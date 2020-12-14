@@ -1,0 +1,11 @@
+.list {
+    width: 1080px;
+    height: 100px;
+   margin: 30px auto ;
+}
+.foot{
+    width: 1080px;
+    height: 400px;
+    margin: 5px auto ;
+    background-color: chartreuse;
+}
