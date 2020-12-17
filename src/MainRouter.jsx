@@ -15,7 +15,7 @@ const MainRouter = () => {
 
   return (
     <Switch>
-      <Route path="/login" exact render={() => <Login        /> } />
+      <Route path="/login" exact render={() => <Login/> } />
       <Route
         path="/cardid"
         render={() => <CardId users={users} setusers={setusers} setShowuser={setShowuser} />}
@@ -25,7 +25,7 @@ const MainRouter = () => {
         render={() => <EditID setusers={setusers} users={users} />}
       />
       <Route path="/listdoros" render={() => <ListDoros />} />
-      <Route path="/userinfo" render={() => <Userinfo showuser={showuser} />} />
+      <Route path="/userinfo/:id" render={(props) => <Userinfo userId={props.match.params.id} showuser={showuser} />} />
       
     </Switch>
   );

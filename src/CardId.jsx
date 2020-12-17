@@ -6,20 +6,9 @@ const CardId = ({ history }) => {
   const [users, setUsers] = useState([]);
   const [forceUpdate, setForceUpdate] = useState(false);
 
-
-
-
-
-//   const gotoinfo = (user) => {
-    
-// setShowUser(user);
-
-//     history.push("/userinfo");
-//   };
-
-
-
-
+  const gotoinfo = (user) => {
+    history.push(`/userinfo/${user.id}`);
+  };
 
   const handleDeleteUser = (user) => {
     let all = JSON.parse(localStorage.getItem("users"));
@@ -63,7 +52,7 @@ const CardId = ({ history }) => {
                 age<p className="   font-weight-light">{user.age} </p>
               </h4>
               <button
-                // onClick={() => gotoinfo(user)}
+                onClick={() => gotoinfo(user)}
                 className="btn   btn-info  btn-block "
               >
                 نمایش اشخاص
