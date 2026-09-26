@@ -11,6 +11,7 @@ from engine import from_config, find_dimensions, quantities
 from seismic import Site2800v5, Site2800v4, period
 from design import design_all
 from schedule import bar_schedule
+import model
 
 
 def seismic_coefficients(equipment: Equipment, cfg: ProjectConfig):
@@ -41,6 +42,6 @@ def run(equipment: Equipment, cfg: ProjectConfig):
         return None, seis, None, None, None
     des = design_all(res, equipment, soil, cfg.rebar)
     qty = quantities(res, equipment, soil)
-    bbs = bar_schedule(res, equipment, soil, des, cfg.rebar)
+    bbs = bar_schedule(model.build(res, equipment, des, cfg))
     qty["rebar"] = sum(r["weight"] for r in bbs)
     return res, seis, des, qty, bbs
