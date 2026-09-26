@@ -138,3 +138,11 @@ def test_change_password(app):
                                   "confirm": "newpassword1", "_csrf": t})
     assert r.status_code == 302
     assert app.auth.verify("eng1", "newpassword1")
+
+
+def test_design_options_from_form(client):
+    d = _calc(client, "PI", **{"design.governing": "envelope", "design.bearing": "envelope"}).get_json()
+    assert d["options"] == {"governing": "envelope", "bearing": "envelope"}
+    assert d["geometry"]["L"] == pytest.approx(2.7)
+    assert {r["key"] for r in d["comparison"]} == {"notebook", "recommended", "selected"}
+    assert _calc(client, "PI", **{"design.governing": "9"}).status_code == 400

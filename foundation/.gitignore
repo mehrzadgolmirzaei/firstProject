@@ -5,3 +5,4 @@ out/
 web/generated/
 web/foundation.db
 web/.secret_key
+.venv/

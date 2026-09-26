@@ -19,7 +19,7 @@ import codeprofiles as cp
 import settings as st
 from calc_service import build_equipment, run, to_dict
 from config import ProjectConfig
-from engine import from_config
+from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED, WHY
 from equipment import CATALOG
 from seismic import FS_TABLE
 
@@ -109,7 +109,13 @@ def calculate():
                            builtin={k: asdict(v) for k, v in CATALOG.items()},
                            substations=[dict(r) for r in subs],
                            profiles=cp.listing(),
-                           defaults=asdict(ProjectConfig()))
+                           defaults=asdict(ProjectConfig()),
+                           options=design_options())
+
+
+def design_options():
+    return {"governing": GOVERNING_OPTIONS, "bearing": BEARING_OPTIONS,
+            "recommended": RECOMMENDED, "why": WHY}
 
 
 class InputError(ValueError):
@@ -163,6 +169,9 @@ def config_from_form(form) -> ProjectConfig:
             setattr(s, key, val)
     s.soil_class = _choice(form, "seismic.soil_class", tuple(FS_TABLE), s.soil_class)
     s.method = _choice(form, "seismic.method", ("rigid", "static"), s.method)
+    d = cfg.design
+    d.governing = _choice(form, "design.governing", tuple(GOVERNING_OPTIONS), d.governing)
+    d.bearing = _choice(form, "design.bearing", tuple(BEARING_OPTIONS), d.bearing)
     return cfg
 
 
@@ -377,7 +386,7 @@ def calculation_print(cid):
     data = dict(row)
     data["results"] = json.loads(data["results"])
     data["inputs"] = json.loads(data["inputs"])
-    return render_template("print.html", calc=data, conf=st.load())
+    return render_template("print.html", calc=data, conf=st.load(), options=design_options())
 
 
 # ================================================================= آیین‌نامه
@@ -510,5 +519,10 @@ if __name__ == "__main__":
     creds = bootstrap()
     if creds:
         print(f"کاربر مدیر ساخته شد — {creds}  (رمز را بعد از اولین ورود عوض کنید)")
-    print("سامانه روی http://127.0.0.1:5000 بالا آمد")
-    app.run(debug=os.environ.get("FOUNDATION_DEBUG") == "1", port=5000)
+    port = int(os.environ.get("FOUNDATION_PORT", 5000))
+    url = f"http://127.0.0.1:{port}"
+    print(f"سامانه روی {url} بالا آمد — برای بستن این پنجره را ببندید")
+    if os.environ.get("FOUNDATION_OPEN_BROWSER") == "1":
+        import threading, webbrowser
+        threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    app.run(debug=os.environ.get("FOUNDATION_DEBUG") == "1", port=port)

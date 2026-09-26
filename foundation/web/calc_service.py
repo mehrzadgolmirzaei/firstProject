@@ -61,7 +61,7 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
         "cases": [{"no": c.no, "name": c.name, "Fe": c.Fe, "Fs": c.Fs,
                    "N": c.Nmax, "Nmin": c.Nmin, "V": c.V, "M": c.M} for c in res.cases],
         "checks": [{"name": c.name, "value": c.value, "limit": c.limit,
-                    "ok": c.passed, "dir": c.direction, "unit": c.unit,
+                    "ok": c.passed, "dir": c.direction, "unit": c.unit, "case": c.case,
                     "steps": [list(s) for s in c.steps]} for c in res.checks],
         "design": {k: {"title": d.title, "ok": d.ok, "note": d.note,
                        "bars": d.bar_count, "dia": d.bar_dia, "spacing": d.spacing,
@@ -70,6 +70,8 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
         "bbs": bbs,
         "model": model.to_dict(fm),
         "clashes": clashes,
+        "options": {"governing": str(cfg.design.governing), "bearing": cfg.design.bearing},
+        "comparison": getattr(res, "comparison", []),
         "quantities": qty,
         "ok": res.ok and all(d.ok for d in des.values()) and not clashes,
     }

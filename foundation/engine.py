@@ -91,6 +91,7 @@ class Check:
     direction: str             # ">" یا "<"
     unit: str = ""
     steps: list = field(default_factory=list)
+    case: int = 0              # حالت باری که این کنترل را حاکم کرده
 
 
 @dataclass
@@ -143,36 +144,79 @@ def case_forces(lc: dict, eq: Equipment) -> CaseForces:
                       (1 + lc["cv"]) * n, (1 - lc["cv"]) * n, v, m, lc["k"])
 
 
-def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
-            wind: WindParams, ch: float, cv: float) -> Result:
-    cases = [case_forces(lc, eq) for lc in build_cases(eq, wind, ch, cv)]
-    g = max(cases, key=lambda c: c.Nmax + c.V + c.M)
+# ------------------------------------------------------------------ گزینه‌های مهندس
+# هر دو انتخاب با مهندس است؛ سامانه پیشنهاد خودش را کنار هر گزینه نشان می‌دهد
+# و ابعاد هر دو روش را حساب می‌کند تا اثر انتخاب دیده شود.
+GOVERNING_OPTIONS = {
+    "notebook": "روش دفترچه — حالتی که N+V+M آن بیشترین است",
+    "envelope": "پوش همه حالات — هر کنترل با بحرانی‌ترین حالت خودش (پیشنهادی)",
+    "1": "فقط حالت ۱ — یخ + باد نرمال",
+    "2": "فقط حالت ۲ — باد شدید",
+    "3": "فقط حالت ۳ — باد شدید + اتصال کوتاه",
+    "4": "فقط حالت ۴ — زلزله",
+    "5": "فقط حالت ۵ — زلزله + اتصال کوتاه",
+}
+BEARING_OPTIONS = {
+    "min": "با N_min — روش دفترچه",
+    "max": "با N_max",
+    "envelope": "بحرانی‌ترین از N_max و N_min (پیشنهادی)",
+}
+RECOMMENDED = {"governing": "envelope", "bearing": "envelope"}
+WHY = {
+    "governing": "جمع N+V+M واحدهای ناهمگون (kg و kg·m) را با هم جمع می‌کند؛ "
+                 "حالتی که برای واژگونی بحرانی است لزوماً برای تنش خاک یا لغزش "
+                 "بحرانی نیست. پوش، هر چهار کنترل را برای هر پنج حالت انجام "
+                 "می‌دهد و بدترین را برمی‌دارد.",
+    "bearing": "تنش خاک معمولاً با بیشترین بار قائم کنترل می‌شود؛ ولی وقتی خروج "
+               "از مرکزیت زیاد است (توزیع مثلثی)، بار قائم کمتر می‌تواند تنش لبه "
+               "بیشتری بدهد. پس هر دو حساب و بدترین برداشته می‌شود.",
+}
 
-    # بارهای مانور تجهیز روی حالت حاکم اضافه می‌شوند
-    g = CaseForces(g.no, g.name, g.Fe, g.Fs,
-                   g.Nmax + eq.op_vertical, g.Nmin - eq.op_vertical,
-                   g.V + eq.op_horizontal, g.M + eq.op_moment, g.factor)
+
+def _with_operation(c: CaseForces, eq: Equipment) -> CaseForces:
+    """بارهای مانور تجهیز روی حالت اضافه می‌شوند."""
+    return CaseForces(c.no, c.name, c.Fe, c.Fs,
+                      c.Nmax + eq.op_vertical, c.Nmin - eq.op_vertical,
+                      c.V + eq.op_horizontal, c.M + eq.op_moment, c.factor)
+
+
+def _bearing(w, mo, geo):
+    """تنش حداکثر خاک برای بار قائم w و لنگر واژگونی mo."""
+    ecc = mo / w
+    Bc, Lc, ec = geo.B * 100, geo.L * 100, ecc * 100
+    triangular = ecc > geo.B / 6
+    if Bc - 2 * ec <= 0:
+        q = float("inf")
+    elif triangular:
+        q = 4 * w / (3 * Lc * (Bc - 2 * ec))
+    else:
+        q = w / (Lc * Bc) * (1 + 6 * ecc / geo.B)
+    return q, ecc, triangular
+
+
+def _checks_for(g: CaseForces, eq, geo, soil, bearing):
+    """چهار کنترل برای یک حالت بار."""
     u = CaseForces(g.no, g.name, g.Fe, g.Fs,
                    g.Nmax * g.factor, g.Nmin * g.factor,
                    g.V * g.factor, g.M * g.factor, g.factor)
-
     n = eq.n_pedestal
     A = geo.L * geo.B
     f = lambda v, d=2: f"{v:.{d}f}"
+    case_step = ("حالت بار", f"#{g.no}", g.name)
 
     w_c = (A * geo.tf + n * geo.hp * geo.b ** 2) * soil.gamma_c
     w_s = (A - n * geo.b ** 2) * (geo.hp - soil.soil_cover) * soil.gamma_s
     w_t = w_c + w_s + g.Nmin
 
     weight_steps = [
+        case_step,
         ("وزن بتن", "W_c = (L·B·t_f + n·h_p·b²)·γ_c",
          f"({f(geo.L)}×{f(geo.B)}×{f(geo.tf)} + {n}×{f(geo.hp)}×{f(geo.b)}²)×{soil.gamma_c:.0f} = {w_c:.0f} kg"),
-        ("وزن خاک روی پی", "W_s = (L·B − n·b²)·(h_p − 0.15)·γ_s",
-         f"({f(A)} − {n}×{f(geo.b**2)})×({f(geo.hp)}−0.15)×{soil.gamma_s:.0f} = {w_s:.0f} kg"),
+        ("وزن خاک روی پی", f"W_s = (L·B − n·b²)·(h_p − {soil.soil_cover:.2f})·γ_s",
+         f"({f(A)} − {n}×{f(geo.b**2)})×({f(geo.hp)}−{soil.soil_cover:.2f})×{soil.gamma_s:.0f} = {w_s:.0f} kg"),
         ("وزن کل قائم", "W = W_c + W_s + N_min",
          f"{w_c:.0f} + {w_s:.0f} + {g.Nmin:.0f} = {w_t:.0f} kg"),
     ]
-
     checks = []
 
     # ۱ — واژگونی
@@ -184,21 +228,26 @@ def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
             ("لنگر واژگون‌کننده", "M_o = V·(h_p + t_f) + M",
              f"{g.V:.0f}×({f(geo.hp)}+{f(geo.tf)}) + {g.M:.0f} = {mo:.0f} kg·m"),
             ("لنگر مقاوم", "M_r = W · B/2", f"{w_t:.0f} × {f(geo.B)}/2 = {mr:.0f} kg·m"),
-            ("ضریب اطمینان", "SF = M_r / M_o ≥ 1.75", f"{mr:.0f} / {mo:.0f} = {sf:.2f}"),
+            ("ضریب اطمینان", f"SF = M_r / M_o ≥ {soil.sf_overturn}", f"{mr:.0f} / {mo:.0f} = {sf:.2f}"),
         ]))
 
     # ۲ — تنش خاک
-    ecc = mo / w_t
-    Bc, Lc, ec = geo.B * 100, geo.L * 100, ecc * 100
-    triangular = ecc > geo.B / 6
-    if Bc - 2 * ec <= 0:
-        q = float("inf")
-    elif triangular:
-        q = 4 * w_t / (3 * Lc * (Bc - 2 * ec))
-    else:
-        q = w_t / (Lc * Bc) * (1 + 6 * ecc / geo.B)
-    checks.append(Check("حداکثر تنش خاک", q, soil.q_all, q <= soil.q_all, "<", "kg/cm²", [
-        ("خروج از مرکزیت", "e = M_o / W", f"{mo:.0f} / {w_t:.0f} = {ecc:.3f} m"),
+    variants = {"min": ("N_min", g.Nmin), "max": ("N_max", g.Nmax)}
+    use = ["min", "max"] if bearing == "envelope" else [bearing]
+    results = []
+    for key in use:
+        label, nv = variants[key]
+        w = w_c + w_s + nv
+        q, ecc, tri = _bearing(w, mo, geo)
+        results.append((q, label, w, ecc, tri))
+    q, label, w_b, ecc, triangular = max(results, key=lambda r: r[0])
+    steps = [case_step,
+             ("بار قائم", f"W = W_c + W_s + {label}", f"{w_b:.0f} kg")]
+    if len(results) > 1:
+        steps.append(("مقایسه", "q با N_min و با N_max",
+                      "  ،  ".join(f"{r[1]}: {r[0]:.2f}" for r in results) + f"  → حاکم: {label}"))
+    steps += [
+        ("خروج از مرکزیت", "e = M_o / W", f"{mo:.0f} / {w_b:.0f} = {ecc:.3f} m"),
         ("هسته مرکزی", "B/6", f"{f(geo.B)}/6 = {geo.B/6:.3f} m → توزیع "
                               f"{'مثلثی' if triangular else 'ذوزنقه‌ای'}"),
         ("تنش حداکثر",
@@ -206,7 +255,8 @@ def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
          f"{q:.2f} kg/cm²"),
         ("تنش مجاز", "q_all = q_a × ضریب بار موقت",
          f"{soil.q_base:.2f} × {soil.q_factor:.2f} = {soil.q_all:.2f} kg/cm²"),
-    ]))
+    ]
+    checks.append(Check("حداکثر تنش خاک", q, soil.q_all, q <= soil.q_all, "<", "kg/cm²", steps))
 
     # ۳ — بلندشدگی پی
     w_u = u.Nmax + w_c + w_s
@@ -214,6 +264,7 @@ def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
     x = geo.B / 2 - m_u / w_u
     uplift = geo.B - 3 * x
     checks.append(Check("طول بلندشدگی پی", uplift, geo.B / 4, uplift <= geo.B / 4, "<", "m", [
+        case_step,
         ("وزن قائم نهایی", "W_u = N_u + W_c + W_s", f"{u.Nmax:.0f} + {w_c:.0f} + {w_s:.0f} = {w_u:.0f} kg"),
         ("لنگر نهایی", "M_u = M + V·(h_p + t_f)", f"{m_u:.0f} kg·m"),
         ("بازوی فشاری", "x = B/2 − M_u / W_u", f"{f(geo.B)}/2 − {m_u:.0f}/{w_u:.0f} = {x:.3f} m"),
@@ -225,26 +276,59 @@ def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
     resist = (w_c + w_s + g.Nmin) * soil.friction
     sf_s = resist / g.V if g.V else float("inf")
     checks.append(Check("ضریب اطمینان لغزش", sf_s, soil.sf_sliding, sf_s > soil.sf_sliding, ">", "", [
+        case_step,
         ("نیروی مقاوم", "F_r = (W_c + W_s + N_min)·μ",
          f"({w_c:.0f}+{w_s:.0f}+{g.Nmin:.0f})×{soil.friction} = {resist:.0f} kg"),
-        ("ضریب اطمینان", "SF = F_r / V ≥ 1.20", f"{resist:.0f} / {g.V:.0f} = {sf_s:.2f}"),
+        ("ضریب اطمینان", f"SF = F_r / V ≥ {soil.sf_sliding}", f"{resist:.0f} / {g.V:.0f} = {sf_s:.2f}"),
     ]))
+    for c in checks:
+        c.case = g.no
+    return checks, u, w_c, w_s, w_t, ecc
+
+
+def _utilisation(c: Check) -> float:
+    """نسبت بهره‌برداری: بیشتر از ۱ یعنی مردود."""
+    if c.direction == ">":
+        return c.limit / c.value if c.value else float("inf")
+    return c.value / c.limit if c.limit else float("inf")
+
+
+def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
+            wind: WindParams, ch: float, cv: float,
+            governing="notebook", bearing="min") -> Result:
+    cases = [case_forces(lc, eq) for lc in build_cases(eq, wind, ch, cv)]
+    governing = str(governing)
+    if governing == "envelope":
+        candidates = cases
+    elif governing.isdigit():
+        candidates = [next(c for c in cases if c.no == int(governing))]
+    else:
+        candidates = [max(cases, key=lambda c: c.Nmax + c.V + c.M)]
+
+    evaluated = [(_with_operation(c, eq), *_checks_for(_with_operation(c, eq), eq, geo, soil,
+                                                      bearing)) for c in candidates]
+    # هر کنترل با بحرانی‌ترین حالت خودش
+    checks = [max((e[1][i] for e in evaluated), key=_utilisation) for i in range(4)]
+    # طراحی مقطع با حالتی که بیشترین بلندشدگی (بیشترین خروج از مرکزیت نهایی) را دارد
+    g, _, u, w_c, w_s, w_t, ecc = max(evaluated, key=lambda e: _utilisation(e[1][2]))
 
     r = Result(geo, cases, g, u, w_c, w_s, w_t, ecc, checks)
-    r._n = n
+    r._n = eq.n_pedestal
+    r.options = {"governing": governing, "bearing": bearing}
     return r
 
 
 def find_dimensions(eq: Equipment, soil: SoilAndMaterials, wind: WindParams,
                     ch: float, cv: float, hp=1.0, b=0.8, tf=0.4,
-                    lo=1.0, hi=5.0, step=0.1):
+                    lo=1.0, hi=5.0, step=0.1, governing="notebook", bearing="min"):
     """کوچک‌ترین پی مربعی که هر چهار کنترل را پاس کند."""
     i = 0
     while True:
         side = round(lo + i * step, 2)
         if side > hi:
             return None
-        res = analyse(eq, Geometry(side, side, hp, b, tf), soil, wind, ch, cv)
+        res = analyse(eq, Geometry(side, side, hp, b, tf), soil, wind, ch, cv,
+                      governing, bearing)
         if res.ok:
             return res
         i += 1

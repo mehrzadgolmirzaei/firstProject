@@ -115,6 +115,23 @@
   </div>
 </section>
 
+{% if r.comparison %}
+<section>
+  <h2>روش کنترل و مقایسه</h2>
+  <table>
+    <thead><tr><th>روش</th><th>حالت حاکم</th><th>تنش خاک</th><th>ابعاد پی (m)</th></tr></thead>
+    <tbody>
+    {% for c in r.comparison %}
+      <tr class="{{ 'gov' if c.selected }}"><td>{{ c.label }}</td>
+        <td>{{ options.governing[c.governing] }}</td><td>{{ options.bearing[c.bearing] }}</td>
+        <td class="n">{{ '%.2f'|format(c.side) if c.side else '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div style="font-size:9pt;color:#5C6B77;margin-top:4px">سطر پررنگ روشی است که طراح انتخاب کرده و مبنای این گزارش است.</div>
+</section>
+{% endif %}
+
 <section>
   <h2>ضریب زلزله</h2>
   <div class="steps">
@@ -147,7 +164,7 @@
   {% for c in r.checks %}
   <div class="chk">
     <div class="top">
-      <b>{{ c.name }}</b>
+      <b>{{ c.name }}{% if c.case %} <span style="font-weight:400;color:#5C6B77">— حالت {{ c.case }}</span>{% endif %}</b>
       <span class="val">{{ '%.2f'|format(c.value) }} {{ c.dir }} {{ '%.2f'|format(c.limit) }} {{ c.unit }}</span>
       <span class="{{ 'ok' if c.ok else 'ng' }}">{{ 'قبول' if c.ok else 'مردود' }}</span>
     </div>

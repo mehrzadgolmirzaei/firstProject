@@ -148,6 +148,34 @@
       </div>
     </fieldset>
 
+    <fieldset>
+      <legend>روش کنترل — انتخاب مهندس</legend>
+      <div class="f">
+        <label>حالت بار حاکم</label>
+        <select id="governing">
+          {% for k, v in options.governing.items() %}
+          <option value="{{ k }}" {{ 'selected' if k == defaults.design.governing }}>{{ v }}</option>
+          {% endfor %}
+        </select>
+        <p class="note" style="margin:4px 0 0">
+          <b>پیشنهاد سامانه:</b> {{ options.governing[options.recommended.governing] }}.
+          {{ options.why.governing }}</p>
+      </div>
+      <div class="f">
+        <label>بار قائم در کنترل تنش خاک</label>
+        <select id="bearing">
+          {% for k, v in options.bearing.items() %}
+          <option value="{{ k }}" {{ 'selected' if k == defaults.design.bearing }}>{{ v }}</option>
+          {% endfor %}
+        </select>
+        <p class="note" style="margin:4px 0 0">
+          <b>پیشنهاد سامانه:</b> {{ options.bearing[options.recommended.bearing] }}.
+          {{ options.why.bearing }}</p>
+      </div>
+      <p class="note" style="margin:0">پیش‌فرض همان روش دفترچه است. بعد از محاسبه، ابعاد پی با
+        روش دفترچه و با پیشنهاد سامانه کنار هم نشان داده می‌شود تا اثر انتخاب را ببینید.</p>
+    </fieldset>
+
     <button class="btn wide" type="submit" id="go">محاسبه کن</button>
     <p class="note" id="msg"></p>
   </form>
@@ -174,6 +202,7 @@
         <span class="verdict" id="verdict"></span>
       </div>
       <p class="note" id="sub"></p>
+      <table class="compare" id="compare"></table>
       <div class="actions" id="actions" style="display:none">
         <button class="btn quiet" type="button" id="mkdxf">ساخت نقشه‌های اتوکد</button>
         <span id="dxflinks" style="display:contents"></span>
@@ -203,6 +232,7 @@
 <script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
 <script>
 const BUILTIN = {{ builtin|tojson }};
+const OPTIONS = {{ options|tojson }};
 const $ = id => document.getElementById(id);
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 const viewer = new FoundationViewer($("viewer"));
@@ -305,7 +335,8 @@ $("form").addEventListener("submit", async ev => {
     "soil.q_base": num("q_base"), "soil.q_factor": num("q_factor"),
     "materials.fc": num("fc"), "materials.fy": num("fy"),
     "materials.cover": num("cover"), "materials.lean": num("lean"),
-    "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf")
+    "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf"),
+    "design.governing": $("governing").value, "design.bearing": $("bearing").value
   };
   try {
     const r = await fetch("/api/calculate", {
@@ -354,7 +385,7 @@ function render(d){
     const w = Math.max(3, Math.min(100, ratio * 100));
     return `<div class="check">
       <div class="line">
-        <span class="nm">${c.name}</span>
+        <span class="nm">${c.name} <small class="case">حالت ${c.case}</small></span>
         <span class="vl"><b>${fmt(c.value)}</b> ${c.dir} ${fmt(c.limit)} ${c.unit}</span>
         <span class="tag ${c.ok?'ok':'ng'}">${c.ok?'قبول':'مردود'}</span>
       </div>
@@ -367,6 +398,12 @@ function render(d){
   requestAnimationFrame(() => document.querySelectorAll(".gauge i")
     .forEach(el => el.style.width = el.dataset.w + "%"));
 
+  $("compare").innerHTML = "<thead><tr><th>روش</th><th>حالت حاکم</th><th>تنش خاک</th>" +
+    "<th>ابعاد پی (m)</th></tr></thead><tbody>" +
+    d.comparison.map(r => `<tr class="${r.selected ? 'on' : ''}"><td>${r.label}</td>` +
+      `<td>${OPTIONS.governing[r.governing]}</td><td>${OPTIONS.bearing[r.bearing]}</td>` +
+      `<td class="num">${r.side === null ? "—" : fmt(r.side) + " × " + fmt(r.side)}</td></tr>`).join("") +
+    "</tbody>";
   if (d.clashes && d.clashes.length) {
     $("sub").textContent += " · تداخل جزئیات: " + d.clashes.join("، ");
   }

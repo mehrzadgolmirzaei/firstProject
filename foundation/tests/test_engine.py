@@ -55,3 +55,44 @@ def test_pad_rebar_matches_drawing():
     des = design_all(res, CATALOG["LA"], soil, cfg.rebar)
     pad = des["pad"]
     assert (pad.bar_count, pad.bar_dia, pad.spacing) == (10, 14, 200)
+
+
+# ------------------------------------------------------------ گزینه‌های مهندس
+def _run_opt(tag, governing, bearing, edition=4):
+    cfg = ProjectConfig()
+    cfg.seismic.edition = edition
+    cfg.design.governing, cfg.design.bearing = governing, bearing
+    return run(CATALOG[tag], cfg)[0]
+
+
+def test_notebook_is_default_and_reproduces_notebook():
+    cfg = ProjectConfig()
+    assert (cfg.design.governing, cfg.design.bearing) == ("notebook", "min")
+
+
+@pytest.mark.parametrize("tag", list(NOTEBOOK))
+def test_envelope_never_smaller_than_notebook(tag):
+    """پوش همه حالات شامل حالت دفترچه هم هست، پس پی کوچک‌تر نمی‌دهد."""
+    nb = _run_opt(tag, "notebook", "min")
+    env = _run_opt(tag, "envelope", "envelope")
+    assert env.geometry.L >= nb.geometry.L - 1e-9
+
+
+def test_envelope_catches_wind_uplift_in_pi():
+    """در PI حالت ۲ (باد شدید، ضریب ۱٫۵) بلندشدگی را حاکم می‌کند؛ روش دفترچه آن را نمی‌بیند."""
+    env = _run_opt("PI", "envelope", "envelope")
+    assert env.geometry.L == pytest.approx(2.7)
+    rows = {r["key"]: r["side"] for r in env.comparison}
+    assert rows["notebook"] == pytest.approx(2.5) and rows["recommended"] == pytest.approx(2.7)
+
+
+def test_manual_case_selection():
+    res = _run_opt("LA", "2", "min")
+    assert all(c.case == 2 for c in res.checks)
+
+
+def test_bearing_envelope_takes_worse_of_nmin_nmax():
+    lo = _run_opt("CB", "notebook", "min").checks[1].value
+    hi = _run_opt("CB", "notebook", "max").checks[1].value
+    both = _run_opt("CB", "notebook", "envelope").checks[1].value
+    assert both == pytest.approx(max(lo, hi))

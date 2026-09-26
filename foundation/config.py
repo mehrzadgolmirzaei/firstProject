@@ -79,6 +79,16 @@ class Foundation:
 
 
 @dataclass
+class DesignOptions:
+    """
+    انتخاب‌های مهندس (فهرست گزینه‌ها و پیشنهاد سامانه در engine.py).
+    پیش‌فرض همان روش دفترچه کامی‌آباد است تا محاسبات تأییدشده بازتولید شوند.
+    """
+    governing: str = "notebook"    # notebook | envelope | 1..5
+    bearing: str = "min"           # min | max | envelope
+
+
+@dataclass
 class TitleBlock:
     """
     مقادیر جدول عنوان. کلیدها همان نام فیلدهای کادر شرکت هستند
@@ -127,6 +137,7 @@ class ProjectConfig:
     wind: Wind = field(default_factory=Wind)
     rebar: Rebar = field(default_factory=Rebar)
     foundation: Foundation = field(default_factory=Foundation)
+    design: DesignOptions = field(default_factory=DesignOptions)
     title_block: TitleBlock = field(default_factory=TitleBlock)
     drawing: DrawingSetup = field(default_factory=DrawingSetup)
 
@@ -146,7 +157,7 @@ class ProjectConfig:
     @classmethod
     def _from_dict(cls, raw: dict):
         sub = {"materials": Materials, "soil": SoilData, "seismic": SeismicData,
-               "wind": Wind, "rebar": Rebar, "foundation": Foundation,
+               "wind": Wind, "rebar": Rebar, "foundation": Foundation, "design": DesignOptions,
                "title_block": TitleBlock, "drawing": DrawingSetup}
         kwargs = {}
         for key, value in raw.items():

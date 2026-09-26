@@ -7,7 +7,7 @@
 """
 from config import ProjectConfig
 from equipment import Equipment
-from engine import from_config, find_dimensions, quantities
+from engine import from_config, find_dimensions, quantities, RECOMMENDED
 from seismic import Site2800v5, Site2800v4, period
 from design import design_all
 from schedule import bar_schedule
@@ -31,13 +31,43 @@ def seismic_coefficients(equipment: Equipment, cfg: ProjectConfig):
     return seis
 
 
+PROFILES = [
+    ("notebook", "روش دفترچه", {"governing": "notebook", "bearing": "min"}),
+    ("recommended", "پیشنهاد سامانه", RECOMMENDED),
+]
+
+
+def compare(search, opt):
+    """
+    ابعاد پی با روش دفترچه، با پیشنهاد سامانه و با انتخاب مهندس — تا اثر
+    انتخاب کنار هم دیده شود.
+    """
+    rows, seen = [], {}
+    chosen = {"governing": str(opt.governing), "bearing": opt.bearing}
+    for key, label, o in PROFILES + [("selected", "انتخاب شما", chosen)]:
+        sig = (o["governing"], o["bearing"])
+        if sig not in seen:
+            r = search(*sig)
+            seen[sig] = None if r is None else r.geometry.L
+        rows.append({"key": key, "label": label, **o, "side": seen[sig],
+                     "selected": sig == (chosen["governing"], chosen["bearing"])})
+    return rows
+
+
 def run(equipment: Equipment, cfg: ProjectConfig):
     soil, wind = from_config(cfg)
     seis = seismic_coefficients(equipment, cfg)
-    f = cfg.foundation
-    res = find_dimensions(equipment, soil, wind, seis.ch, seis.cv,
-                          hp=f.hp, b=f.b, tf=f.tf,
-                          lo=f.search_min, hi=f.search_max, step=f.search_step)
+    f, opt = cfg.foundation, cfg.design
+
+    def search(governing, bearing):
+        return find_dimensions(equipment, soil, wind, seis.ch, seis.cv,
+                               hp=f.hp, b=f.b, tf=f.tf,
+                               lo=f.search_min, hi=f.search_max, step=f.search_step,
+                               governing=governing, bearing=bearing)
+
+    res = search(opt.governing, opt.bearing)
+    if res is not None:
+        res.comparison = compare(search, opt)
     if res is None:
         return None, seis, None, None, None
     des = design_all(res, equipment, soil, cfg.rebar)
