@@ -9,7 +9,23 @@
 با آمدن ویرایش جدید تغییر نمی‌کنند.
 """
 import json
-from database import query, execute, now
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from database import query, execute, now                 # noqa: E402
+from seismic import FS_TABLE, F1_TABLE, IMPORTANCE     # noqa: E402
+
+
+_FA_DIGITS = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+
+def _table(t):
+    return {soil: {f"{k:.2f}": v for k, v in row.items()} for soil, row in t.items()}
+
 
 # ---------------------------------------------------------------- پیش‌فرض‌ها
 EDITION_5 = {
@@ -23,21 +39,11 @@ EDITION_5 = {
     "cmin_floor": 0.01,
     "cv_factor": 0.20,
     "rigid_factor": 0.30,
-    "importance": {"گروه ۱": 1.4, "گروه ۲": 1.2, "گروه ۳": 1.0, "گروه ۴": 0.8},
-    "fs_table": {
-        "I":   {"0.50": 1.0, "0.75": 1.0, "1.00": 1.0, "1.25": 1.0, "1.50": 1.0},
-        "II":  {"0.50": 1.2, "0.75": 1.2, "1.00": 1.1, "1.25": 1.0, "1.50": 1.0},
-        "III": {"0.50": 1.3, "0.75": 1.2, "1.00": 1.1, "1.25": 1.0, "1.50": 1.0},
-        "IV":  {"0.50": 1.6, "0.75": 1.3, "1.00": 1.3, "1.25": 1.1, "1.50": 1.1},
-        "V":   {"0.50": 1.6, "0.75": 1.4, "1.00": 1.4, "1.25": 1.2, "1.50": 1.2},
-    },
-    "f1_table": {
-        "I":   {"0.20": 1.0, "0.30": 1.0, "0.40": 1.0, "0.50": 1.0, "0.60": 1.0},
-        "II":  {"0.20": 1.5, "0.30": 1.3, "0.40": 1.3, "0.50": 1.3, "0.60": 1.3},
-        "III": {"0.20": 2.2, "0.30": 2.1, "0.40": 2.1, "0.50": 2.1, "0.60": 2.1},
-        "IV":  {"0.20": 3.3, "0.30": 3.3, "0.40": 3.2, "0.50": 2.8, "0.60": 2.8},
-        "V":   {"0.20": 2.2, "0.30": 2.1, "0.40": 2.1, "0.50": 2.1, "0.60": 2.2},
-    },
+    "importance": {"گروه " + str(g).translate(_FA_DIGITS): v for g, v in IMPORTANCE.items()},
+    # جداول از seismic.py خوانده می‌شوند تا پروفایل و موتور هیچ‌وقت دو عدد
+    # متفاوت نداشته باشند (قبلاً F1 زمین V در S1=0.6 اینجا 2.2 و در موتور 2.1 بود).
+    "fs_table": _table(FS_TABLE),
+    "f1_table": _table(F1_TABLE),
 }
 
 EDITION_4 = {

@@ -5,6 +5,7 @@
   <p>داده‌های اوت‌لاین سازنده که ورودی محاسبه‌اند</p></div>
   {% if user.role != 'viewer' %}
   <form method="post" action="{{ url_for('catalog_import') }}">
+  {{ csrf_field() }}
     <button class="btn quiet" type="submit">افزودن تجهیزات پایه</button>
   </form>{% endif %}
 </header>

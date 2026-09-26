@@ -5,7 +5,7 @@
     python server.py
 سپس در مرورگر: http://127.0.0.1:5000
 """
-import json, os, sys
+import json, os, secrets, sys
 from pathlib import Path
 from dataclasses import asdict
 from flask import (Flask, render_template, request, redirect, url_for, session,
@@ -19,24 +19,40 @@ import codeprofiles as cp
 import settings as st
 from calc_service import build_equipment, run, to_dict
 from config import ProjectConfig
+from engine import from_config
 from equipment import CATALOG
+from seismic import FS_TABLE
 
-OUT = Path(__file__).with_name("generated")
-OUT.mkdir(exist_ok=True)
+OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
+OUT.mkdir(parents=True, exist_ok=True)
+
+
+def _secret_key():
+    """کلید نشست: از متغیر محیطی، وگرنه یک‌بار ساخته و کنار برنامه نگه داشته می‌شود."""
+    env = os.environ.get("FOUNDATION_SECRET")
+    if env:
+        return env
+    path = Path(__file__).with_name(".secret_key")
+    if not path.exists():
+        path.write_text(secrets.token_hex(32))
+    return path.read_text().strip()
+
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("FOUNDATION_SECRET", "change-me-in-production")
+app.secret_key = _secret_key()
 app.jinja_env.add_extension("jinja2.ext.do")
 
 
 @app.before_request
-def _reset_user_cache():
+def _before():
     g._user = None
+    auth.check_csrf()
 
 
 @app.context_processor
 def _inject():
-    return {"user": auth.current_user(), "ROLES": auth.ROLES}
+    return {"user": auth.current_user(), "ROLES": auth.ROLES,
+            "csrf_token": auth.csrf_token, "csrf_field": auth.csrf_field}
 
 
 # ================================================================= ورود
@@ -52,7 +68,7 @@ def login():
             session["uid"] = user["id"]
             g._user = user
             auth.record("ورود به سامانه")
-            return redirect(request.args.get("next") or url_for("dashboard"))
+            return redirect(auth.safe_next(request.args.get("next")) or url_for("dashboard"))
     return render_template("login.html")
 
 
@@ -96,13 +112,37 @@ def calculate():
                            defaults=asdict(ProjectConfig()))
 
 
-@app.post("/api/calculate")
-@auth.requires("engineer")
-def api_calculate():
-    form = request.get_json(force=True)
-    cfg = ProjectConfig()
+class InputError(ValueError):
+    pass
 
-    # --- پارامترهای پروژه از فرم ---
+
+def _number(form, key, cast=float):
+    val = form.get(key)
+    if val is None or (isinstance(val, str) and not val.strip()):
+        return None
+    try:
+        return cast(float(val))
+    except (TypeError, ValueError):
+        raise InputError(f"مقدار «{key}» عدد نیست: {val!r}")
+
+
+def _choice(form, key, allowed, default):
+    val = form.get(key)
+    if val in (None, ""):
+        return default
+    if str(val) not in allowed:
+        raise InputError(f"مقدار «{key}» باید یکی از {', '.join(allowed)} باشد")
+    return str(val)
+
+
+def config_from_form(form) -> ProjectConfig:
+    """
+    ساخت تنظیمات محاسبه از فرم.
+    ترتیب: پیش‌فرض ← تنظیمات دفتر (آرماتور) ← مقادیر فرم.
+    نتیجه کامل در اسنپ‌شات ذخیره می‌شود؛ تغییر بعدی تنظیمات روی این محاسبه اثر ندارد.
+    """
+    cfg = ProjectConfig()
+    st.apply_to(cfg, st.load(), parts=st.ENGINEERING_PARTS)
     for group, keys in (("materials", ("fc", "fy", "cover", "lean")),
                         ("soil", ("q_base", "q_factor")),
                         ("wind", ("v_normal", "v_high")),
@@ -110,31 +150,49 @@ def api_calculate():
                         ("rebar", ("pad_dia", "col_dia", "tie_dia", "tie_spacing"))):
         target = getattr(cfg, group)
         for key in keys:
-            val = form.get(f"{group}.{key}")
-            if val not in (None, ""):
-                cur = getattr(target, key)
-                setattr(target, key, type(cur)(float(val)))
+            cur = getattr(target, key)
+            val = _number(form, f"{group}.{key}", type(cur))
+            if val is not None:
+                setattr(target, key, val)
 
     s = cfg.seismic
-    s.edition = int(form.get("seismic.edition", 5))
+    s.edition = int(_choice(form, "seismic.edition", ("4", "5"), str(s.edition)))
     for key in ("ss", "s1", "ie", "ru", "a", "b", "i", "r", "k_lateral"):
-        val = form.get(f"seismic.{key}")
-        if val not in (None, ""):
-            setattr(s, key, float(val))
-    s.soil_class = form.get("seismic.soil_class", s.soil_class)
-    s.method = form.get("seismic.method", s.method)
+        val = _number(form, f"seismic.{key}")
+        if val is not None:
+            setattr(s, key, val)
+    s.soil_class = _choice(form, "seismic.soil_class", tuple(FS_TABLE), s.soil_class)
+    s.method = _choice(form, "seismic.method", ("rigid", "static"), s.method)
+    return cfg
 
+
+def _profile_for(form, edition):
+    pid = form.get("code_profile_id")
+    if pid:
+        return int(pid)
+    row = db.query("SELECT id FROM code_profiles WHERE edition=? AND is_active=1"
+                   " ORDER BY id DESC LIMIT 1", (edition,), one=True)
+    return row["id"] if row else None
+
+
+@app.post("/api/calculate")
+@auth.requires("engineer")
+def api_calculate():
+    form = request.get_json(silent=True)
+    if not isinstance(form, dict):
+        return jsonify({"error": "درخواست باید JSON باشد."}), 400
     try:
-        eq = build_equipment(form.get("equipment", {}))
+        cfg = config_from_form(form)
+        eq = build_equipment(form.get("equipment") or {})
     except (TypeError, ValueError) as exc:
-        return jsonify({"error": f"ورودی تجهیز نامعتبر است: {exc}"}), 400
+        return jsonify({"error": f"ورودی نامعتبر است: {exc}"}), 400
 
     # تجهیزاتی که سازه‌شان را سازنده می‌دهد: تا اعداد اوت‌لاین وارد نشود،
     # محاسبه اجرا نمی‌شود تا کسی سهواً با عدد نمونه نقشه نگیرد.
     base = CATALOG.get(eq.tag)
     missing = []
     if base and base.requires_outline:
-        raw = form.get("equipment", {})
+        raw = form.get("equipment") or {}
         LABELS = {"He": "ارتفاع تجهیز", "he": "مرکز ثقل تجهیز", "Ae": "سطح دید تجهیز",
                   "We": "وزن تجهیز", "Hs": "ارتفاع استراکچر", "As": "سطح دید استراکچر",
                   "Ws": "وزن استراکچر", "anchor_gauge": "گِیج میل مهار",
@@ -153,13 +211,12 @@ def api_calculate():
         return jsonify({"error": "تا حد جست‌وجو ابعادی پیدا نشد که همه کنترل‌ها را پاس کند."}), 200
 
     payload = to_dict(res, seis, des, qty, bbs, eq, cfg)
-    profile_id = form.get("code_profile_id")
     calc_id = db.execute(
         "INSERT INTO calculations (project_id, substation_id, equipment_tag,"
         " code_profile_id, inputs, results, status, run_by, run_at)"
         " VALUES (?,?,?,?,?,?,?,?,?)",
         (form.get("project_id") or None, form.get("substation_id") or None,
-         eq.tag, profile_id or None,
+         eq.tag, _profile_for(form, cfg.seismic.edition),
          json.dumps({"equipment": asdict(eq), "config": asdict(cfg)}, ensure_ascii=False),
          json.dumps(payload, ensure_ascii=False),
          "ok" if payload["ok"] else "ng",
@@ -208,16 +265,32 @@ def drawing_settings():
 
 
 # ================================================================= نقشه و گزارش
+def _same_result(stored, fresh):
+    """آیا بازتولید از اسنپ‌شات همان نتیجه ذخیره‌شده را داد؟"""
+    a, b = stored["geometry"], fresh["geometry"]
+    if any(abs(a[k] - b[k]) > 1e-9 for k in ("L", "B", "tf", "hp", "b")):
+        return False
+    for key in ("pad", "pedestal"):
+        x, y = stored["design"][key], fresh["design"][key]
+        if (x["bars"], x["dia"], x["spacing"]) != (y["bars"], y["dia"], y["spacing"]):
+            return False
+    return True
+
+
 @app.post("/api/drawing/<int:cid>")
 @auth.requires("engineer")
 def api_drawing(cid):
-    """تولید DXF و گزارش از روی یک محاسبه ذخیره‌شده."""
+    """
+    تولید DXF از اسنپ‌شات یک محاسبه ذخیره‌شده.
+    فقط تنظیمات ظاهری (جدول عنوان، مقیاس، یادداشت‌ها) از تنظیمات فعلی می‌آید؛
+    هر چه روی عدد اثر دارد از خود اسنپ‌شات است، و اگر بازتولید با نتیجه
+    ذخیره‌شده نخواند، نقشه ساخته نمی‌شود.
+    """
     row = db.query("SELECT * FROM calculations WHERE id=?", (cid,), one=True)
     if not row:
         return jsonify({"error": "چنین محاسبه‌ای ثبت نشده."}), 404
 
     saved = json.loads(row["inputs"])
-    from dataclasses import asdict as _asdict
     cfg = ProjectConfig._from_dict(saved["config"])
     root = Path(__file__).resolve().parent.parent
     cfg.drawing.frame_file = str(root / Path(cfg.drawing.frame_file).name)
@@ -225,7 +298,7 @@ def api_drawing(cid):
     cfg.drawing.notes_file = str(root / Path(cfg.drawing.notes_file).name)
 
     conf = st.load()
-    st.apply_to(cfg, conf)
+    st.apply_to(cfg, conf, parts=st.PRESENTATION_PARTS)
     notes_text = (conf.get("notes") or "").strip()
     if notes_text:
         notes_file = OUT / f"notes_{cid}.txt"
@@ -234,9 +307,10 @@ def api_drawing(cid):
 
     eq = build_equipment(saved["equipment"])
     res, seis, des, qty, bbs = run(eq, cfg)
-    if res is None:
-        return jsonify({"error": "محاسبه بازتولید نشد."}), 400
-    qty["rebar"] = sum(r["weight"] for r in bbs)
+    if res is None or not _same_result(json.loads(row["results"]),
+                                       to_dict(res, seis, des, qty, bbs, eq, cfg)):
+        return jsonify({"error": "بازتولید محاسبه از اسنپ‌شات با نتیجه ذخیره‌شده نخواند؛ "
+                                 "نقشه ساخته نشد. محاسبه را دوباره اجرا کنید."}), 409
 
     tb = cfg.title_block.fields
     if not str(tb.get("DOCUMENT_TITLE", "")).strip():
@@ -246,23 +320,18 @@ def api_drawing(cid):
     dxf_name = f"{eq.tag}_{cid}.dxf"
     try:
         from drawing import FoundationDrawing
-        soil, _ = from_config_for_drawing(cfg)
         dwg = FoundationDrawing(cfg)
-        dwg.build(res, eq, soil, qty, bbs, seis, des)
+        dwg.build(res, eq, from_config(cfg)[0], qty, bbs, seis, des)
         dwg.save(str(OUT / dxf_name))
     except ImportError:
         return jsonify({"error": "کتابخانه ezdxf نصب نیست: python -m pip install ezdxf"}), 500
     except Exception as exc:
+        app.logger.exception("drawing failed")
         return jsonify({"error": f"نقشه ساخته نشد: {exc}"}), 500
 
     db.execute("UPDATE calculations SET dxf_path=? WHERE id=?", (dxf_name, cid))
     auth.record("تولید نقشه", "calculation", cid, {"file": dxf_name})
     return jsonify({"url": url_for("download", name=dxf_name), "name": dxf_name})
-
-
-def from_config_for_drawing(cfg):
-    from engine import from_config as _fc
-    return _fc(cfg)
 
 
 @app.route("/files/<path:name>")
@@ -298,7 +367,6 @@ def calculation_detail(cid):
     return render_template("detail.html", calc=data)
 
 
-# ================================================================= آیین‌نامه
 @app.route("/calculation/<int:cid>/print")
 @auth.login_required
 def calculation_print(cid):
@@ -313,6 +381,7 @@ def calculation_print(cid):
     return render_template("print.html", calc=data, conf=st.load())
 
 
+# ================================================================= آیین‌نامه
 @app.route("/codes")
 @auth.login_required
 def codes():
@@ -360,6 +429,25 @@ def catalog_import():
     return redirect(url_for("catalog"))
 
 
+# ================================================================= حساب کاربری
+@app.route("/account", methods=["GET", "POST"])
+@auth.login_required
+def account():
+    if request.method == "POST":
+        f = request.form
+        if f.get("new", "") != f.get("confirm", ""):
+            flash("رمز تازه و تکرارش یکی نیستند.", "error")
+        else:
+            try:
+                auth.change_password(auth.current_user()["id"], f.get("old", ""), f.get("new", ""))
+                auth.record("تغییر رمز عبور", "users", auth.current_user()["id"])
+                flash("رمز عبور عوض شد.", "ok")
+                return redirect(url_for("dashboard"))
+            except ValueError as exc:
+                flash(str(exc), "error")
+    return render_template("account.html", min_len=auth.MIN_PASSWORD)
+
+
 # ================================================================= کاربران
 @app.route("/users")
 @auth.requires("admin")
@@ -377,8 +465,11 @@ def users_new():
                                f.get("role", "engineer"), f.get("initials"))
         auth.record("ایجاد کاربر", "users", uid, {"username": f["username"]})
         flash("کاربر ساخته شد.", "ok")
-    except Exception as exc:
+    except (ValueError, KeyError) as exc:
         flash(f"کاربر ساخته نشد: {exc}", "error")
+    except Exception as exc:
+        flash("کاربر ساخته نشد — نام کاربری تکراری است؟" if "UNIQUE" in str(exc)
+              else f"کاربر ساخته نشد: {exc}", "error")
     return redirect(url_for("users"))
 
 
@@ -388,6 +479,12 @@ def audit():
     rows = db.query("SELECT a.*, u.full_name AS who FROM audit_log a"
                     " LEFT JOIN users u ON u.id=a.user_id ORDER BY a.at DESC LIMIT 300")
     return render_template("audit.html", rows=[dict(r) for r in rows])
+
+
+@app.errorhandler(400)
+def bad_request(exc):
+    return render_template("error.html", code=400,
+                           message=getattr(exc, "description", "درخواست نامعتبر")), 400
 
 
 @app.errorhandler(403)
@@ -415,4 +512,4 @@ if __name__ == "__main__":
     if creds:
         print(f"کاربر مدیر ساخته شد — {creds}  (رمز را بعد از اولین ورود عوض کنید)")
     print("سامانه روی http://127.0.0.1:5000 بالا آمد")
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get("FOUNDATION_DEBUG") == "1", port=5000)

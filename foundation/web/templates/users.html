@@ -16,6 +16,7 @@
     </table>
   </div>
   <form class="sheet" method="post" action="{{ url_for('users_new') }}">
+  {{ csrf_field() }}
     <h2>کاربر تازه</h2>
     <div class="f"><label>نام کاربری</label><input name="username" required></div>
     <div class="f"><label>نام و نام خانوادگی</label><input name="full_name" required></div>

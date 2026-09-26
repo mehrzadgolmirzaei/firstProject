@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}تغییر رمز{% endblock %}
+{% block body %}
+<header class="page"><div><h1>تغییر رمز عبور</h1><p>{{ user.full_name }}</p></div></header>
+<form class="sheet" method="post" style="max-width:420px">
+  {{ csrf_field() }}
+  <div class="f"><label>رمز فعلی</label><input name="old" type="password" required autocomplete="current-password"></div>
+  <div class="f"><label>رمز تازه (دست‌کم {{ min_len }} نویسه)</label>
+    <input name="new" type="password" required minlength="{{ min_len }}" autocomplete="new-password"></div>
+  <div class="f"><label>تکرار رمز تازه</label>
+    <input name="confirm" type="password" required minlength="{{ min_len }}" autocomplete="new-password"></div>
+  <button class="btn wide" type="submit">ذخیره</button>
+</form>
+{% endblock %}

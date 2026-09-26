@@ -204,6 +204,7 @@
 <script>
 const BUILTIN = {{ builtin|tojson }};
 const $ = id => document.getElementById(id);
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 const viewer = new FoundationViewer($("viewer"));
 let lastId = null;
 
@@ -211,7 +212,7 @@ $("mkdxf").addEventListener("click", async () => {
   if (!lastId) return;
   const b = $("mkdxf"); b.disabled = true; b.textContent = "در حال ساخت نقشه…";
   try {
-    const r = await fetch(`/api/drawing/${lastId}`, {method:"POST"});
+    const r = await fetch(`/api/drawing/${lastId}`, {method:"POST", headers: {"X-CSRF-Token": CSRF}});
     const d = await r.json();
     if (d.error) { $("msg").textContent = d.error; }
     else {
@@ -302,7 +303,7 @@ $("form").addEventListener("submit", async ev => {
   };
   try {
     const r = await fetch("/api/calculate", {
-      method: "POST", headers: {"Content-Type": "application/json"},
+      method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
       body: JSON.stringify(payload)});
     const d = await r.json();
     if (d.error) { $("msg").textContent = d.error; $("go").disabled = false; return; }
@@ -376,8 +377,6 @@ function render(d){
   viewer.build(Object.assign({}, g, {
     pad_dia: pad.dia, pad_spacing: pad.spacing,
     col_dia: ped.dia, col_bars: ped.bars,
-    tie_spacing: {{ defaults.rebar.tie_spacing }},
-    anchor_embed: g.anchor_embed || 600
   }));
 }
 </script>

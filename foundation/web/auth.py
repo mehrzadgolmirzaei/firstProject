@@ -1,6 +1,10 @@
-"""کاربران، نقش‌ها و نشست."""
+"""کاربران، نقش‌ها، نشست و حفاظت فرم‌ها."""
 import functools
+import hmac
+import secrets
+from urllib.parse import urlsplit
 from flask import session, redirect, url_for, request, abort, g
+from markupsafe import Markup
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import query, execute, now, log
 
@@ -8,7 +12,14 @@ ROLES = {"admin": "مدیر سامانه", "engineer": "مهندس طراح", "v
 RANK = {"viewer": 0, "engineer": 1, "admin": 2}
 
 
+MIN_PASSWORD = 8
+
+
 def create_user(username, full_name, password, role="engineer", initials=None):
+    if role not in ROLES:
+        raise ValueError(f"نقش نامعتبر: {role}")
+    if not username.strip() or not full_name.strip():
+        raise ValueError("نام کاربری و نام لازم است")
     return execute(
         "INSERT INTO users (username, full_name, password_hash, role, initials, created_at)"
         " VALUES (?,?,?,?,?,?)",
@@ -21,6 +32,16 @@ def seed_admin():
         return None
     create_user("admin", "مدیر سامانه", "admin", "admin", "ADM")
     return "admin / admin"
+
+
+def change_password(user_id, old, new):
+    row = query("SELECT password_hash FROM users WHERE id=?", (user_id,), one=True)
+    if not row or not check_password_hash(row["password_hash"], old):
+        raise ValueError("رمز فعلی درست نیست")
+    if len(new) < MIN_PASSWORD:
+        raise ValueError(f"رمز تازه باید دست‌کم {MIN_PASSWORD} نویسه باشد")
+    execute("UPDATE users SET password_hash=? WHERE id=?",
+            (generate_password_hash(new), user_id))
 
 
 def verify(username, password):
@@ -69,3 +90,34 @@ def record(action, entity=None, entity_id=None, detail=None):
     user = current_user()
     log(user["id"] if user else None, action, entity, entity_id, detail,
         request.remote_addr if request else None)
+
+
+def safe_next(target):
+    """فقط مسیرهای داخلی همین سامانه؛ جلوی هدایت به سایت بیرونی را می‌گیرد."""
+    if not target:
+        return None
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or not target.startswith("/") or target.startswith("//"):
+        return None
+    return target
+
+
+# ---------------------------------------------------------------- CSRF
+def csrf_token():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_urlsafe(32)
+    return session["_csrf"]
+
+
+def csrf_field():
+    return Markup(f'<input type="hidden" name="_csrf" value="{csrf_token()}">')
+
+
+def check_csrf():
+    """هر درخواست POST باید توکن نشست را همراه داشته باشد (فیلد فرم یا هدر)."""
+    if request.method != "POST":
+        return
+    sent = request.form.get("_csrf") or request.headers.get("X-CSRF-Token") or ""
+    expected = session.get("_csrf") or ""
+    if not expected or not hmac.compare_digest(sent, expected):
+        abort(400, "توکن فرم نامعتبر است — صفحه را تازه کنید و دوباره تلاش کنید.")

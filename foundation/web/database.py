@@ -11,10 +11,12 @@
 """
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime
+import os
 from pathlib import Path
 
-DB_PATH = Path(__file__).with_name("foundation.db")
+DB_PATH = Path(os.environ.get("FOUNDATION_DB") or Path(__file__).with_name("foundation.db"))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -128,7 +130,7 @@ def connect():
 
 
 def init_db():
-    with connect() as conn:
+    with closing(connect()) as conn, conn:
         conn.executescript(SCHEMA)
 
 
@@ -137,17 +139,14 @@ def now():
 
 
 def query(sql, args=(), one=False):
-    with connect() as conn:
-        cur = conn.execute(sql, args)
-        rows = cur.fetchall()
+    with closing(connect()) as conn:
+        rows = conn.execute(sql, args).fetchall()
     return (rows[0] if rows else None) if one else rows
 
 
 def execute(sql, args=()):
-    with connect() as conn:
-        cur = conn.execute(sql, args)
-        conn.commit()
-        return cur.lastrowid
+    with closing(connect()) as conn, conn:
+        return conn.execute(sql, args).lastrowid
 
 
 def log(user_id, action, entity=None, entity_id=None, detail=None, ip=None):

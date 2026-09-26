@@ -78,6 +78,7 @@
  <div class="card-wrap">
   <canvas id="robot"></canvas>
   <form method="post" id="card">
+  {{ csrf_field() }}
     <svg class="mark" viewBox="0 0 64 40" aria-hidden="true">
       <line x1="4" y1="30" x2="60" y2="30"/>
       <line x1="10" y1="30" x2="54" y2="30" class="hot"/>

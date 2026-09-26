@@ -40,21 +40,25 @@ def save(data, user_id, project_id=None):
                 " VALUES ('global',?,?,?)", (blob, user_id, now()))
 
 
-def apply_to(cfg, data):
+# بخش‌هایی که روی نتیجه مهندسی اثر دارند در لحظه اجرای محاسبه اعمال و در
+# اسنپ‌شات ذخیره می‌شوند؛ بقیه فقط ظاهر نقشه‌اند و هنگام ساخت نقشه اعمال می‌شوند.
+ENGINEERING_PARTS = ("rebar",)
+PRESENTATION_PARTS = ("title_block", "drawing")
+
+
+def apply_to(cfg, data, parts=ENGINEERING_PARTS + PRESENTATION_PARTS):
     """اعمال تنظیمات ذخیره‌شده روی ProjectConfig."""
-    for key, val in (data.get("title_block") or {}).items():
-        if str(val).strip():
-            cfg.title_block.fields[key] = val
-    for key, val in (data.get("drawing") or {}).items():
-        if val in ("", None):
+    if "title_block" in parts:
+        for key, val in (data.get("title_block") or {}).items():
+            if str(val).strip():
+                cfg.title_block.fields[key] = val
+    for part in ("drawing", "rebar"):
+        if part not in parts:
             continue
-        if hasattr(cfg.drawing, key):
-            cur = getattr(cfg.drawing, key)
-            setattr(cfg.drawing, key, type(cur)(val) if not isinstance(cur, str) else val)
-    for key, val in (data.get("rebar") or {}).items():
-        if val in ("", None):
-            continue
-        if hasattr(cfg.rebar, key):
-            cur = getattr(cfg.rebar, key)
-            setattr(cfg.rebar, key, type(cur)(float(val)))
+        target = getattr(cfg, part)
+        for key, val in (data.get(part) or {}).items():
+            if val in ("", None) or not hasattr(target, key):
+                continue
+            cur = getattr(target, key)
+            setattr(target, key, val if isinstance(cur, str) else type(cur)(float(val)))
     return cfg

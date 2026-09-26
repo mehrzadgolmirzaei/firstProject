@@ -13,38 +13,8 @@
 import argparse, os, datetime
 from config import ProjectConfig
 from equipment import CATALOG
-from engine import from_config, find_dimensions, quantities
-from seismic import Site2800v5, Site2800v4
-from design import design_all
-
-REBAR_UNIT = lambda d: 0.006165 * d * d
-
-
-def bar_schedule(res, eq, soil, des, rebar):
-    g = res.geometry
-    cov = soil.cover / 1000
-    L, B, tf, hp, b = g.L, g.B, g.tf, g.hp, g.b
-    n_ped = eq.n_pedestal
-    pad_dia, pad_sp = des["pad"].bar_dia, des["pad"].spacing
-    col_n, col_dia = des["pedestal"].bar_count, des["pedestal"].bar_dia
-    nx = int((L - 2 * cov) / (pad_sp / 1000)) + 1
-    ny = int((B - 2 * cov) / (pad_sp / 1000)) + 1
-    raw = [
-        ("01", "PAD  BOTTOM  E.W.", pad_dia, 2 * ny, L - 2 * cov + 2 * 10 * pad_dia / 1000),
-        ("02", "PEDESTAL VERTICAL", col_dia, col_n * n_ped,
-         tf + hp - 2 * cov + 15 * col_dia / 1000),
-        ("03", "PAD  TOP  E.W.", pad_dia, 2 * nx, B - 2 * cov + 2 * 10 * pad_dia / 1000),
-        ("04", "STANDEE", rebar.standee_dia, nx, (tf - 2 * cov) + 0.4),
-        ("05", "PEDESTAL TIE", rebar.tie_dia, (int(hp / (rebar.tie_spacing / 1000)) + 1) * n_ped,
-         4 * (b - 2 * cov) + 20 * rebar.tie_dia / 1000),
-    ]
-    rows = []
-    for pos, shape, dia, no, length in raw:
-        total = no * length
-        rows.append(dict(pos=pos, shape=shape, dia=dia, no=no, length=length,
-                         total=total, unit_w=REBAR_UNIT(dia), weight=total * REBAR_UNIT(dia)))
-    return rows
-
+from pipeline import run
+from engine import from_config
 
 def report(res, eq, soil, seis, qty, bbs, des, cfg):
     g = res.geometry
@@ -97,7 +67,7 @@ def report(res, eq, soil, seis, qty, bbs, des, cfg):
                  f"آرماتور {qty['rebar']*cfg.equipment_count:.0f} kg")
         o.append("")
     o += ["> آرماتور از طراحی خمشی محاسبه و برش پانچ و یک‌طرفه کنترل شده است.",
-          "> آنچه هنوز نیست: زمان تناوب T ، ترکیب ۱۰۰/۳۰ زلزله ، طراحی میل مهار و صفحه کف."]
+          "> آنچه هنوز نیست: ترکیب ۱۰۰/۳۰ زلزله ، طراحی میل مهار و صفحه کف."]
     return "\n".join(o)
 
 
@@ -127,24 +97,12 @@ def main():
         cfg.drawing.dxf_version = "R2000"
 
     eq = CATALOG[a.tag]
-    soil, wind = from_config(cfg)
-    s = cfg.seismic
-    seis = (Site2800v4(a=s.a, b=s.b, i=s.i, r=s.r).compute() if s.edition == 4
-            else Site2800v5(ss=s.ss, s1=s.s1, soil=s.soil_class, ie=s.ie,
-                            ru=s.ru, method=s.method, map_date=s.map_date).compute())
-
-    f = cfg.foundation
-    res = find_dimensions(eq, soil, wind, seis.ch, seis.cv,
-                          hp=f.hp, b=f.b, tf=f.tf,
-                          lo=f.search_min, hi=f.search_max, step=f.search_step)
+    res, seis, des, qty, bbs = run(eq, cfg)
     if res is None:
+        f = cfg.foundation
         print(f"تا {f.search_max} متر جوابی پیدا نشد — ورودی‌ها را بررسی کنید.")
         return
-
-    des = design_all(res, eq, soil, cfg.rebar)
-    qty = quantities(res, eq, soil)
-    bbs = bar_schedule(res, eq, soil, des, cfg.rebar)
-    qty["rebar"] = sum(r["weight"] for r in bbs)
+    soil = from_config(cfg)[0]
 
     os.makedirs(a.out, exist_ok=True)
     rpt = os.path.join(a.out, f"{a.tag}_report.md")
