@@ -88,7 +88,8 @@ CREATE TABLE IF NOT EXISTS calculations (
     inputs         TEXT NOT NULL,       -- JSON اسنپ‌شات کامل ورودی
     results        TEXT NOT NULL,       -- JSON ابعاد، کنترل‌ها، آرماتور، متره
     status         TEXT NOT NULL,       -- ok | ng | failed
-    dxf_path       TEXT,
+    dxf_path       TEXT,                -- نقشه دوبعدی (ساخت)
+    dxf3d_path     TEXT,                -- مدل سه‌بعدی (ارائه)
     report_path    TEXT,
     run_by         INTEGER REFERENCES users(id),
     run_at         TEXT NOT NULL,
@@ -129,9 +130,17 @@ def connect():
     return conn
 
 
+# ستون‌هایی که بعد از نسخه ۱٫۰ اضافه شده‌اند؛ دیتابیس‌های قدیمی بی‌دردسر به‌روز می‌شوند.
+MIGRATIONS = [("calculations", "dxf3d_path", "TEXT")]
+
+
 def init_db():
     with closing(connect()) as conn, conn:
         conn.executescript(SCHEMA)
+        for table, column, decl in MIGRATIONS:
+            cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
 
 def now():

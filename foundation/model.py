@@ -9,7 +9,7 @@
     x در راستای L ، y در راستای B ، z رو به بالا
     z = 0 کف پی ، z = tf روی پی ، z = tf + hp روی ستون
 """
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 
 @dataclass
@@ -137,9 +137,18 @@ def build(res, eq, des, cfg) -> FoundationModel:
         for dx, dy in pedestal_bar_positions(core, ped.bar_count):
             x, y = p.x + dx, p.y + dy
             z0, z1 = z_bot + d, tf + hp - cov
-            # قلاب رو به بیرون مقطع
-            hx = 15 * ped.bar_dia * (1 if dx > 0 else -1) if abs(dx) >= abs(dy) else 0
-            hy = 15 * ped.bar_dia * (1 if dy > 0 else -1) if abs(dy) > abs(dx) else 0
+            # قلاب ۱۵d رو به بیرون مقطع؛ اگر از لبه پی بیرون بزند، رو به داخل
+            hook = 15 * ped.bar_dia
+            if abs(dx) >= abs(dy):
+                sx = 1 if dx > 0 else -1
+                if abs(x + sx * hook) > L / 2 - cov:
+                    sx = -sx
+                hx, hy = sx * hook, 0.0
+            else:
+                sy = 1 if dy > 0 else -1
+                if abs(y + sy * hook) > B / 2 - cov:
+                    sy = -sy
+                hx, hy = 0.0, sy * hook
             fm.bars.append(Bar("02", ped.bar_dia, [(x + hx, y + hy, z0), (x, y, z0), (x, y, z1)]))
         z = tf + TIE_START
         while z <= tf + hp - TIE_START + 1e-6:
@@ -162,3 +171,46 @@ def build(res, eq, des, cfg) -> FoundationModel:
                 fm.anchors.append(Anchor(p.x + sx * gge / 2, p.y + sy * gge / 2, eq.anchor_dia,
                                          fm.top - eq.anchor_embed, fm.top + 200))
     return fm
+
+
+def clashes(fm: FoundationModel) -> list:
+    """
+    کنترل هندسی جزئیات: هر میلگردی که پوشش بتن را رعایت نکند یا از بتن بیرون
+    بزند، هر میل مهاری که از ستون بیرون باشد یا تا پی نرسد، و ستون‌هایی که روی
+    هم افتاده‌اند یا از پی بیرون زده‌اند.
+    """
+    out = []
+    tol = 1.0
+
+    def inside(x, y, z, margin):
+        if -margin <= z <= fm.tf + margin and abs(x) <= fm.L / 2 - margin and \
+                abs(y) <= fm.B / 2 - margin:
+            return True
+        return any(abs(x - p.x) <= p.size / 2 - margin and abs(y - p.y) <= p.size / 2 - margin
+                   and fm.tf - margin <= z <= fm.top - margin for p in fm.pedestals)
+
+    for bar in fm.bars:
+        r = bar.dia / 2
+        for x, y, z in bar.points:
+            if not inside(x, y, z, fm.cover * 0.5 - r - tol):
+                out.append(f"میلگرد {bar.mark} (Ф{bar.dia:.0f}) در ({x:.0f}, {y:.0f}, {z:.0f}) "
+                           f"از بتن بیرون زده یا پوشش ندارد")
+                break
+    for a in fm.anchors:
+        if not any(abs(a.x - p.x) <= p.size / 2 - a.dia and abs(a.y - p.y) <= p.size / 2 - a.dia
+                   for p in fm.pedestals):
+            out.append(f"میل مهار ({a.x:.0f}, {a.y:.0f}) بیرون از ستون است")
+    for i, p in enumerate(fm.pedestals):
+        if abs(p.x) + p.size / 2 > fm.L / 2 + tol or abs(p.y) + p.size / 2 > fm.B / 2 + tol:
+            out.append(f"ستون {i + 1} از پی بیرون زده")
+        for q in fm.pedestals[i + 1:]:
+            if abs(p.x - q.x) < (p.size + q.size) / 2 and abs(p.y - q.y) < (p.size + q.size) / 2:
+                out.append("دو ستون روی هم افتاده‌اند")
+    return out
+
+
+def to_dict(fm: FoundationModel) -> dict:
+    """نسخه JSON مدل برای نمای سه‌بعدی مرورگر؛ همان مختصات فایل‌های اتوکد."""
+    d = asdict(fm)
+    d["top"] = fm.top
+    return d

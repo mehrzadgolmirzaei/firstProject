@@ -73,7 +73,12 @@ def test_calculate_and_draw(client, app):
     assert row["code_profile_id"] is not None
     r = client.post(f"/api/drawing/{d['id']}", headers={"X-CSRF-Token": client.csrf})
     assert r.status_code == 200, r.get_json()
-    assert client.get(r.get_json()["url"]).status_code == 200
+    files = {f["kind"]: f for f in r.get_json()["files"]}
+    assert set(files) == {"2d", "3d"}
+    for f in files.values():
+        body = client.get(f["url"]).data
+        assert body.startswith(b"  0\r\nSECTION") or b"SECTION" in body[:40]
+    assert r.get_json()["warnings"] == []
     assert client.get(f"/calculation/{d['id']}/print").status_code == 200
 
 

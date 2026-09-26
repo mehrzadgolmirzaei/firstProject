@@ -175,8 +175,8 @@
       </div>
       <p class="note" id="sub"></p>
       <div class="actions" id="actions" style="display:none">
-        <button class="btn quiet" type="button" id="mkdxf">ساخت نقشه DXF</button>
-        <a class="btn quiet" id="dxflink" style="display:none">دانلود نقشه</a>
+        <button class="btn quiet" type="button" id="mkdxf">ساخت نقشه‌های اتوکد</button>
+        <span id="dxflinks" style="display:contents"></span>
         <a class="btn quiet" id="detail">گزارش کامل</a>
         <a class="btn quiet" id="printlink" target="_blank">گزارش چاپی / PDF</a>
       </div>
@@ -216,12 +216,18 @@ $("mkdxf").addEventListener("click", async () => {
     const d = await r.json();
     if (d.error) { $("msg").textContent = d.error; }
     else {
-      const a = $("dxflink");
-      a.href = d.url; a.download = d.name; a.style.display = "inline-block";
-      $("msg").textContent = "نقشه ساخته شد: " + d.name;
+      const box = $("dxflinks"); box.innerHTML = "";
+      d.files.forEach(f => {
+        const a = document.createElement("a");
+        a.className = "btn quiet"; a.href = f.url; a.download = f.name; a.textContent = f.label;
+        box.appendChild(a);
+      });
+      $("msg").textContent = d.warnings.length
+        ? "نقشه‌ها ساخته شد، با هشدار: " + d.warnings.join("، ")
+        : "دو خروجی ساخته شد: نقشه دوبعدی برای ساخت و مدل سه‌بعدی برای ارائه.";
     }
   } catch (e) { $("msg").textContent = "نقشه ساخته نشد: " + e; }
-  b.disabled = false; b.textContent = "ساخت نقشه DXF";
+  b.disabled = false; b.textContent = "ساخت نقشه‌های اتوکد";
 });
 
 const OUTLINE_FIELDS = {};
@@ -325,7 +331,7 @@ function render(d){
   $("designBox").style.display = "block";
   $("legend").style.display = "block";
   $("actions").style.display = "flex";
-  $("dxflink").style.display = "none";
+  $("dxflinks").innerHTML = "";
   $("detail").href = "/calculation/" + d.id;
   $("printlink").href = "/calculation/" + d.id + "/print";
   $("readouts").innerHTML =
@@ -361,6 +367,9 @@ function render(d){
   requestAnimationFrame(() => document.querySelectorAll(".gauge i")
     .forEach(el => el.style.width = el.dataset.w + "%"));
 
+  if (d.clashes && d.clashes.length) {
+    $("sub").textContent += " · تداخل جزئیات: " + d.clashes.join("، ");
+  }
   const pad = d.design.pad, ped = d.design.pedestal;
   $("rebar").innerHTML =
     `<div class="kv"><span>آرماتور پی</span><span>${pad.bars}Ф${pad.dia}@${fmt(pad.spacing,0)}</span></div>
@@ -374,10 +383,7 @@ function render(d){
      <div class="kv"><span>خاکبرداری</span><span>${fmt(q.excavation)} m³</span></div>
      <div class="kv"><span>وزن آرماتور</span><span>${fmt(q.rebar,1)} kg</span></div>`;
 
-  viewer.build(Object.assign({}, g, {
-    pad_dia: pad.dia, pad_spacing: pad.spacing,
-    col_dia: ped.dia, col_bars: ped.bars,
-  }));
+  viewer.build(d.model);
 }
 </script>
 {% endblock %}

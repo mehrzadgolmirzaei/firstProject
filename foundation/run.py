@@ -4,6 +4,9 @@
     python run.py LA
     python run.py LA --project project.json
     python run.py LA --edition 4                  بازتولید دفترچه قدیمی
+    python run.py LA --no-dxf                     فقط محاسبه و گزارش
+
+خروجی در out/:  گزارش، نقشه دوبعدی LA_2D.dxf و مدل سه‌بعدی LA_3D.dxf
     python run.py --save-project project.json     ساخت فایل تنظیمات پیش‌فرض
 
 تمام اعداد قابل تنظیم در project.json هستند: مصالح، خاک، باد، لرزه،
@@ -121,19 +124,19 @@ def main():
         print(f"   {des[key].title:24} {des[key].note}")
     print(f"   بتن {qty['concrete']:.2f} m3 | مگر {qty['lean']:.3f} m3 | "
           f"آرماتور {qty['rebar']:.0f} kg")
+    import model
+    for c in model.clashes(model.build(res, eq, des, cfg)):
+        print(f"   ⚠ تداخل: {c}")
     print(f"گزارش: {rpt}")
 
     if a.no_dxf:
         return
     try:
-        from drawing import FoundationDrawing
-        tb = cfg.title_block.fields
-        if not str(tb.get("DOCUMENT_TITLE", "")).strip():
-            tb["DOCUMENT_TITLE"] = f"{eq.title.upper()} FOUNDATION"
-        tb["SCALE"] = f"1/{cfg.drawing.scale:.0f}"
-        dwg = FoundationDrawing(cfg, simple=a.simple)
-        dwg.build(res, eq, soil, qty, bbs, seis, des)
-        print("نقشه:", dwg.save(os.path.join(a.out, f"{a.tag}_foundation.dxf")))
+        from outputs import make_outputs
+        out = make_outputs(res, eq, soil, qty, bbs, seis, des, cfg, a.out, a.tag,
+                           simple=a.simple)
+        print(f"نقشه دوبعدی (ساخت، ۱:{out['scale']:.0f}):", out["2d"])
+        print("مدل سه‌بعدی (ارائه):", out["3d"])
     except ImportError:
         print("ezdxf نصب نیست:  python -m pip install ezdxf")
 

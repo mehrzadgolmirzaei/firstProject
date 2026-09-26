@@ -312,26 +312,25 @@ def api_drawing(cid):
         return jsonify({"error": "بازتولید محاسبه از اسنپ‌شات با نتیجه ذخیره‌شده نخواند؛ "
                                  "نقشه ساخته نشد. محاسبه را دوباره اجرا کنید."}), 409
 
-    tb = cfg.title_block.fields
-    if not str(tb.get("DOCUMENT_TITLE", "")).strip():
-        tb["DOCUMENT_TITLE"] = f"{eq.title.upper()} FOUNDATION"
-    tb["SCALE"] = f"1/{cfg.drawing.scale:.0f}"
-
-    dxf_name = f"{eq.tag}_{cid}.dxf"
     try:
-        from drawing import FoundationDrawing
-        dwg = FoundationDrawing(cfg)
-        dwg.build(res, eq, from_config(cfg)[0], qty, bbs, seis, des)
-        dwg.save(str(OUT / dxf_name))
+        from outputs import make_outputs
+        out = make_outputs(res, eq, from_config(cfg)[0], qty, bbs, seis, des, cfg,
+                           str(OUT), f"{eq.tag}_{cid}")
     except ImportError:
         return jsonify({"error": "کتابخانه ezdxf نصب نیست: python -m pip install ezdxf"}), 500
     except Exception as exc:
         app.logger.exception("drawing failed")
         return jsonify({"error": f"نقشه ساخته نشد: {exc}"}), 500
 
-    db.execute("UPDATE calculations SET dxf_path=? WHERE id=?", (dxf_name, cid))
-    auth.record("تولید نقشه", "calculation", cid, {"file": dxf_name})
-    return jsonify({"url": url_for("download", name=dxf_name), "name": dxf_name})
+    n2, n3 = Path(out["2d"]).name, Path(out["3d"]).name
+    db.execute("UPDATE calculations SET dxf_path=?, dxf3d_path=? WHERE id=?", (n2, n3, cid))
+    auth.record("تولید نقشه", "calculation", cid, {"2d": n2, "3d": n3})
+    return jsonify({"files": [
+        {"kind": "2d", "name": n2, "url": url_for("download", name=n2),
+         "label": f"نقشه دوبعدی — ساخت (۱:{out['scale']:.0f})"},
+        {"kind": "3d", "name": n3, "url": url_for("download", name=n3),
+         "label": "مدل سه‌بعدی — ارائه"}],
+        "warnings": out["warnings"]})
 
 
 @app.route("/files/<path:name>")

@@ -95,7 +95,10 @@
       this.build0 = Math.min(1, this.build0 + 0.035);
       this.group.scale.y = 0.25 + 0.75 * this._ease(this.build0);
       this.group.traverse((o) => {
-        if (o.material && o.material.transparent) o.material.opacity = this.build0;
+        // شفافیت نهایی هر ماده حفظ می‌شود؛ انیمیشن فقط از صفر به همان مقدار می‌رود
+        if (o.material && o.material.transparent) {
+          o.material.opacity = this.build0 * (o.material.userData.opacity ?? 1);
+        }
       });
     }
     this.renderer.render(this.scene, this.camera);
@@ -117,115 +120,77 @@
     const m = new THREE.MeshStandardMaterial({
       color, roughness: 0.85, metalness: 0.05,
       transparent: opacity !== undefined, opacity: opacity === undefined ? 1 : opacity,
+      depthWrite: opacity === undefined,
     });
+    m.userData.opacity = m.opacity;
     return new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
   }
 
-  function bar(len, dia, color, axis) {
+  /** میلگرد بین دو نقطه (مختصات three.js) */
+  function segment(a, b, dia, color) {
+    const dir = new THREE.Vector3().subVectors(b, a);
+    const len = dir.length();
     const m = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.6 });
-    const g = new THREE.CylinderGeometry(dia / 2, dia / 2, len, 8);
-    const mesh = new THREE.Mesh(g, m);
-    if (axis === "x") mesh.rotation.z = Math.PI / 2;
-    if (axis === "z") mesh.rotation.x = Math.PI / 2;
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(dia / 2, dia / 2, len, 8), m);
+    mesh.position.copy(a).add(b).multiplyScalar(0.5);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
     return mesh;
   }
 
-  /** ساخت مدل از خروجی محاسبه */
-  Viewer.prototype.build = function (g) {
-    if (!this.ready) return;
-    this._clear();
-    const L = g.L, B = g.B, tf = g.tf, hp = g.hp, b = g.b;
-    const cov = (g.cover || 75) / 1000, lean = (g.lean || 100) / 1000;
-    const n = g.n_pedestal || 1;
-    const sp = g.pedestal_spacing || (n > 1 ? B / 2 : 0);
-    const dia = (g.pad_dia || 14) / 1000;
-    const spacing = (g.pad_spacing || 200) / 1000;
+  // مختصات مدل: میلی‌متر، z رو به بالا ← three.js: متر، y رو به بالا
+  const P = (p) => new THREE.Vector3(p[0] / 1000, p[2] / 1000, -p[1] / 1000);
 
-    // زمین
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(L * 3.2, B * 3.2),
+  function edged(group, w, h, d, pos, color, opacity) {
+    const b = box(w, h, d, color, opacity);
+    b.position.copy(pos);
+    group.add(b);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)),
+      new THREE.LineBasicMaterial({ color: 0xD6DEE4 }));
+    e.position.copy(pos);
+    group.add(e);
+  }
+
+  /**
+   * ساخت مدل از مدل مرکزی سرور (model.py) — همان مختصاتی که نقشه دوبعدی و
+   * فایل سه‌بعدی اتوکد از آن ساخته می‌شوند.
+   */
+  Viewer.prototype.build = function (m) {
+    if (!this.ready || !m) return;
+    this._clear();
+    const k = 1 / 1000;
+    const L = m.L * k, B = m.B * k, tf = m.tf * k, lean = m.lean * k, lm = m.lean_margin * k;
+    const top = m.top * k;
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(L * 3.2, B * 3.2),
       new THREE.MeshStandardMaterial({ color: C.ground, roughness: 1 }));
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -lean - 0.001;
     this.group.add(ground);
 
-    // بتن مگر
-    const lc = box(L + 0.2, lean, B + 0.2, C.lean);
+    const lc = box(L + 2 * lm, lean, B + 2 * lm, C.lean);
     lc.position.y = -lean / 2;
     this.group.add(lc);
-
-    // پی
-    const pad = box(L, tf, B, C.pad, 0.55);
-    pad.position.y = tf / 2;
-    this.group.add(pad);
-    const padEdge = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(L, tf, B)),
-      new THREE.LineBasicMaterial({ color: 0xD6DEE4 }));
-    padEdge.position.y = tf / 2;
-    this.group.add(padEdge);
-
-    // شبکه آرماتور پی، دو لایه
-    [cov, tf - cov].forEach((y) => {
-      for (let x = -L / 2 + cov; x <= L / 2 - cov + 1e-6; x += spacing) {
-        const r = bar(B - 2 * cov, dia, C.rebar, "z");
-        r.position.set(x, y, 0);
-        this.group.add(r);
-      }
-      for (let z = -B / 2 + cov; z <= B / 2 - cov + 1e-6; z += spacing) {
-        const r = bar(L - 2 * cov, dia, C.rebar, "x");
-        r.position.set(0, y, z);
-        this.group.add(r);
-      }
+    edged(this.group, L, tf, B, new THREE.Vector3(0, tf / 2, 0), C.pad, 0.55);
+    m.pedestals.forEach((p) => {
+      const h = top - tf;
+      edged(this.group, p.size * k, h, p.size * k,
+        new THREE.Vector3(p.x * k, tf + h / 2, -p.y * k), C.pedestal, 0.45);
     });
 
-    // ستون‌ها
-    const xs = n > 1 ? [-sp / 2, sp / 2] : [0];
-    const colDia = (g.col_dia || 18) / 1000;
-    const tieSp = (g.tie_spacing || 150) / 1000;
-    const core = b - 2 * cov;
-    xs.forEach((cx) => {
-      const ped = box(b, hp, b, C.pedestal, 0.45);
-      ped.position.set(cx, tf + hp / 2, 0);
-      this.group.add(ped);
-      const edge = new THREE.LineSegments(
-        new THREE.EdgesGeometry(new THREE.BoxGeometry(b, hp, b)),
-        new THREE.LineBasicMaterial({ color: 0xD6DEE4 }));
-      edge.position.set(cx, tf + hp / 2, 0);
-      this.group.add(edge);
-
-      // میلگردهای قائم دور مقطع
-      const per = Math.max(2, Math.round((g.col_bars || 8) / 4));
-      for (let i = 0; i < per; i++) {
-        const o = -core / 2 + (core / (per - 1 || 1)) * i;
-        [[o, -core / 2], [o, core / 2], [-core / 2, o], [core / 2, o]].forEach((p) => {
-          const v = bar(hp + tf - 2 * cov, colDia, C.rebar, "y");
-          v.position.set(cx + p[0], (tf + hp) / 2, p[1]);
-          this.group.add(v);
-        });
+    m.bars.forEach((bar) => {
+      const pts = bar.points.map(P);
+      if (bar.closed) pts.push(pts[0]);
+      const color = bar.mark === "05" ? C.tie : C.rebar;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        this.group.add(segment(pts[i], pts[i + 1], bar.dia * k, color));
       }
-      // خاموت‌ها
-      for (let y = tf + cov; y <= tf + hp - cov; y += tieSp) {
-        const ring = new THREE.LineLoop(
-          new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(cx - core / 2, y, -core / 2),
-            new THREE.Vector3(cx + core / 2, y, -core / 2),
-            new THREE.Vector3(cx + core / 2, y, core / 2),
-            new THREE.Vector3(cx - core / 2, y, core / 2)]),
-          new THREE.LineBasicMaterial({ color: C.tie }));
-        this.group.add(ring);
-      }
-      // میل مهارها
-      const gge = (g.anchor_gauge || 450) / 1000;
-      const ad = (g.anchor_dia || 20) / 1000;
-      const emb = (g.anchor_embed || 600) / 1000;
-      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach((s) => {
-        const ab = bar(emb + 0.2, ad, C.anchor, "y");
-        ab.position.set(cx + s[0] * gge / 2, tf + hp - emb / 2 + 0.1, s[1] * gge / 2);
-        this.group.add(ab);
-      });
+    });
+    m.anchors.forEach((a) => {
+      this.group.add(segment(P([a.x, a.y, a.z_bottom]), P([a.x, a.y, a.z_top]),
+        a.dia * k, C.anchor));
     });
 
-    this.group.position.y = -(tf + hp) / 2;
+    this.group.position.y = -top / 2;
     this.dist = Math.max(4.5, Math.max(L, B) * 2.6);
     this.build0 = 0;                 // شروع انیمیشن ساخت
     this.autoRotate = true;

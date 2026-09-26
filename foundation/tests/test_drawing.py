@@ -80,3 +80,16 @@ def test_title_block_scale_follows_chosen_scale():
     dwg, *_ = _drawing("PI", 4)
     texts = [t.dxf.text for t in dwg.msp.query("TEXT")]
     assert f"1/{dwg.s:.0f}" in texts
+
+
+@pytest.mark.parametrize("tag", list(CATALOG))
+def test_model_has_no_clashes(tag):
+    dwg, res, des, bbs, cfg = _drawing(tag)
+    assert model.clashes(model.build(res, CATALOG[tag], des, cfg)) == []
+
+
+def test_clash_check_catches_bar_outside_concrete():
+    dwg, res, des, bbs, cfg = _drawing("LA")
+    fm = model.build(res, CATALOG["LA"], des, cfg)
+    fm.bars[0].points[0] = (fm.L, 0, 0)
+    assert model.clashes(fm)

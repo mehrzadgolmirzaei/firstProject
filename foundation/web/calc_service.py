@@ -14,6 +14,7 @@ if str(ROOT) not in sys.path:
 from config import ProjectConfig                      # noqa: E402
 from equipment import Equipment, CATALOG              # noqa: E402
 from pipeline import run                              # noqa: E402,F401
+import model                                          # noqa: E402
 
 def build_equipment(data: dict) -> Equipment:
     """ساخت شیء تجهیز از دیکشنری کاتالوگ یا فرم."""
@@ -38,6 +39,8 @@ def build_equipment(data: dict) -> Equipment:
 def to_dict(res, seis, des, qty, bbs, eq, cfg):
     """خروجی قابل ذخیره در دیتابیس و قابل مصرف در رابط کاربری."""
     g = res.geometry
+    fm = model.build(res, eq, des, cfg)
+    clashes = model.clashes(fm)
     return {
         "geometry": {"L": g.L, "B": g.B, "tf": g.tf, "hp": g.hp, "b": g.b,
                      "n_pedestal": eq.n_pedestal,
@@ -65,6 +68,8 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
                        "as_req": d.as_req, "steps": [list(s) for s in d.steps]}
                    for k, d in des.items()},
         "bbs": bbs,
+        "model": model.to_dict(fm),
+        "clashes": clashes,
         "quantities": qty,
-        "ok": res.ok and all(d.ok for d in des.values()),
+        "ok": res.ok and all(d.ok for d in des.values()) and not clashes,
     }
