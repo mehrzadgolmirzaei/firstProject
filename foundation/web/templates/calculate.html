@@ -154,7 +154,7 @@
         <label>حالت بار حاکم</label>
         <select id="governing">
           {% for k, v in options.governing.items() %}
-          <option value="{{ k }}" {{ 'selected' if k == defaults.design.governing }}>{{ v }}</option>
+          <option value="{{ k }}" {{ 'selected' if k == defaults.design.governing }}>{{ v }}{{ '  ★ پیشنهاد سامانه' if k == options.recommended.governing }}</option>
           {% endfor %}
         </select>
         <p class="note" style="margin:4px 0 0">
@@ -165,7 +165,7 @@
         <label>بار قائم در کنترل تنش خاک</label>
         <select id="bearing">
           {% for k, v in options.bearing.items() %}
-          <option value="{{ k }}" {{ 'selected' if k == defaults.design.bearing }}>{{ v }}</option>
+          <option value="{{ k }}" {{ 'selected' if k == defaults.design.bearing }}>{{ v }}{{ '  ★ پیشنهاد سامانه' if k == options.recommended.bearing }}</option>
           {% endfor %}
         </select>
         <p class="note" style="margin:4px 0 0">

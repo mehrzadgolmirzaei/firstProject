@@ -146,3 +146,14 @@ def test_design_options_from_form(client):
     assert d["geometry"]["L"] == pytest.approx(2.7)
     assert {r["key"] for r in d["comparison"]} == {"notebook", "recommended", "selected"}
     assert _calc(client, "PI", **{"design.governing": "9"}).status_code == 400
+
+
+def test_print_report_shows_only_chosen_method(client):
+    """گزارش چاپی سند رسمی است: روش انتخاب‌شده می‌آید، پیشنهاد و مقایسه نه."""
+    d = _calc(client, "PI", **{"design.governing": "envelope"}).get_json()
+    html = client.get(f"/calculation/{d['id']}/print").get_data(as_text=True)
+    assert "پوش همه حالات" in html
+    import re
+    for w in ("پیشنهاد", "مقایسه"):
+        m = re.search(w, html)
+        assert m is None, html[max(0, m.start() - 200):m.end() + 50]

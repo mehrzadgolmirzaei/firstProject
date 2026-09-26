@@ -19,7 +19,7 @@ import argparse, os, datetime
 from config import ProjectConfig
 from equipment import CATALOG
 from pipeline import run
-from engine import GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED, WHY
+from engine import GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED
 from engine import from_config
 
 def report(res, eq, soil, seis, qty, bbs, des, cfg):
@@ -39,14 +39,7 @@ def report(res, eq, soil, seis, qty, bbs, des, cfg):
         o.append(f"- **{lab}** — `{formula}` → {subst}")
     o += ["", "## روش کنترل",
           f"- حالت بار حاکم: {GOVERNING_OPTIONS[str(cfg.design.governing)]}",
-          f"- تنش خاک: {BEARING_OPTIONS[cfg.design.bearing]}", "",
-          "| روش | حالت حاکم | تنش خاک | ابعاد پی (m) |", "|---|---|---|---|"]
-    for c in getattr(res, "comparison", []):
-        side = f"{c['side']:.2f}" if c["side"] else "—"
-        mark = " ←" if c["selected"] else ""
-        o.append(f"| {c['label']}{mark} | {GOVERNING_OPTIONS[c['governing']]} | "
-                 f"{BEARING_OPTIONS[c['bearing']]} | {side} |")
-    o += ["", f"> چرا پیشنهاد سامانه: {WHY['governing']}", ""]
+          f"- تنش خاک: {BEARING_OPTIONS[cfg.design.bearing]}"]
     o += ["", "## حالات بارگذاری",
           "| # | حالت | Fe | Fs | N max | N min | V | M |", "|---|---|---|---|---|---|---|---|"]
     for c in res.cases:

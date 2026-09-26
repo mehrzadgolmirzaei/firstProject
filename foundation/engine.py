@@ -149,7 +149,7 @@ def case_forces(lc: dict, eq: Equipment) -> CaseForces:
 # و ابعاد هر دو روش را حساب می‌کند تا اثر انتخاب دیده شود.
 GOVERNING_OPTIONS = {
     "notebook": "روش دفترچه — حالتی که N+V+M آن بیشترین است",
-    "envelope": "پوش همه حالات — هر کنترل با بحرانی‌ترین حالت خودش (پیشنهادی)",
+    "envelope": "پوش همه حالات — هر کنترل با بحرانی‌ترین حالت خودش",
     "1": "فقط حالت ۱ — یخ + باد نرمال",
     "2": "فقط حالت ۲ — باد شدید",
     "3": "فقط حالت ۳ — باد شدید + اتصال کوتاه",
@@ -159,7 +159,7 @@ GOVERNING_OPTIONS = {
 BEARING_OPTIONS = {
     "min": "با N_min — روش دفترچه",
     "max": "با N_max",
-    "envelope": "بحرانی‌ترین از N_max و N_min (پیشنهادی)",
+    "envelope": "بحرانی‌ترین از N_max و N_min",
 }
 RECOMMENDED = {"governing": "envelope", "bearing": "envelope"}
 WHY = {

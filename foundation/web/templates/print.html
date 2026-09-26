@@ -55,6 +55,7 @@
   }
   .kv{display:flex;justify-content:space-between;border-bottom:1px dotted #D3D8D6;padding:3px 0;font-size:9.5pt}
   .kv span:last-child{font-family:"IBM Plex Mono",monospace;font-weight:600;direction:ltr}
+  .kv span.txt{font-family:inherit;direction:rtl;text-align:left;font-weight:600}
   .chk{border-bottom:1px solid #E4E7E5;padding:7px 0;break-inside:avoid}
   .chk .top{display:flex;justify-content:space-between;gap:10px;font-size:10pt}
   .chk .val{font-family:"IBM Plex Mono",monospace;direction:ltr}
@@ -105,6 +106,10 @@
       <div class="kv"><span>آرماتور پی</span><span>{{ r.design.pad.bars }}Ф{{ r.design.pad.dia }}@{{ r.design.pad.spacing|round|int }}</span></div>
       <div class="kv"><span>آرماتور ستون</span><span>{{ r.design.pedestal.bars }}Ф{{ r.design.pedestal.dia }}</span></div>
       <div class="kv"><span>میل مهار</span><span>{{ r.geometry.anchor_n }}M{{ r.geometry.anchor_dia }} @ {{ r.geometry.anchor_gauge|round|int }}</span></div>
+      {% if r.options %}
+      <div class="kv"><span>حالت بار حاکم</span><span class="txt">{{ options.governing[r.options.governing] }}</span></div>
+      <div class="kv"><span>تنش خاک</span><span class="txt">{{ options.bearing[r.options.bearing] }}</span></div>
+      {% endif %}
       <div class="kv"><span>ضریب زلزله</span><span>Ch={{ '%.3f'|format(r.seismic.ch) }} / Cv={{ '%.3f'|format(r.seismic.cv) }}</span></div>
       {% if r.seismic.period %}
       <div class="kv"><span>زمان تناوب</span><span>{{ '%.4f'|format(r.seismic.period) }} s — {{ 'صلب' if r.seismic.method=='rigid' else 'غیرصلب' }}</span></div>
@@ -115,22 +120,6 @@
   </div>
 </section>
 
-{% if r.comparison %}
-<section>
-  <h2>روش کنترل و مقایسه</h2>
-  <table>
-    <thead><tr><th>روش</th><th>حالت حاکم</th><th>تنش خاک</th><th>ابعاد پی (m)</th></tr></thead>
-    <tbody>
-    {% for c in r.comparison %}
-      <tr class="{{ 'gov' if c.selected }}"><td>{{ c.label }}</td>
-        <td>{{ options.governing[c.governing] }}</td><td>{{ options.bearing[c.bearing] }}</td>
-        <td class="n">{{ '%.2f'|format(c.side) if c.side else '—' }}</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  <div style="font-size:9pt;color:#5C6B77;margin-top:4px">سطر پررنگ روشی است که طراح انتخاب کرده و مبنای این گزارش است.</div>
-</section>
-{% endif %}
 
 <section>
   <h2>ضریب زلزله</h2>
