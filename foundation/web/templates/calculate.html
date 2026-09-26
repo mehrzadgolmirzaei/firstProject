@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+{% block title %}محاسبه جدید{% endblock %}
+{% block body %}
+<header class="page">
+  <div><h1>محاسبه جدید</h1><p>تجهیز را انتخاب کنید، ابعاد و آرماتور محاسبه می‌شود</p></div>
+  <span class="note" id="stamp"></span>
+</header>
+
+<div class="cols">
+  <!-- ورودی -->
+  <form class="sheet" id="form" autocomplete="off">
+    <h2>ورودی</h2>
+
+    <div class="f">
+      <label>تجهیز</label>
+      <select id="preset">
+        <option value="">— انتخاب کنید —</option>
+        {% for tag, eq in builtin.items() %}
+        <option value="{{ tag }}">{{ tag }} — {{ eq.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="f">
+      <label>پست و ساختگاه</label>
+      <select id="substation">
+        <option value="">— بدون پست (ورود دستی) —</option>
+        {% for s in substations %}
+        <option value="{{ s.id }}" data-ss="{{ s.ss or '' }}" data-s1="{{ s.s1 or '' }}"
+                data-soil="{{ s.soil_class or 'III' }}" data-qb="{{ s.q_base or '' }}"
+                data-qf="{{ s.q_factor or '' }}">{{ s.code }} — {{ s.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="flash" id="outlineWarn" style="display:none">
+      سازه این تجهیز را خود سازنده می‌دهد. ابعاد و وزن، نقاط اتصال هادی، گِیج میل مهار و
+      صفحه کف باید از اوت‌لاین سازنده همین پروژه خوانده و وارد شوند. عدد پیش‌فرض گذاشته نشده.
+    </div>
+
+    <fieldset>
+      <legend>تجهیز</legend>
+      <div class="row">
+        <div class="f"><label><b>He</b> ارتفاع (m)</label><input id="He" type="number" step="0.001"></div>
+        <div class="f"><label><b>he</b> مرکز ثقل (m)</label><input id="he" type="number" step="0.001"></div>
+        <div class="f"><label><b>Ae</b> سطح دید (m²)</label><input id="Ae" type="number" step="0.01"></div>
+        <div class="f"><label><b>Ce</b> ضریب درگ</label><input id="Ce" type="number" step="0.01" value="0.5"></div>
+        <div class="f"><label><b>We</b> وزن (kg)</label><input id="We" type="number" step="1"></div>
+        <div class="f"><label>تعداد ستون</label><input id="n_pedestal" type="number" step="1" value="1"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>اتصال به فونداسیون</legend>
+      <div class="row">
+        <div class="f"><label>فاصله محور ستون‌ها (m)</label>
+          <input id="pedestal_spacing" type="number" step="0.05" placeholder="خالی = B/2"></div>
+        <div class="f"><label>تعداد میل مهار</label><input id="anchor_n" type="number" step="1" value="4"></div>
+        <div class="f"><label>قطر میل مهار (mm)</label><input id="anchor_dia" type="number" step="1" value="20"></div>
+        <div class="f"><label>گِیج میل مهار (mm)</label><input id="anchor_gauge" type="number" step="10" value="450"></div>
+        <div class="f"><label>طول مدفون (mm)</label><input id="anchor_embed" type="number" step="10" value="600"></div>
+        <div class="f"><label>ضلع صفحه کف (mm)</label><input id="base_plate" type="number" step="10" value="0"></div>
+      </div>
+      <p class="note" style="margin:0">گِیج، فاصله مرکز تا مرکز میل مهارهاست و از اوت‌لاین سازنده می‌آید.
+        اگر فاصله ستون‌ها خالی بماند، نصف عرض پی فرض می‌شود و همین در گزارش ثبت می‌گردد.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>استراکچر</legend>
+      <div class="row">
+        <div class="f"><label><b>Hs</b> ارتفاع (m)</label><input id="Hs" type="number" step="0.01"></div>
+        <div class="f"><label><b>Ws</b> وزن (kg)</label><input id="Ws" type="number" step="1"></div>
+        <div class="f"><label><b>As</b> سطح دید (m²)</label><input id="As" type="number" step="0.01"></div>
+        <div class="f"><label><b>Cs</b> ضریب درگ</label><input id="Cs" type="number" step="0.01" value="2.05"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>هادی و بار مانور</legend>
+      <div class="row">
+        <div class="f"><label><b>Wc</b> وزن هادی (kg)</label><input id="Wc" type="number" step="1" value="50"></div>
+        <div class="f"><label><b>Fc</b> کشش عادی (kg)</label><input id="Fc" type="number" step="1"></div>
+        <div class="f"><label><b>Fc,sc</b> اتصال کوتاه</label><input id="Fc_sc" type="number" step="1"></div>
+        <div class="f"><label>نقاط اتصال (m)</label><input id="conductor_points" placeholder="خالی = He"></div>
+        <div class="f"><label>بار قائم مانور</label><input id="op_vertical" type="number" step="1" value="0"></div>
+        <div class="f"><label>بار افقی مانور</label><input id="op_horizontal" type="number" step="1" value="0"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>زلزله — استاندارد ۲۸۰۰</legend>
+      <div class="f">
+        <label>ویرایش</label>
+        <select id="edition">
+          <option value="5" selected>ویرایش ۵</option>
+          <option value="4">ویرایش ۴ (بازتولید محاسبات قدیمی)</option>
+        </select>
+      </div>
+      <div id="ed5">
+        <div class="row">
+          <div class="f"><label><b>SS</b> شتاب ۰٫۲ ثانیه</label><input id="ss" type="number" step="0.01" value="0.90"></div>
+          <div class="f"><label><b>S1</b> شتاب ۱ ثانیه</label><input id="s1" type="number" step="0.01" value="0.35"></div>
+        </div>
+        <div class="row">
+          <div class="f"><label>نوع زمین</label>
+            <select id="soil_class"><option>I</option><option>II</option>
+              <option selected>III</option><option>IV</option><option>V</option></select></div>
+          <div class="f"><label>روش</label>
+            <select id="method"><option value="rigid" selected>صلب — رابطه ۵-۴</option>
+              <option value="static">استاتیکی — رابطه ۳-۱</option></select></div>
+          <div class="f"><label>سختی جانبی استراکچر (kg/cm)</label>
+            <input id="k_lateral" type="number" step="10" placeholder="خالی = نامشخص"></div>
+          <div class="f"><label><b>Ie</b> ضریب اهمیت</label><input id="ie" type="number" step="0.1" value="1.4"></div>
+          <div class="f"><label><b>Ru</b> ضریب رفتار</label><input id="ru" type="number" step="0.1" value="2"></div>
+        </div>
+        <p class="note" style="margin:0">اگر سختی جانبی را وارد کنید، سیستم زمان تناوب را حساب
+          می‌کند و طبق بند ۵-۵-۱ خودش تعیین می‌کند صلب است یا غیرصلب. بدون آن، انتخاب روش
+          تصمیم شماست و همان‌طور که انتخاب کرده‌اید در گزارش ثبت می‌شود.</p>
+      </div>
+      <div id="ed4" style="display:none">
+        <div class="row">
+          <div class="f"><label><b>A</b></label><input id="a" type="number" step="0.01" value="0.30"></div>
+          <div class="f"><label><b>B</b></label><input id="b4" type="number" step="0.01" value="2.75"></div>
+          <div class="f"><label><b>I</b></label><input id="i4" type="number" step="0.1" value="1.4"></div>
+          <div class="f"><label><b>R</b></label><input id="r4" type="number" step="0.1" value="2"></div>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>خاک و مصالح</legend>
+      <div class="row">
+        <div class="f"><label>q پایه (kg/cm²)</label><input id="q_base" type="number" step="0.01" value="2.83"></div>
+        <div class="f"><label>ضریب بار موقت</label><input id="q_factor" type="number" step="0.01" value="1.33"></div>
+        <div class="f"><label>f'c (kg/cm²)</label><input id="fc" type="number" step="10" value="250"></div>
+        <div class="f"><label>fy (kg/cm²)</label><input id="fy" type="number" step="100" value="4000"></div>
+        <div class="f"><label>پوشش بتن (mm)</label><input id="cover" type="number" step="5" value="75"></div>
+        <div class="f"><label>بتن مگر (mm)</label><input id="lean" type="number" step="10" value="100"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>ابعاد اولیه ستون و پی</legend>
+      <div class="row three">
+        <div class="f"><label><b>hp</b> (m)</label><input id="hp" type="number" step="0.05" value="1"></div>
+        <div class="f"><label><b>b</b> (m)</label><input id="bcol" type="number" step="0.05" value="0.8"></div>
+        <div class="f"><label><b>tf</b> (m)</label><input id="tf" type="number" step="0.05" value="0.4"></div>
+      </div>
+    </fieldset>
+
+    <button class="btn wide" type="submit" id="go">محاسبه کن</button>
+    <p class="note" id="msg"></p>
+  </form>
+
+  <!-- خروجی -->
+  <div>
+    <div class="sheet" style="padding:0;border:0">
+      <div class="viewer" id="viewer">
+        <div class="empty">پس از محاسبه، مدل فونداسیون اینجا ساخته می‌شود</div>
+        <div class="legend" id="legend" style="display:none">
+          <i style="background:#8E9AA4"></i>بتن<br>
+          <i style="background:#B4653A"></i>آرماتور<br>
+          <i style="background:#6FA8C7"></i>میل مهار
+        </div>
+        <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
+        <div class="readouts" id="readouts"></div>
+      </div>
+    </div>
+
+    <div class="sheet" id="result" style="display:none">
+      <div class="readout">
+        <span class="big" id="dim">—</span>
+        <span class="unit">متر — پی</span>
+        <span class="verdict" id="verdict"></span>
+      </div>
+      <p class="note" id="sub"></p>
+      <div class="actions" id="actions" style="display:none">
+        <button class="btn quiet" type="button" id="mkdxf">ساخت نقشه DXF</button>
+        <a class="btn quiet" id="dxflink" style="display:none">دانلود نقشه</a>
+        <a class="btn quiet" id="detail">گزارش کامل</a>
+        <a class="btn quiet" id="printlink" target="_blank">گزارش چاپی / PDF</a>
+      </div>
+    </div>
+
+    <div class="sheet" id="checksBox" style="display:none">
+      <h2>کنترل‌های طراحی</h2>
+      <div id="checks"></div>
+    </div>
+
+    <div class="sheet" id="designBox" style="display:none">
+      <h2>آرماتور و متره</h2>
+      <div class="cols">
+        <div id="rebar"></div>
+        <div id="qty"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
+<script>
+const BUILTIN = {{ builtin|tojson }};
+const $ = id => document.getElementById(id);
+const viewer = new FoundationViewer($("viewer"));
+let lastId = null;
+
+$("mkdxf").addEventListener("click", async () => {
+  if (!lastId) return;
+  const b = $("mkdxf"); b.disabled = true; b.textContent = "در حال ساخت نقشه…";
+  try {
+    const r = await fetch(`/api/drawing/${lastId}`, {method:"POST"});
+    const d = await r.json();
+    if (d.error) { $("msg").textContent = d.error; }
+    else {
+      const a = $("dxflink");
+      a.href = d.url; a.download = d.name; a.style.display = "inline-block";
+      $("msg").textContent = "نقشه ساخته شد: " + d.name;
+    }
+  } catch (e) { $("msg").textContent = "نقشه ساخته نشد: " + e; }
+  b.disabled = false; b.textContent = "ساخت نقشه DXF";
+});
+
+const OUTLINE_FIELDS = {};
+Object.keys(BUILTIN).forEach(k => OUTLINE_FIELDS[k] = BUILTIN[k].requires_outline || []);
+
+$("preset").addEventListener("change", e => {
+  const eq = BUILTIN[e.target.value];
+  const need = OUTLINE_FIELDS[e.target.value] || [];
+  $("outlineWarn").style.display = need.length ? "block" : "none";
+  if (!eq) return;
+  const map = {He:"He", he:"he", Ae:"Ae", Ce:"Ce", We:"We", Hs:"Hs", Ws:"Ws",
+               As:"As", Cs:"Cs", Wc:"Wc", Fc:"Fc", Fc_sc:"Fc_sc",
+               n_pedestal:"n_pedestal", op_vertical:"op_vertical", op_horizontal:"op_horizontal"};
+  for (const k in map) if ($(k) && eq[map[k]] !== undefined && eq[map[k]] !== null) $(k).value = eq[map[k]];
+  $("conductor_points").value = (eq.conductor_points || []).join(", ");
+  ["anchor_n","anchor_dia","anchor_gauge","anchor_embed","base_plate","pedestal_spacing"]
+    .forEach(k => { if (eq[k] !== undefined && eq[k] !== null) $(k).value = eq[k]; });
+  // فیلدهایی که باید از اوت‌لاین بیایند خالی و علامت‌گذاری می‌شوند
+  document.querySelectorAll(".needs-outline").forEach(el => {
+    el.classList.remove("needs-outline"); el.placeholder = "";
+  });
+  need.forEach(k => {
+    const el = $(k === "conductor_points" ? "conductor_points" : k);
+    if (!el) return;
+    el.value = "";
+    el.classList.add("needs-outline");
+    el.placeholder = "از اوت‌لاین سازنده";
+  });
+});
+
+$("substation").addEventListener("change", e => {
+  const o = e.target.selectedOptions[0]; if (!o || !o.dataset.ss) return;
+  if (o.dataset.ss) $("ss").value = o.dataset.ss;
+  if (o.dataset.s1) $("s1").value = o.dataset.s1;
+  if (o.dataset.soil) $("soil_class").value = o.dataset.soil;
+  if (o.dataset.qb) $("q_base").value = o.dataset.qb;
+  if (o.dataset.qf) $("q_factor").value = o.dataset.qf;
+});
+
+$("edition").addEventListener("change", e => {
+  const five = e.target.value === "5";
+  $("ed5").style.display = five ? "block" : "none";
+  $("ed4").style.display = five ? "none" : "block";
+});
+
+const num = id => $(id).value === "" ? null : parseFloat($(id).value);
+
+$("form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("go").disabled = true; $("msg").textContent = "در حال محاسبه…";
+  const tag = $("preset").value || "EQ";
+  const eq = BUILTIN[tag] || {};
+  const payload = {
+    substation_id: $("substation").value || null,
+    equipment: {
+      tag: tag, title: eq.title || tag,
+      He: num("He"), he: num("he"), Ae: num("Ae"), Ce: num("Ce"), We: num("We"),
+      Hs: num("Hs"), As: num("As"), Ws: num("Ws"), Cs: num("Cs"),
+      Wc: num("Wc"), Fc: num("Fc"), Fc_sc: num("Fc_sc"),
+      conductor_points: $("conductor_points").value,
+      op_vertical: num("op_vertical"), op_horizontal: num("op_horizontal"),
+      n_pedestal: num("n_pedestal"),
+      anchor_gauge: num("anchor_gauge"), anchor_dia: num("anchor_dia"),
+      anchor_n: num("anchor_n"), anchor_embed: num("anchor_embed"),
+      base_plate: num("base_plate"),
+      pedestal_spacing: num("pedestal_spacing")
+    },
+    "seismic.k_lateral": num("k_lateral"),
+    "seismic.edition": $("edition").value,
+    "seismic.ss": num("ss"), "seismic.s1": num("s1"),
+    "seismic.soil_class": $("soil_class").value, "seismic.method": $("method").value,
+    "seismic.ie": num("ie"), "seismic.ru": num("ru"),
+    "seismic.a": num("a"), "seismic.b": num("b4"),
+    "seismic.i": num("i4"), "seismic.r": num("r4"),
+    "soil.q_base": num("q_base"), "soil.q_factor": num("q_factor"),
+    "materials.fc": num("fc"), "materials.fy": num("fy"),
+    "materials.cover": num("cover"), "materials.lean": num("lean"),
+    "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf")
+  };
+  try {
+    const r = await fetch("/api/calculate", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload)});
+    const d = await r.json();
+    if (d.error) { $("msg").textContent = d.error; $("go").disabled = false; return; }
+    render(d);
+    $("msg").textContent = "ثبت شد — شناسه " + d.id;
+    lastId = d.id;
+  } catch (err) {
+    $("msg").textContent = "ارتباط با سرور برقرار نشد: " + err;
+  }
+  $("go").disabled = false;
+});
+
+function fmt(v, d=2){ return Number(v).toFixed(d); }
+
+function render(d){
+  const g = d.geometry;
+  $("result").style.display = "block";
+  $("checksBox").style.display = "block";
+  $("designBox").style.display = "block";
+  $("legend").style.display = "block";
+  $("actions").style.display = "flex";
+  $("dxflink").style.display = "none";
+  $("detail").href = "/calculation/" + d.id;
+  $("printlink").href = "/calculation/" + d.id + "/print";
+  $("readouts").innerHTML =
+    `<span>L <b>${fmt(g.L)}</b></span><span>B <b>${fmt(g.B)}</b></span>` +
+    `<span>t<sub>f</sub> <b>${fmt(g.tf)}</b></span><span>h<sub>p</sub> <b>${fmt(g.hp)}</b></span>` +
+    `<span>ستون <b>${g.n_pedestal}</b></span>`;
+  $("dim").textContent = `${fmt(g.L)} × ${fmt(g.B)} × ${fmt(g.tf)}`;
+  const v = $("verdict");
+  v.className = "verdict " + (d.ok ? "ok" : "ng");
+  v.textContent = d.ok ? "همه کنترل‌ها قبول" : "نیازمند بازبینی";
+  $("sub").textContent =
+    `ستون ${g.n_pedestal} عدد ${fmt(g.b)}×${fmt(g.b)} به ارتفاع ${fmt(g.hp)} m · ` +
+    `حالت حاکم ${d.governing.name} · Ch=${fmt(d.seismic.ch,3)} Cv=${fmt(d.seismic.cv,3)} ` +
+    `(۲۸۰۰ ویرایش ${d.seismic.edition})` +
+    (d.seismic.period ? ` · T=${fmt(d.seismic.period,4)} s → ${d.seismic.method === "rigid" ? "صلب" : "غیرصلب"}`
+                      : ` · روش ${d.seismic.method === "rigid" ? "صلب" : "استاتیکی"} (انتخاب دستی)`);
+
+  $("checks").innerHTML = d.checks.map(c => {
+    const ratio = c.dir === ">" ? c.limit / c.value : c.value / c.limit;
+    const w = Math.max(3, Math.min(100, ratio * 100));
+    return `<div class="check">
+      <div class="line">
+        <span class="nm">${c.name}</span>
+        <span class="vl"><b>${fmt(c.value)}</b> ${c.dir} ${fmt(c.limit)} ${c.unit}</span>
+        <span class="tag ${c.ok?'ok':'ng'}">${c.ok?'قبول':'مردود'}</span>
+      </div>
+      <div class="gauge"><i class="${c.ok?'':'ng'}" data-w="${w}"></i></div>
+      <details><summary>مراحل محاسبه</summary><div class="steps">
+        ${c.steps.map(s => `<div class="step"><span class="l">${s[0]}</span>
+          <p class="f">${s[1]}</p><p class="v">${s[2]}</p></div>`).join("")}
+      </div></details></div>`;
+  }).join("");
+  requestAnimationFrame(() => document.querySelectorAll(".gauge i")
+    .forEach(el => el.style.width = el.dataset.w + "%"));
+
+  const pad = d.design.pad, ped = d.design.pedestal;
+  $("rebar").innerHTML =
+    `<div class="kv"><span>آرماتور پی</span><span>${pad.bars}Ф${pad.dia}@${fmt(pad.spacing,0)}</span></div>
+     <div class="kv"><span>آرماتور ستون</span><span>${ped.bars}Ф${ped.dia}</span></div>
+     <div class="kv"><span>برش پانچ</span><span>${d.design.punching.note}</span></div>
+     <div class="kv"><span>برش یک‌طرفه</span><span>${d.design.oneway.note}</span></div>`;
+  const q = d.quantities;
+  $("qty").innerHTML =
+    `<div class="kv"><span>بتن</span><span>${fmt(q.concrete)} m³</span></div>
+     <div class="kv"><span>بتن مگر</span><span>${fmt(q.lean,3)} m³</span></div>
+     <div class="kv"><span>خاکبرداری</span><span>${fmt(q.excavation)} m³</span></div>
+     <div class="kv"><span>وزن آرماتور</span><span>${fmt(q.rebar,1)} kg</span></div>`;
+
+  viewer.build(Object.assign({}, g, {
+    pad_dia: pad.dia, pad_spacing: pad.spacing,
+    col_dia: ped.dia, col_bars: ped.bars,
+    tie_spacing: {{ defaults.rebar.tie_spacing }},
+    anchor_embed: g.anchor_embed || 600
+  }));
+}
+</script>
+{% endblock %}

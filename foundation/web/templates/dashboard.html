@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page">
+  <div>
+    <h1>خانه</h1>
+    <p>وضعیت سامانه و آخرین محاسبات</p>
+  </div>
+  <a class="btn" href="{{ url_for('calculate') }}">محاسبه جدید</a>
+</header>
+
+<div class="stat">
+  <div class="cell"><b class="num">{{ stats.calculations }}</b><span>محاسبه ثبت‌شده</span></div>
+  <div class="cell"><b class="num">{{ stats.projects }}</b><span>پروژه</span></div>
+  <div class="cell"><b class="num">{{ stats.catalog }}</b><span>تجهیز در کاتالوگ</span></div>
+  <div class="cell"><b class="num">{{ stats.users }}</b><span>کاربر فعال</span></div>
+</div>
+
+<div class="sheet" style="margin-top:16px">
+  <h2>آخرین محاسبات</h2>
+  {% if recent %}
+  <table>
+    <thead><tr><th>تجهیز</th><th>وضعیت</th><th>کاربر</th><th>زمان</th><th></th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr>
+        <td class="num">{{ r.equipment_tag }}</td>
+        <td><span class="tag {{ 'ok' if r.status == 'ok' else 'ng' }}">{{ 'قبول' if r.status == 'ok' else 'مردود' }}</span></td>
+        <td>{{ r.who or '—' }}</td>
+        <td class="num">{{ r.run_at.replace('T',' ') }}</td>
+        <td><a href="{{ url_for('calculation_detail', cid=r.id) }}">مشاهده</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="note">هنوز محاسبه‌ای ثبت نشده. از «محاسبه جدید» شروع کنید.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page">
+  <div><h1>ویرایش‌های آیین‌نامه</h1>
+  <p>هر محاسبه به یک ویرایش مشخص گره می‌خورد؛ آمدن ویرایش جدید گزارش‌های قبلی را تغییر نمی‌دهد</p></div>
+</header>
+
+<div class="sheet">
+  <h2>ویرایش‌های ثبت‌شده</h2>
+  <table>
+    <thead><tr><th>نام</th><th>ویرایش</th><th>تاریخ انتشار</th><th>وضعیت</th></tr></thead>
+    <tbody>
+    {% for p in profiles %}
+      <tr><td>{{ p.name }}</td><td class="num">{{ p.edition }}</td>
+        <td class="num">{{ p.issued_on or '—' }}</td>
+        <td>{{ 'فعال' if p.is_active else 'بایگانی' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="sheet">
+  <h2>مقایسه دو ویرایش</h2>
+  <form method="get" class="row three">
+    <div class="f"><label>از</label><select name="a">
+      {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if a==p.id }}>{{ p.name }}</option>{% endfor %}
+    </select></div>
+    <div class="f"><label>به</label><select name="b">
+      {% for p in profiles %}<option value="{{ p.id }}" {{ 'selected' if b==p.id }}>{{ p.name }}</option>{% endfor %}
+    </select></div>
+    <div class="f"><label>&nbsp;</label><button class="btn quiet" type="submit">نشان بده چه عوض شده</button></div>
+  </form>
+
+  {% if changes is not none %}
+    {% if changes %}
+    <table style="margin-top:12px">
+      <thead><tr><th>پارامتر</th><th>مقدار پیشین</th><th>مقدار جدید</th><th>وضعیت</th></tr></thead>
+      <tbody>
+      {% for c in changes %}
+        <tr><td class="num">{{ c.key }}</td>
+          <td class="n">{{ c.old if c.old is not none else '—' }}</td>
+          <td class="n">{{ c.new if c.new is not none else '—' }}</td>
+          <td>{{ c.state }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">{{ changes|length }} تفاوت. تغییر فرمول‌ها و جداول ضرایب ساختگاه مستقیماً روی ابعاد خروجی اثر دارد.</p>
+    {% else %}<p class="note">بین این دو ویرایش تفاوتی ثبت نشده.</p>{% endif %}
+  {% endif %}
+</div>
+
+<div class="sheet">
+  <h2>افزودن ویرایش جدید</h2>
+  <p class="note">
+    برای ثبت ویرایش تازه، پارامترهایش — فرمول ضریب زلزله، جداول ضرایب ساختگاه،
+    ضرایب اهمیت و رفتار — توسط مدیر سامانه وارد می‌شود و فایل آیین‌نامه به عنوان
+    سند مرجع پیوست می‌شود. خواندن خودکار متن آیین‌نامه انجام نمی‌شود؛ عدد مهندسی
+    باید دست انسان ثبت و تأیید شود.
+  </p>
+</div>
+{% endblock %}

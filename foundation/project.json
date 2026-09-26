@@ -1,0 +1,88 @@
+{
+  "project_name": "",
+  "substation": "",
+  "equipment_count": 1,
+  "materials": {
+    "fc": 250,
+    "fy": 4000,
+    "cover": 75,
+    "lean": 100,
+    "gamma_c": 2500.0,
+    "gamma_s": 1900.0
+  },
+  "soil": {
+    "q_base": 2.83,
+    "q_factor": 1.33,
+    "friction": 0.466,
+    "soil_cover": 0.15
+  },
+  "seismic": {
+    "edition": 5,
+    "ss": 0.9,
+    "s1": 0.35,
+    "soil_class": "III",
+    "ie": 1.4,
+    "ru": 2.0,
+    "method": "rigid",
+    "map_date": "",
+    "a": 0.3,
+    "b": 2.75,
+    "i": 1.4,
+    "r": 2.0
+  },
+  "wind": {
+    "v_normal": 25.0,
+    "v_high": 40.0,
+    "sc_ratio": 0.7
+  },
+  "rebar": {
+    "pad_dia": 14,
+    "pad_spacing_max": 200,
+    "col_dia": 18,
+    "col_min_bars": 8,
+    "tie_dia": 10,
+    "tie_spacing": 150,
+    "standee_dia": 14
+  },
+  "foundation": {
+    "hp": 1.0,
+    "b": 0.8,
+    "tf": 0.4,
+    "search_min": 1.0,
+    "search_max": 5.0,
+    "search_step": 0.1
+  },
+  "title_block": {
+    "fields": {
+      "DOCUMENT_TITLE": "LIGHTNING ARRESTER FOUNDATION",
+      "DESC.1": "",
+      "DESC.2": "",
+      "PANEL_NAME": "",
+      "DWG.": "",
+      "NO.P": "",
+      "T.P": "",
+      "COUNT.": "",
+      "SCALE": "",
+      "CONTRACT_NO.": "",
+      "CONTRACTOR_DOC_CODE": "",
+      "PREP": "",
+      "CHCK": "",
+      "APP": "",
+      "AUTH": "",
+      "REV1": "",
+      "DATE1": "",
+      "DESC1": "",
+      "MOD.1": "",
+      "CHCK.1": "",
+      "APPRD.1": ""
+    }
+  },
+  "drawing": {
+    "scale": 20.0,
+    "detail_scale": 10.0,
+    "frame_file": "frame_blank.dxf",
+    "template_file": "template.dxf",
+    "notes_file": "notes.txt",
+    "dxf_version": "R2000"
+  }
+}

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page">
+  <div><h1>کاتالوگ تجهیزات</h1>
+  <p>داده‌های اوت‌لاین سازنده که ورودی محاسبه‌اند</p></div>
+  {% if user.role != 'viewer' %}
+  <form method="post" action="{{ url_for('catalog_import') }}">
+    <button class="btn quiet" type="submit">افزودن تجهیزات پایه</button>
+  </form>{% endif %}
+</header>
+<div class="sheet">
+  {% if items %}
+  <table>
+    <thead><tr><th>تگ</th><th>عنوان</th><th>سازنده</th><th>He</th><th>We</th>
+      <th>گِیج بولت</th><th>مرجع</th></tr></thead>
+    <tbody>
+    {% for e in items %}
+      <tr><td class="num">{{ e.tag }}</td><td>{{ e.title }}</td>
+        <td>{{ e.manufacturer or '—' }}</td>
+        <td class="n">{{ e.data.He }}</td><td class="n">{{ e.data.We }}</td>
+        <td class="n">{{ e.data.anchor_gauge }}</td>
+        <td class="note">{{ e.source or '—' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="note">کاتالوگ خالی است. با دکمه بالا، هشت تجهیز پایه پروژه کامی‌آباد افزوده می‌شود.</p>
+  {% endif %}
+</div>
+{% endblock %}

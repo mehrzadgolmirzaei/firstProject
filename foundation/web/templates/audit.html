@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page"><div><h1>سیاهه رویدادها</h1>
+<p>هر ورود، محاسبه و تغییر با کاربر و زمان ثبت می‌شود</p></div></header>
+<div class="sheet">
+  <table>
+    <thead><tr><th>زمان</th><th>کاربر</th><th>رویداد</th><th>موضوع</th><th>جزئیات</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr><td class="num">{{ r.at.replace('T',' ') }}</td><td>{{ r.who or '—' }}</td>
+        <td>{{ r.action }}</td>
+        <td class="num">{{ r.entity or '—' }}{{ ' #' ~ r.entity_id if r.entity_id }}</td>
+        <td class="note">{{ r.detail or '' }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

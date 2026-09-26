@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}تنظیمات نقشه{% endblock %}
+{% block body %}
+<header class="page">
+  <div><h1>تنظیمات نقشه</h1>
+  <p>یادداشت‌ها، جدول عنوان و مشخصات آرماتور — روی هر نقشه‌ای که از این پس ساخته شود اعمال می‌شود</p></div>
+</header>
+
+<form method="post">
+<div class="cols">
+  <div class="sheet">
+    <h2>یادداشت‌های نقشه</h2>
+    <p class="note" style="margin-top:0">
+      هر خط یک بند. خطی که با # شروع شود نادیده گرفته می‌شود.
+      متغیرهای <code>{fc}</code> و <code>{fy}</code> و <code>{cover}</code> و
+      <code>{lean}</code> و <code>{q_all}</code> و <code>{seismic}</code> و
+      <code>{edition}</code> هنگام ساخت نقشه با مقادیر همان محاسبه پر می‌شوند.
+      بندهای بلند خودکار شکسته می‌شوند تا از کادر بیرون نزنند.
+    </p>
+    <textarea name="notes" rows="26" class="mono"
+      style="font-size:12.5px;line-height:1.7">{{ data.notes }}</textarea>
+  </div>
+
+  <div>
+    <div class="sheet">
+      <h2>جدول عنوان</h2>
+      <div class="row">
+        {% for key, label in labels %}
+        <div class="f">
+          <label>{{ label }}</label>
+          <input name="tb.{{ key }}" value="{{ data.title_block.get(key, '') }}">
+        </div>
+        {% endfor %}
+      </div>
+      <p class="note">فیلدهای خالی نوشته نمی‌شوند. «عنوان نقشه» اگر خالی بماند،
+        خودکار از نام تجهیز ساخته می‌شود و «مقیاس» هم خودکار پر می‌شود.</p>
+    </div>
+
+    <div class="sheet">
+      <h2>مقیاس و آرماتور</h2>
+      <div class="row">
+        <div class="f"><label>مقیاس شیت</label>
+          <input name="dw.scale" type="number" step="1"
+                 value="{{ data.drawing.get('scale') or defaults.drawing.scale|int }}"></div>
+        <div class="f"><label>مقیاس دیتیل</label>
+          <input name="dw.detail_scale" type="number" step="1"
+                 value="{{ data.drawing.get('detail_scale') or defaults.drawing.detail_scale|int }}"></div>
+        <div class="f"><label>قطر آرماتور پی (mm)</label>
+          <input name="rb.pad_dia" type="number" step="1"
+                 value="{{ data.rebar.get('pad_dia') or defaults.rebar.pad_dia }}"></div>
+        <div class="f"><label>حداکثر فاصله شبکه (mm)</label>
+          <input name="rb.pad_spacing_max" type="number" step="10"
+                 value="{{ data.rebar.get('pad_spacing_max') or defaults.rebar.pad_spacing_max|int }}"></div>
+        <div class="f"><label>قطر آرماتور ستون (mm)</label>
+          <input name="rb.col_dia" type="number" step="1"
+                 value="{{ data.rebar.get('col_dia') or defaults.rebar.col_dia }}"></div>
+        <div class="f"><label>حداقل تعداد میلگرد ستون</label>
+          <input name="rb.col_min_bars" type="number" step="1"
+                 value="{{ data.rebar.get('col_min_bars') or defaults.rebar.col_min_bars }}"></div>
+        <div class="f"><label>قطر خاموت (mm)</label>
+          <input name="rb.tie_dia" type="number" step="1"
+                 value="{{ data.rebar.get('tie_dia') or defaults.rebar.tie_dia }}"></div>
+        <div class="f"><label>فاصله خاموت (mm)</label>
+          <input name="rb.tie_spacing" type="number" step="10"
+                 value="{{ data.rebar.get('tie_spacing') or defaults.rebar.tie_spacing|int }}"></div>
+        <div class="f"><label>قطر خرک (mm)</label>
+          <input name="rb.standee_dia" type="number" step="1"
+                 value="{{ data.rebar.get('standee_dia') or defaults.rebar.standee_dia }}"></div>
+      </div>
+      <p class="note">حداقل تعداد میلگرد ستون، استاندارد داخلی دفتر است.
+        محاسبه معمولاً کمتر از این لازم دارد؛ هر عددی که اینجا بگذارید کف کار خواهد بود.</p>
+    </div>
+
+    {% if user.role != 'viewer' %}
+    <button class="btn wide" type="submit" style="margin-top:14px">ذخیره تنظیمات</button>
+    {% endif %}
+  </div>
+</div>
+</form>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page"><div><h1>کاربران</h1><p>دسترسی‌ها بر اساس نقش</p></div></header>
+<div class="cols">
+  <div class="sheet">
+    <h2>کاربران سامانه</h2>
+    <table>
+      <thead><tr><th>نام کاربری</th><th>نام</th><th>نقش</th><th>حروف اختصاری</th><th>وضعیت</th></tr></thead>
+      <tbody>
+      {% for u in rows %}
+        <tr><td class="num">{{ u.username }}</td><td>{{ u.full_name }}</td>
+          <td>{{ ROLES.get(u.role, u.role) }}</td><td class="num">{{ u.initials or '—' }}</td>
+          <td>{{ 'فعال' if u.is_active else 'غیرفعال' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <form class="sheet" method="post" action="{{ url_for('users_new') }}">
+    <h2>کاربر تازه</h2>
+    <div class="f"><label>نام کاربری</label><input name="username" required></div>
+    <div class="f"><label>نام و نام خانوادگی</label><input name="full_name" required></div>
+    <div class="f"><label>رمز عبور</label><input name="password" type="password" required></div>
+    <div class="row">
+      <div class="f"><label>نقش</label><select name="role">
+        <option value="engineer">مهندس طراح</option>
+        <option value="viewer">بیننده</option>
+        <option value="admin">مدیر سامانه</option></select></div>
+      <div class="f"><label>حروف اختصاری</label><input name="initials" placeholder="P.K."></div>
+    </div>
+    <button class="btn wide" type="submit">ساخت کاربر</button>
+    <p class="note">مهندس طراح می‌تواند محاسبه اجرا کند و کاتالوگ را ویرایش کند.
+      بیننده فقط نتایج را می‌بیند.</p>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% set r = calc.results %}
+{% block body %}
+<header class="page">
+  <div><h1>محاسبه {{ calc.id }} — {{ calc.equipment_tag }}</h1>
+  <p>{{ calc.who or '—' }} · {{ calc.run_at.replace('T',' ') }}</p></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <a class="btn quiet" href="{{ url_for('calculation_print', cid=calc.id) }}" target="_blank">گزارش چاپی / PDF</a>
+    <span class="verdict {{ 'ok' if calc.status=='ok' else 'ng' }}">
+      {{ 'همه کنترل‌ها قبول' if calc.status=='ok' else 'نیازمند بازبینی' }}</span>
+  </div>
+</header>
+
+<div class="sheet">
+  <div class="readout">
+    <span class="big">{{ '%.2f'|format(r.geometry.L) }} × {{ '%.2f'|format(r.geometry.B) }} × {{ '%.2f'|format(r.geometry.tf) }}</span>
+    <span class="unit">متر — پی</span>
+  </div>
+  <p class="note">ستون {{ r.geometry.n_pedestal }} عدد {{ '%.2f'|format(r.geometry.b) }}×{{ '%.2f'|format(r.geometry.b) }}
+    به ارتفاع {{ '%.2f'|format(r.geometry.hp) }} m ·
+    حالت حاکم {{ r.governing.name }} ·
+    Ch={{ '%.3f'|format(r.seismic.ch) }} Cv={{ '%.3f'|format(r.seismic.cv) }}
+    (۲۸۰۰ ویرایش {{ r.seismic.edition }})</p>
+</div>
+
+<div class="sheet">
+  <h2>حالات بارگذاری</h2>
+  <table>
+    <thead><tr><th>#</th><th>حالت</th><th>Fe</th><th>Fs</th><th>N</th><th>N min</th><th>V</th><th>M</th></tr></thead>
+    <tbody>
+    {% for c in r.cases %}
+      <tr class="{{ 'gov' if c.no == r.governing.no }}">
+        <td class="num">{{ c.no }}</td><td>{{ c.name }}</td>
+        <td class="n">{{ c.Fe|round|int }}</td><td class="n">{{ c.Fs|round|int }}</td>
+        <td class="n">{{ c.N|round|int }}</td><td class="n">{{ c.Nmin|round|int }}</td>
+        <td class="n">{{ c.V|round|int }}</td><td class="n">{{ c.M|round|int }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="cols">
+  <div class="sheet">
+    <h2>کنترل‌های طراحی</h2>
+    {% for c in r.checks %}
+    <div class="check">
+      <div class="line">
+        <span class="nm">{{ c.name }}</span>
+        <span class="vl"><b>{{ '%.2f'|format(c.value) }}</b> {{ c.dir }} {{ '%.2f'|format(c.limit) }} {{ c.unit }}</span>
+        <span class="tag {{ 'ok' if c.ok else 'ng' }}">{{ 'قبول' if c.ok else 'مردود' }}</span>
+      </div>
+      <details><summary>مراحل محاسبه</summary><div class="steps">
+        {% for s in c.steps %}
+        <div class="step"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+        {% endfor %}
+      </div></details>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="sheet">
+    <h2>آرماتور و متره</h2>
+    <div class="kv"><span>آرماتور پی</span><span>{{ r.design.pad.bars }}Ф{{ r.design.pad.dia }}@{{ r.design.pad.spacing|round|int }}</span></div>
+    <div class="kv"><span>آرماتور ستون</span><span>{{ r.design.pedestal.bars }}Ф{{ r.design.pedestal.dia }}</span></div>
+    <div class="kv"><span>برش پانچ</span><span>{{ r.design.punching.note }}</span></div>
+    <div class="kv"><span>برش یک‌طرفه</span><span>{{ r.design.oneway.note }}</span></div>
+    <div class="kv"><span>بتن</span><span>{{ '%.2f'|format(r.quantities.concrete) }} m³</span></div>
+    <div class="kv"><span>بتن مگر</span><span>{{ '%.3f'|format(r.quantities.lean) }} m³</span></div>
+    <div class="kv"><span>خاکبرداری</span><span>{{ '%.2f'|format(r.quantities.excavation) }} m³</span></div>
+    <div class="kv"><span>وزن آرماتور</span><span>{{ '%.1f'|format(r.quantities.rebar) }} kg</span></div>
+  </div>
+</div>
+
+<div class="sheet">
+  <h2>ضریب زلزله</h2>
+  <div class="steps">
+  {% for s in r.seismic.steps %}
+    <div class="step"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+  {% endfor %}
+  </div>
+</div>
+{% endblock %}

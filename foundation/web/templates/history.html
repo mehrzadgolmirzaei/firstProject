@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="page"><div><h1>تاریخچه محاسبات</h1>
+<p>هر اجرا با ورودی کامل ذخیره شده و قابل بازتولید است</p></div></header>
+<div class="sheet">
+  {% if rows %}
+  <table>
+    <thead><tr><th>شناسه</th><th>تجهیز</th><th>پروژه</th><th>وضعیت</th>
+      <th>کاربر</th><th>زمان اجرا</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td class="num">{{ r.id }}</td>
+        <td class="num">{{ r.equipment_tag }}</td>
+        <td>{{ r.project or '—' }}</td>
+        <td><span class="tag {{ 'ok' if r.status=='ok' else 'ng' }}">{{ 'قبول' if r.status=='ok' else 'مردود' }}</span></td>
+        <td>{{ r.who or '—' }}</td>
+        <td class="num">{{ r.run_at.replace('T',' ') }}</td>
+        <td><a href="{{ url_for('calculation_detail', cid=r.id) }}">مشاهده</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="note">هنوز محاسبه‌ای ثبت نشده.</p>{% endif %}
+</div>
+{% endblock %}

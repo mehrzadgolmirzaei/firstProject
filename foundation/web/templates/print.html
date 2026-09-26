@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+{% set r = calc.results %}
+{% set tb = conf.title_block or {} %}
+<head>
+<meta charset="utf-8">
+<title>گزارش محاسبه {{ calc.id }} — {{ calc.equipment_tag }}</title>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  @page{size:A4;margin:16mm 14mm}
+  *{box-sizing:border-box}
+  body{font-family:Vazirmatn,Tahoma,sans-serif;color:#16202B;font-size:11pt;line-height:1.7;margin:0}
+  .num,code{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+  .bar{position:fixed;inset-block-start:0;inset-inline:0;z-index:5;background:#16202B;color:#fff;
+       padding:8px 16px;font-size:10pt;display:flex;justify-content:space-between;
+       gap:12px;flex-wrap:wrap;align-items:center}
+  .bar a{color:#F0C6A8}
+  /* روی صفحه، برگ به اندازه واقعی A4 نمایش داده می‌شود تا همان چیزی را
+     ببینید که چاپ می‌شود؛ در چاپ، این محدودیت‌ها برداشته می‌شوند. */
+  body{background:#E4E7E5}
+  .wrap{
+    width:210mm;max-width:100%;min-height:297mm;margin:60px auto 40px;
+    background:#fff;padding:16mm 14mm;box-shadow:0 2px 18px rgba(22,32,43,.14);
+  }
+  @media print{
+    body{background:#fff}
+    .bar{display:none}
+    .wrap{width:auto;min-height:0;margin:0;padding:0;box-shadow:none}
+  }
+  @media (max-width:230mm){
+    .wrap{width:auto;margin:56px 10px 24px;padding:16px 14px}
+  }
+
+  header.doc{border-bottom:2px solid #16202B;padding-bottom:8px;margin-bottom:14px}
+  header.doc h1{margin:0;font-size:15pt}
+  header.doc .meta{display:flex;gap:22px;flex-wrap:wrap;font-size:9.5pt;color:#5C6B77;margin-top:5px}
+  h2{font-size:11pt;color:#3E6B8A;margin:16px 0 7px;padding-bottom:4px;border-bottom:1px solid #D3D8D6}
+  table{width:100%;border-collapse:collapse;font-size:9.5pt;table-layout:fixed}
+  th,td{word-break:break-word;overflow-wrap:anywhere}
+  section{overflow-x:auto}
+  @media print{section{overflow:visible}}
+  th,td{padding:4px 6px;border-bottom:1px solid #E4E7E5;text-align:right}
+  th{background:#F3F5F4;color:#5C6B77;font-weight:600}
+  td.n{font-family:"IBM Plex Mono",monospace;direction:ltr;text-align:left}
+  tr.gov td{background:#EEF3F6;font-weight:600}
+  .dim{font-family:"IBM Plex Mono",monospace;font-size:20pt;font-weight:600;letter-spacing:-1px;direction:ltr}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .sign{--cols:3}
+  @media (max-width:600px){
+    .grid2{grid-template-columns:1fr}
+    .st{grid-template-columns:1fr}
+    .st .v{grid-column:1}
+    .chk .top{flex-wrap:wrap}
+  }
+  .kv{display:flex;justify-content:space-between;border-bottom:1px dotted #D3D8D6;padding:3px 0;font-size:9.5pt}
+  .kv span:last-child{font-family:"IBM Plex Mono",monospace;font-weight:600;direction:ltr}
+  .chk{border-bottom:1px solid #E4E7E5;padding:7px 0;break-inside:avoid}
+  .chk .top{display:flex;justify-content:space-between;gap:10px;font-size:10pt}
+  .chk .val{font-family:"IBM Plex Mono",monospace;direction:ltr}
+  .ok{color:#2C6E4B;font-weight:700}
+  .ng{color:#A32B28;font-weight:700}
+  .steps{margin-top:5px;padding-inline-start:10px;border-inline-start:2px solid #E4E7E5}
+  .st{display:grid;grid-template-columns:90px 1fr;gap:2px 8px;font-size:8.5pt;margin-bottom:3px}
+  .st .l{color:#5C6B77}
+  .st .f,.st .v{font-family:"IBM Plex Mono",monospace;direction:ltr;text-align:right;margin:0;word-break:break-word}
+  .st .f{color:#3E6B8A}.st .v{grid-column:2}
+  .sign{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;
+        margin-top:26px;break-inside:avoid}
+  .sign div{border:1px solid #D3D8D6;padding:10px;min-height:70px;font-size:9pt;color:#5C6B77}
+  .foot{margin-top:16px;font-size:8.5pt;color:#5C6B77;border-top:1px solid #D3D8D6;padding-top:6px}
+  section{break-inside:avoid}
+</style>
+</head>
+<body>
+<div class="bar">
+  <span>برای ذخیره به صورت PDF: کلید Ctrl+P و سپس انتخاب «Save as PDF»</span>
+  <a href="#" onclick="window.print();return false">چاپ</a>
+</div>
+
+<div class="wrap">
+<header class="doc">
+  <h1>گزارش محاسبه فونداسیون — {{ calc.equipment_tag }}</h1>
+  <div class="meta">
+    {% if tb.get('PANEL_NAME') %}<span>پست: {{ tb['PANEL_NAME'] }}</span>{% endif %}
+    {% if tb.get('DWG.') %}<span>نقشه: <span class="num">{{ tb['DWG.'] }}</span></span>{% endif %}
+    <span>شناسه محاسبه: <span class="num">{{ calc.id }}</span></span>
+    <span>تاریخ: <span class="num">{{ calc.run_at.replace('T',' ') }}</span></span>
+    <span>کاربر: {{ calc.who or '—' }}</span>
+    <span>مبنا: ۲۸۰۰ ویرایش {{ r.seismic.edition }}</span>
+  </div>
+</header>
+
+<section>
+  <h2>نتیجه</h2>
+  <div class="grid2">
+    <div>
+      <div class="dim">{{ '%.2f'|format(r.geometry.L) }} × {{ '%.2f'|format(r.geometry.B) }} × {{ '%.2f'|format(r.geometry.tf) }}</div>
+      <div style="font-size:9.5pt;color:#5C6B77">متر — ابعاد پی</div>
+      <div style="margin-top:8px" class="{{ 'ok' if calc.status=='ok' else 'ng' }}">
+        {{ 'همه کنترل‌ها قبول' if calc.status=='ok' else 'نیازمند بازبینی' }}</div>
+    </div>
+    <div>
+      <div class="kv"><span>ستون</span><span>{{ r.geometry.n_pedestal }} × {{ '%.2f'|format(r.geometry.b) }} m ، h={{ '%.2f'|format(r.geometry.hp) }}</span></div>
+      <div class="kv"><span>آرماتور پی</span><span>{{ r.design.pad.bars }}Ф{{ r.design.pad.dia }}@{{ r.design.pad.spacing|round|int }}</span></div>
+      <div class="kv"><span>آرماتور ستون</span><span>{{ r.design.pedestal.bars }}Ф{{ r.design.pedestal.dia }}</span></div>
+      <div class="kv"><span>میل مهار</span><span>{{ r.geometry.anchor_n }}M{{ r.geometry.anchor_dia }} @ {{ r.geometry.anchor_gauge|round|int }}</span></div>
+      <div class="kv"><span>ضریب زلزله</span><span>Ch={{ '%.3f'|format(r.seismic.ch) }} / Cv={{ '%.3f'|format(r.seismic.cv) }}</span></div>
+      {% if r.seismic.period %}
+      <div class="kv"><span>زمان تناوب</span><span>{{ '%.4f'|format(r.seismic.period) }} s — {{ 'صلب' if r.seismic.method=='rigid' else 'غیرصلب' }}</span></div>
+      {% else %}
+      <div class="kv"><span>روش برش پایه</span><span>{{ 'صلب' if r.seismic.method=='rigid' else 'استاتیکی' }} (انتخاب طراح)</span></div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>ضریب زلزله</h2>
+  <div class="steps">
+  {% for s in r.seismic.steps %}
+    <div class="st"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+  {% endfor %}
+  </div>
+</section>
+
+<section>
+  <h2>حالات بارگذاری</h2>
+  <table>
+    <thead><tr><th>#</th><th>حالت</th><th>Fe</th><th>Fs</th><th>N max</th><th>N min</th><th>V</th><th>M</th></tr></thead>
+    <tbody>
+    {% for c in r.cases %}
+      <tr class="{{ 'gov' if c.no == r.governing.no }}">
+        <td class="num">{{ c.no }}</td><td>{{ c.name }}</td>
+        <td class="n">{{ c.Fe|round|int }}</td><td class="n">{{ c.Fs|round|int }}</td>
+        <td class="n">{{ c.N|round|int }}</td><td class="n">{{ c.Nmin|round|int }}</td>
+        <td class="n">{{ c.V|round|int }}</td><td class="n">{{ c.M|round|int }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div style="font-size:9pt;color:#5C6B77;margin-top:4px">نیرو بر حسب kg و لنگر بر حسب kg·m — سطر پررنگ حالت حاکم است.</div>
+</section>
+
+<section>
+  <h2>کنترل‌های طراحی</h2>
+  {% for c in r.checks %}
+  <div class="chk">
+    <div class="top">
+      <b>{{ c.name }}</b>
+      <span class="val">{{ '%.2f'|format(c.value) }} {{ c.dir }} {{ '%.2f'|format(c.limit) }} {{ c.unit }}</span>
+      <span class="{{ 'ok' if c.ok else 'ng' }}">{{ 'قبول' if c.ok else 'مردود' }}</span>
+    </div>
+    <div class="steps">
+      {% for s in c.steps %}
+      <div class="st"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+<section>
+  <h2>طراحی مقطع</h2>
+  {% for key in ['pedestal','pad','punching','oneway'] %}
+  {% set dz = r.design[key] %}
+  <div class="chk">
+    <div class="top"><b>{{ dz.title }}</b>
+      <span class="{{ 'ok' if dz.ok else 'ng' }}">{{ 'قبول' if dz.ok else 'مردود' }}</span></div>
+    <div class="steps">
+      {% for s in dz.steps %}
+      <div class="st"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+
+<section>
+  <h2>لیست آرماتور و متره</h2>
+  <table>
+    <thead><tr><th>POS</th><th>شرح</th><th>قطر</th><th>تعداد</th><th>طول (m)</th><th>طول کل</th><th>وزن (kg)</th></tr></thead>
+    <tbody>
+    {% for b in r.bbs %}
+      <tr><td class="num">{{ b.pos }}</td><td class="num">{{ b.shape }}</td>
+        <td class="n">{{ b.dia }}</td><td class="n">{{ b.no }}</td>
+        <td class="n">{{ '%.2f'|format(b.length) }}</td><td class="n">{{ '%.1f'|format(b.total) }}</td>
+        <td class="n">{{ '%.2f'|format(b.weight) }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="grid2" style="margin-top:8px">
+    <div>
+      <div class="kv"><span>بتن</span><span>{{ '%.2f'|format(r.quantities.concrete) }} m³</span></div>
+      <div class="kv"><span>بتن مگر</span><span>{{ '%.3f'|format(r.quantities.lean) }} m³</span></div>
+    </div>
+    <div>
+      <div class="kv"><span>خاکبرداری</span><span>{{ '%.2f'|format(r.quantities.excavation) }} m³</span></div>
+      <div class="kv"><span>وزن آرماتور</span><span>{{ '%.1f'|format(r.quantities.rebar) }} kg</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="sign">
+  <div>تهیه‌کننده<br><br>{{ tb.get('PREP') or calc.who or '' }}</div>
+  <div>کنترل‌کننده<br><br>{{ tb.get('CHCK') or '' }}</div>
+  <div>تأییدکننده<br><br>{{ tb.get('APP') or '' }}</div>
+</div>
+
+<div class="foot">
+  این گزارش از اسنپ‌شات ورودی‌های محاسبه شماره {{ calc.id }} بازتولید شده و همیشه قابل بازسازی است.
+  آنچه در این محاسبه لحاظ نشده: ترکیب ۱۰۰/۳۰ دو راستای زلزله، طراحی میل مهار و صفحه کف، و نشست خاک.
+</div>
+</div>
+</body>
+</html>

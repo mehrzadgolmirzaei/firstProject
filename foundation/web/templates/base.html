@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}سامانه طراحی فونداسیون{% endblock %}</title>
+<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<div class="shell">
+  <nav class="side">
+    <div class="brand">
+      <b>فونداسیون تجهیزات پست</b>
+      <span>طراحی، کنترل و ترسیم</span>
+    </div>
+    {% set p = request.path %}
+    <a href="{{ url_for('dashboard') }}" class="{{ 'on' if p == '/' }}">خانه</a>
+    <a href="{{ url_for('calculate') }}" class="{{ 'on' if p.startswith('/calculate') }}">محاسبه جدید</a>
+    <a href="{{ url_for('history') }}" class="{{ 'on' if p.startswith('/history') or p.startswith('/calculation') }}">تاریخچه</a>
+    <div class="grp">مرجع</div>
+    <a href="{{ url_for('catalog') }}" class="{{ 'on' if p.startswith('/catalog') }}">کاتالوگ تجهیزات</a>
+    <a href="{{ url_for('codes') }}" class="{{ 'on' if p.startswith('/codes') }}">ویرایش‌های آیین‌نامه</a>
+    <a href="{{ url_for('drawing_settings') }}" class="{{ 'on' if p.startswith('/settings') }}">تنظیمات نقشه</a>
+    {% if user and user.role == 'admin' %}
+    <div class="grp">مدیریت</div>
+    <a href="{{ url_for('users') }}" class="{{ 'on' if p.startswith('/users') }}">کاربران</a>
+    <a href="{{ url_for('audit') }}" class="{{ 'on' if p.startswith('/audit') }}">سیاهه رویدادها</a>
+    {% endif %}
+    <div class="foot">
+      {% if user %}{{ user.full_name }} · {{ ROLES.get(user.role, user.role) }}<br>
+      <a href="{{ url_for('logout') }}">خروج</a>{% endif %}
+    </div>
+  </nav>
+
+  <main>
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    {% block body %}{% endblock %}
+  </main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

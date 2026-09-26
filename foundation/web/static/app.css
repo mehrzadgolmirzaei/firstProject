@@ -1,0 +1,191 @@
+/* ==========================================================================
+   سامانه طراحی فونداسیون — سیستم طراحی
+   زبان بصری از خود کار می‌آید: سطح کاغذ پلات‌شده، خط‌کشی مویی،
+   و عدد به عنوان خروجی ابزار اندازه‌گیری.
+   ========================================================================== */
+:root{
+  --paper:#EEF0EF;        /* کاغذ پلات */
+  --sheet:#F168F8;        /* بازنویسی می‌شود */
+  --sheet:#FBFBFA;
+  --ink:#16202B;          /* مرکب */
+  --ink-2:#5C6B77;
+  --steel:#3E6B8A;        /* فولاد سازه */
+  --copper:#B4653A;       /* شینه مسی — تنها لهجه‌ی گرم */
+  --pass:#2C6E4B;
+  --fail:#A32B28;
+  --rule:#D3D8D6;
+  --rule-soft:#E4E7E5;
+  --shadow:0 1px 0 rgba(22,32,43,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Vazirmatn,Tahoma,system-ui,sans-serif;
+  background:var(--paper);color:var(--ink);
+  font-size:15px;line-height:1.75;
+}
+.num,code,.mono{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+
+a{color:var(--steel);text-decoration:none}
+a:hover{text-decoration:underline}
+:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+
+/* ------------------------------------------------------------ چیدمان */
+.shell{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:100vh}
+@media(max-width:860px){.shell{grid-template-columns:minmax(0,1fr)}}
+
+nav.side{
+  background:var(--ink);color:#C9D3DA;padding:22px 0 0;
+  border-inline-start:3px solid var(--copper);
+}
+nav.side .brand{padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.09)}
+nav.side .brand b{display:block;font-size:15px;color:#fff;font-weight:700;letter-spacing:-.2px}
+nav.side .brand span{font-size:11.5px;color:#7E909C}
+nav.side a{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:9px 20px;color:#AFBDC7;font-size:14px;border-inline-start:3px solid transparent;
+}
+nav.side a:hover{background:rgba(255,255,255,.05);color:#fff;text-decoration:none}
+nav.side a.on{background:rgba(255,255,255,.07);color:#fff;border-inline-start-color:var(--copper)}
+nav.side .grp{padding:16px 20px 6px;font-size:11px;color:#65767F}
+nav.side .foot{margin-top:auto;padding:16px 20px;font-size:12px;color:#7E909C;
+  border-top:1px solid rgba(255,255,255,.09)}
+nav.side{display:flex;flex-direction:column}
+
+main{padding:26px 30px 60px;min-width:0}
+header.page{
+  display:flex;justify-content:space-between;align-items:flex-end;gap:18px;
+  flex-wrap:wrap;border-bottom:2px solid var(--ink);padding-bottom:12px;margin-bottom:24px;
+}
+header.page h1{margin:0;font-size:21px;font-weight:700;letter-spacing:-.3px}
+header.page p{margin:3px 0 0;color:var(--ink-2);font-size:13px}
+
+/* ------------------------------------------------------------ سطوح */
+.sheet{background:var(--sheet);border:1px solid var(--rule);padding:18px 20px}
+.sheet + .sheet{margin-top:16px}
+.sheet h2{
+  font-size:13px;font-weight:700;margin:0 0 14px;color:var(--steel);
+  padding-bottom:8px;border-bottom:1px solid var(--rule-soft);
+}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media(max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
+
+/* ------------------------------------------------------------ فرم */
+fieldset{border:0;padding:0;margin:0 0 14px}
+legend{font-size:12px;color:var(--ink-2);margin-bottom:8px;padding:0}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.row.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.f{margin-bottom:8px;min-width:0}
+.f label{display:block;font-size:12px;color:var(--ink-2);margin-bottom:3px}
+.f label b{color:var(--ink);font-weight:600}
+input,select,textarea{
+  width:100%;padding:7px 9px;font:inherit;font-size:14px;color:var(--ink);
+  background:#fff;border:1px solid var(--rule);border-radius:2px;
+}
+input[type=number],input.mono{font-family:"IBM Plex Mono",monospace;direction:ltr;text-align:right}
+select{background:#fff}
+input:focus,select:focus{border-color:var(--steel);outline:2px solid rgba(62,107,138,.2);outline-offset:-1px}
+
+.btn{
+  display:inline-block;padding:9px 18px;font:inherit;font-weight:600;font-size:14px;
+  background:var(--copper);color:#fff;border:0;border-radius:2px;cursor:pointer;
+}
+.btn:hover{background:#9C5530}
+.btn.wide{width:100%;padding:11px}
+.btn.quiet{background:transparent;color:var(--steel);border:1px solid var(--steel)}
+.btn.quiet:hover{background:#EAF0F4}
+.btn:disabled{opacity:.5;cursor:default}
+
+/* ------------------------------------------------------------ نتیجه */
+.readout{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.readout .big{
+  font-family:"IBM Plex Mono",monospace;font-size:38px;font-weight:600;
+  letter-spacing:-1.5px;direction:ltr;
+}
+.readout .unit{color:var(--ink-2);font-size:14px}
+.verdict{margin-inline-start:auto;font-size:13px;font-weight:700;padding:5px 13px;border-radius:2px}
+.verdict.ok{background:#E7F1EB;color:var(--pass)}
+.verdict.ng{background:#F7EAE9;color:var(--fail)}
+
+/* نوار کنترل — عنصر اطلاعاتی اصلی صفحه نتیجه */
+.check{padding:12px 0;border-bottom:1px solid var(--rule-soft)}
+.check:last-child{border-bottom:0}
+.check .line{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:13.5px}
+.check .nm{font-weight:600}
+.check .vl{font-family:"IBM Plex Mono",monospace;color:var(--ink-2);direction:ltr}
+.check .vl b{color:var(--ink)}
+.gauge{position:relative;height:5px;background:#E7EAE8;margin-top:8px;overflow:hidden}
+.gauge i{position:absolute;inset-block:0;inset-inline-start:0;display:block;background:var(--pass);
+  width:0;transition:width .7s cubic-bezier(.22,.8,.3,1)}
+.gauge i.ng{background:var(--fail)}
+.tag{font-size:11px;font-weight:700;padding:1px 8px;border-radius:2px}
+.tag.ok{background:#E7F1EB;color:var(--pass)}
+.tag.ng{background:#F7EAE9;color:var(--fail)}
+
+/* ------------------------------------------------------------ جدول */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--rule-soft);text-align:right}
+th{font-weight:600;color:var(--ink-2);font-size:12px;background:#F3F5F4;
+  border-bottom:1px solid var(--rule)}
+td.n{font-family:"IBM Plex Mono",monospace;direction:ltr;text-align:left}
+tr.gov td{background:#EEF3F6;font-weight:600}
+tbody tr:hover td{background:#F6F8F7}
+
+.kv{display:flex;justify-content:space-between;gap:12px;padding:5px 0;
+  border-bottom:1px dotted var(--rule)}
+.kv:last-child{border-bottom:0}
+.kv span:last-child{font-family:"IBM Plex Mono",monospace;font-weight:600;direction:ltr}
+
+/* ------------------------------------------------------------ ریز */
+.note{font-size:12px;color:var(--ink-2);line-height:1.9}
+.flash{padding:10px 14px;border-inline-start:3px solid var(--steel);background:#EDF2F5;
+  font-size:13.5px;margin-bottom:14px}
+.flash.error{border-color:var(--fail);background:#F8ECEB}
+.flash.ok{border-color:var(--pass);background:#EAF2ED}
+.stat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media(max-width:760px){.stat{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat .cell{background:var(--sheet);border:1px solid var(--rule);padding:14px 16px}
+.stat .cell b{display:block;font-family:"IBM Plex Mono",monospace;font-size:26px;
+  font-weight:600;letter-spacing:-1px}
+.stat .cell span{font-size:12px;color:var(--ink-2)}
+.muted{color:var(--ink-2)}
+details summary{cursor:pointer;font-size:12.5px;color:var(--steel);padding:4px 0}
+.steps{margin-top:8px;border-top:1px dashed var(--rule);padding-top:8px}
+.step{display:grid;grid-template-columns:120px minmax(0,1fr);gap:3px 12px;
+  margin-bottom:7px;font-size:12px}
+.step .l{color:var(--ink-2)}
+.step .f,.step .v{font-family:"IBM Plex Mono",monospace;direction:ltr;text-align:right;
+  word-break:break-word;margin:0}
+.step .f{color:var(--steel)}
+.step .v{grid-column:2}
+
+/* ------------------------------------------------------------ نمای سه‌بعدی */
+.viewer{position:relative;background:#151E27;border:1px solid var(--rule);
+  aspect-ratio:4/3;min-height:340px;overflow:hidden}
+.viewer canvas{display:block;width:100%;height:100%}
+.viewer .hint{position:absolute;inset-block-end:10px;inset-inline-start:12px;
+  color:#7E909C;font-size:11.5px;pointer-events:none}
+.viewer .legend{position:absolute;inset-block-start:12px;inset-inline-start:12px;
+  font-size:11.5px;color:#AFBDC7;pointer-events:none;line-height:1.9}
+.viewer .legend i{display:inline-block;width:9px;height:9px;margin-inline-end:6px;border-radius:1px}
+.viewer .empty{position:absolute;inset:0;display:grid;place-items:center;
+  color:#5C6B77;font-size:13px}
+
+/* خوانش ابعاد روی نمای سه‌بعدی */
+.viewer .readouts{
+  position:absolute;inset-block-end:10px;inset-inline-end:12px;display:flex;gap:14px;
+  flex-wrap:wrap;pointer-events:none;font-size:11.5px;color:#8095A5;
+}
+.viewer .readouts b{
+  font-family:"IBM Plex Mono",monospace;color:#DCE6EC;font-weight:600;
+  font-size:13px;margin-inline-start:4px;
+}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.actions .btn{padding:7px 14px;font-size:13px;text-align:center}
+
+/* فیلدی که باید از اوت‌لاین سازنده پر شود */
+input.needs-outline{
+  border-color:var(--copper);background:#FCF6F2;
+}
+input.needs-outline::placeholder{color:#B4653A;font-size:12px}
