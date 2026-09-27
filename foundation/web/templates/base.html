@@ -20,6 +20,7 @@
     {% set p = request.path %}
     <a href="{{ url_for('dashboard') }}" class="{{ 'on' if p == '/' }}">خانه</a>
     <a href="{{ url_for('calculate') }}" class="{{ 'on' if p.startswith('/calculate') }}">محاسبه جدید</a>
+    <a href="{{ url_for('guide_page') }}" class="{{ 'on' if p.startswith('/guide') }}">راهنما</a>
     <a href="{{ url_for('history') }}" class="{{ 'on' if p.startswith('/history') or p.startswith('/calculation') }}">تاریخچه</a>
     <div class="grp">مرجع</div>
     <a href="{{ url_for('catalog') }}" class="{{ 'on' if p.startswith('/catalog') }}">کاتالوگ تجهیزات</a>

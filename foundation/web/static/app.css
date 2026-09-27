@@ -216,3 +216,37 @@ b.ng{color:var(--fail)}
 .legend.heat .heat-scale{display:block}
 .legend .heat-scale b{display:inline-block;width:90px;height:8px;vertical-align:middle;margin:0 4px;
   background:linear-gradient(to left,#2E7D50,#D6AA28 46%,#D65A28 69%,#AA1E1E);border-radius:2px}
+/* راهنما */
+.guide{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start}
+.guide-toc{position:sticky;top:12px;display:flex;flex-direction:column;gap:2px;padding:10px}
+.guide-toc a{padding:5px 8px;border-radius:4px;color:var(--ink-2);text-decoration:none;font-size:13px}
+.guide-toc a:hover{background:var(--rule-soft);color:var(--ink)}
+.guide-sec{margin-bottom:16px}
+.guide-item{border-top:1px solid var(--rule-soft);padding:12px 0}
+.guide-item h3{margin:0 0 6px;font-size:15px}
+.guide-item h3 b{font-family:ui-monospace,monospace;color:var(--steel);margin-inline-start:6px}
+.guide-item h3 .unit{font-weight:400;color:var(--ink-2);font-size:12px}
+.guide-item dl{display:grid;grid-template-columns:110px 1fr;gap:4px 12px;margin:0;font-size:13px;line-height:1.8}
+.guide-item dt{color:var(--ink-2)}
+.guide-item dd{margin:0}
+.guide-item.flash-target{background:linear-gradient(to left,transparent,rgba(62,107,138,.10));}
+.guide-search{min-width:240px}
+@media (max-width:800px){.guide{grid-template-columns:1fr}.guide-toc{position:static}}
+/* حالت راهنمای فرم */
+.help-dot{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;
+  border:1px solid var(--rule);background:var(--sheet);color:var(--steel);font-size:11px;font-weight:700;
+  cursor:pointer;margin-inline-start:6px;vertical-align:middle;padding:0;line-height:1}
+.help-dot:hover{background:var(--steel);color:#fff}
+.help-panel{position:fixed;inset-block-end:16px;inset-inline-end:16px;width:min(380px,calc(100vw - 32px));
+  z-index:50;background:var(--sheet);border:1px solid var(--rule);border-radius:8px;
+  box-shadow:0 8px 28px rgba(22,32,43,.18);padding:14px 16px;display:none}
+.help-panel.on{display:block}
+.help-panel h3{margin:0 0 2px;font-size:15px}
+.help-panel .sec{font-size:11px;color:var(--ink-2)}
+.help-panel dl{display:grid;grid-template-columns:90px 1fr;gap:4px 10px;margin:10px 0 8px;font-size:13px;line-height:1.75}
+.help-panel dt{color:var(--ink-2)}
+.help-panel dd{margin:0}
+.help-panel .x{position:absolute;inset-block-start:8px;inset-inline-end:10px;border:0;background:none;font-size:18px;cursor:pointer;color:var(--ink-2)}
+.guide-mode .f input:focus,.guide-mode .f select:focus{outline:2px solid var(--steel);outline-offset:1px}
+.guide-toggle{float:inline-end;font-size:12px;padding:4px 10px}
+.guide-toggle.on{background:var(--steel);color:#fff}

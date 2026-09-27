@@ -2,14 +2,15 @@
 {% block title %}محاسبه جدید{% endblock %}
 {% block body %}
 <header class="page">
-  <div><h1>محاسبه جدید</h1><p>تجهیز را انتخاب کنید، ابعاد و آرماتور محاسبه می‌شود</p></div>
+  <div><h1>محاسبه جدید</h1><p>طراحی فونداسیون و سازه نگهدارنده تجهیزات پست</p></div>
   <span class="note" id="stamp"></span>
 </header>
 
 <div class="cols">
   <!-- ورودی -->
   <form class="sheet" id="form" autocomplete="off">
-    <h2>ورودی</h2>
+    <h2>ورودی <button class="btn quiet guide-toggle" type="button" id="guideToggle"
+      title="با فعال بودن این حالت، شرح هر فیلد هنگام انتخاب آن نمایش داده می‌شود">حالت راهنما</button></h2>
 
     <div class="f">
       <label>سطح ولتاژ پست</label>
@@ -58,7 +59,7 @@
         <div class="f"><label><b>He</b> ارتفاع تجهیز (m)</label><input id="He" type="number" step="0.001">
           <small class="hint">از پای تجهیز (روی سازه) تا بالاترین نقطه آن</small></div>
         <div class="f"><label><b>he</b> ارتفاع مرکز ثقل (m)</label><input id="he" type="number" step="0.001">
-          <small class="hint">از پای تجهیز؛ خالی = نصف He</small></div>
+          <small class="hint">از پای تجهیز؛ در صورت خالی بودن، نصف He</small></div>
         <div class="f"><label><b>Ae</b> سطح بادگیر (m²)</label><input id="Ae" type="number" step="0.01">
           <small class="hint">تصویر تجهیز روی صفحه عمود بر باد</small></div>
         <div class="f"><label><b>Ce</b> ضریب درگ تجهیز</label><input id="Ce" type="number" step="0.01" value="0.5">
@@ -86,10 +87,10 @@
             پی دست‌کم «این فاصله + عرض ستون + دو برابر حداقل بیرون‌زدگی» می‌شود.</small></div>
       </div>
       <div class="row">
-        <div class="f"><label><b>L</b> طول پی (m)</label><input id="L" type="number" step="0.05" placeholder="خالی = طراحی خودکار">
+        <div class="f"><label><b>L</b> طول پی (m)</label><input id="L" type="number" step="0.05" placeholder="طراحی خودکار">
           <small class="hint">اگر L و B هر دو وارد شوند، سامانه همان پی را کنترل می‌کند (مثل دفترچه)؛
-            خالی = کوچک‌ترین پی که همه کنترل‌ها را پاس کند.</small></div>
-        <div class="f"><label><b>B</b> عرض پی (m)</label><input id="B" type="number" step="0.05" placeholder="خالی = طراحی خودکار">
+            در صورت خالی بودن، کوچک‌ترین پی که همه کنترل‌ها را پاس کند محاسبه می‌شود.</small></div>
+        <div class="f"><label><b>B</b> عرض پی (m)</label><input id="B" type="number" step="0.05" placeholder="طراحی خودکار">
           <small class="hint">در راستای بار جانبی (M_r = W·B/2)</small></div>
       </div>
 
@@ -175,11 +176,11 @@
         <div class="f"><label><b>Fc</b> کشش هادی — حالت عادی (kg)</label><input id="Fc" type="number" step="1">
           <small class="hint">نیروی افقی هادی روی ترمینال (Terminal load) از محاسبات مکانیکال</small></div>
         <div class="f"><label><b>Fc,sc</b> کشش هادی — اتصال کوتاه (kg)</label><input id="Fc_sc" type="number" step="1">
-          <small class="hint">در حالت اتصال کوتاه؛ خالی = همان Fc</small></div>
-        <div class="f"><label>ارتفاع ترمینال هادی روی تجهیز (m)</label><input id="conductor_points" placeholder="خالی = He">
+          <small class="hint">در حالت اتصال کوتاه؛ در صورت خالی بودن، برابر Fc</small></div>
+        <div class="f"><label>ارتفاع ترمینال هادی روی تجهیز (m)</label><input id="conductor_points" placeholder="برابر He">
           <small class="hint">ارتفاع نقطه‌ای که هادی به تجهیز وصل می‌شود، از پای تجهیز (نه تعداد فاز —
             آن npol است). اگر تجهیز دو ترمینال در دو ارتفاع دارد با ویرگول جدا کنید، مثلاً ۳٫۱۱، ۵٫۱۳
-            برای CB؛ خالی یعنی ترمینال بالای تجهیز (= He).</small></div>
+            برای کلید قدرت؛ در صورت خالی بودن، ترمینال در بالای تجهیز (He) فرض می‌شود.</small></div>
         <div class="f"><label>بار قائم مانور (kg)</label><input id="op_vertical" type="number" step="1" value="0">
           <small class="hint">نیروی قائمی که هنگام قطع و وصل (مانور) تجهیز به پای سازه وارد می‌شود —
             از اوت‌لاین سازنده (Operating / Dynamic load). به N_max اضافه و از N_min کم می‌شود.
@@ -215,7 +216,7 @@
             <select id="method"><option value="rigid" selected>صلب — رابطه ۵-۴</option>
               <option value="static">استاتیکی — رابطه ۳-۱</option></select></div>
           <div class="f"><label>سختی جانبی استراکچر (kg/cm)</label>
-            <input id="k_lateral" type="number" step="10" placeholder="خالی = نامشخص"></div>
+            <input id="k_lateral" type="number" step="10" placeholder="نامشخص"></div>
           <div class="f"><label><b>Ie</b> ضریب اهمیت</label><input id="ie" type="number" step="0.1" value="1.4"></div>
           <div class="f"><label><b>Ru</b> ضریب رفتار</label><input id="ru" type="number" step="0.1" value="2"></div>
         </div>
@@ -261,27 +262,27 @@
     </fieldset>
 
     <fieldset>
-      <legend>سازه فولادی نگهدارنده — تحلیل و طراحی در خود برنامه</legend>
+      <legend>سازه فولادی نگهدارنده</legend>
       <label class="check-inline"><input type="checkbox" id="steel_enabled" checked>
-        سازه را بساز، تحلیل کن و مقاطع را طراحی کن (AISC-ASD89)</label>
+        تحلیل و طراحی سازه فولادی طبق AISC-ASD89</label>
       <label class="check-inline"><input type="checkbox" id="steel_feed" checked>
-        وزن و سطح بادگیر سازه برای پی از همین سازه (به جای Ws و As دستی)</label>
+        استفاده از وزن و سطح بادگیر سازه طراحی‌شده در محاسبه فونداسیون</label>
       <div class="row">
         <div class="f"><label>ضلع پایه مشبک (m)</label><input id="leg_width" type="number" step="0.05" value="{{ defaults.steel.leg_width }}">
           <small class="hint">فاصله محور چهار نبشی اصلی هر پایه؛ مدل‌های دفتر ۰٫۴۰ (سکسیونر ۰٫۳۰)</small></div>
         <div class="f"><label>ضریب طول مؤثر نبشی اصلی K</label>
-          <select id="k_chord"><option value="2" {{ 'selected' if defaults.steel.k_chord == 2 }}>۲ — رویه مدل‌های SAP دفتر</option>
-            <option value="1" {{ 'selected' if defaults.steel.k_chord == 1 }}>۱ — مهار در هر گره پانل</option></select>
-          <small class="hint">نبشی اصلی بین دو گره پانل که مهاربند دارد؛ آیین‌نامه K=1 را مجاز می‌داند، دفتر ۲ گرفته</small></div>
+          <select id="k_chord"><option value="2" {{ 'selected' if defaults.steel.k_chord == 2 }}>۲ — مطابق مدل‌های پیشین دفتر</option>
+            <option value="1" {{ 'selected' if defaults.steel.k_chord == 1 }}>۱ — مهارشده در گره‌های پانل</option></select>
+          <small class="hint">برای نبشی اصلی مهارشده در گره‌های پانل، آیین‌نامه K = ۱ را مجاز می‌داند</small></div>
         <div class="f"><label>Fy فولاد (kg/cm²)</label><input id="steel_fy" type="number" step="50" value="{{ defaults.steel.fy }}">
           <small class="hint">St37 = ۲۳۵۰ (مدل‌های دفتر)</small></div>
         <div class="f"><label>ضریب وزن اتصالات</label><input id="conn_factor" type="number" step="0.05" value="{{ defaults.steel.connection_factor }}">
           <small class="hint">ورق اتصال، پیچ و صفحه کف نسبت به وزن اعضا</small></div>
       </div>
-      <p class="note" style="margin:0">سازه با الگوی سازه‌های دفتر ساخته می‌شود (پایه مشبک چهارنبشی، مهاربند،
-        تیر ناودانی سر سازه)، با همان پنج حالت بار پی به‌علاوه زلزله عمود و بار تعمیر تحلیل می‌شود
-        و برای هر گروه اعضا سبک‌ترین نبشی/ناودانی که همه کنترل‌ها را پاس کند انتخاب می‌شود.
-        سازه کلید قدرت را سازنده می‌دهد و طراحی نمی‌شود.</p>
+      <p class="note" style="margin:0">سازه مطابق الگوی سازه‌های دفتر (پایه مشبک چهارنبشی، مهاربند و تیر
+        ناودانی سر سازه) ایجاد می‌شود، تحت پنج حالت بار فونداسیون به‌علاوه زلزله عمود و بار تعمیر
+        تحلیل می‌شود و برای هر گروه اعضا سبک‌ترین مقطعی که همه کنترل‌ها را پاس کند انتخاب می‌گردد.
+        سازه کلید قدرت توسط سازنده تأمین می‌شود و طراحی نمی‌گردد.</p>
     </fieldset>
 
     <fieldset>
@@ -312,7 +313,8 @@
         روش دفترچه و با پیشنهاد سامانه کنار هم نشان داده می‌شود تا اثر انتخاب را ببینید.</p>
     </fieldset>
 
-    <button class="btn wide" type="submit" id="go">محاسبه کن</button>
+    <aside class="help-panel" id="helpPanel" aria-live="polite"></aside>
+    <button class="btn wide" type="submit" id="go">اجرای محاسبه</button>
     <p class="note" id="msg"></p>
   </form>
 
@@ -320,7 +322,7 @@
   <div>
     <div class="sheet" style="padding:0;border:0">
       <div class="viewer" id="viewer">
-        <div class="empty">پس از محاسبه، مدل فونداسیون اینجا ساخته می‌شود</div>
+        <div class="empty">مدل سه‌بعدی فونداسیون پس از محاسبه در این بخش نمایش داده می‌شود</div>
         <div class="legend" id="legend" style="display:none">
           <i style="background:#D4D0C8"></i>بتن<br>
           <i style="background:#7E5440"></i>آرماتور<br>
@@ -343,7 +345,7 @@
       <p class="note" id="sub"></p>
       <table class="compare" id="compare"></table>
       <div class="actions" id="actions" style="display:none">
-        <button class="btn quiet" type="button" id="mkdxf">ساخت نقشه‌های اتوکد</button>
+        <button class="btn quiet" type="button" id="mkdxf">تهیه نقشه‌های اتوکد</button>
         <span id="dxflinks" style="display:contents"></span>
         <a class="btn quiet" id="detail">گزارش کامل</a>
         <a class="btn quiet" id="printlink" target="_blank">گزارش چاپی / PDF</a>
@@ -379,6 +381,7 @@ const BUILTIN = {{ builtin|tojson }};
 const VOLTAGES = {{ voltages|tojson }};
 const TYPES = {{ types|tojson }};
 const VORDER = {{ voltage_order|tojson }};
+const GUIDE = {{ guide|tojson }};
 const OPTIONS = {{ options|tojson }};
 const $ = id => document.getElementById(id);
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
@@ -387,7 +390,7 @@ let lastId = null;
 
 $("mkdxf").addEventListener("click", async () => {
   if (!lastId) return;
-  const b = $("mkdxf"); b.disabled = true; b.textContent = "در حال ساخت نقشه…";
+  const b = $("mkdxf"); b.disabled = true; b.textContent = "در حال تهیه نقشه‌ها…";
   try {
     const r = await fetch(`/api/drawing/${lastId}`, {method:"POST", headers: {"X-CSRF-Token": CSRF}});
     const d = await r.json();
@@ -400,11 +403,11 @@ $("mkdxf").addEventListener("click", async () => {
         box.appendChild(a);
       });
       $("msg").textContent = d.warnings.length
-        ? "نقشه‌ها ساخته شد، با هشدار: " + d.warnings.join("، ")
-        : "دو خروجی ساخته شد: نقشه دوبعدی برای ساخت و مدل سه‌بعدی برای ارائه.";
+        ? "فایل‌های خروجی آماده است، با هشدار: " + d.warnings.join("، ")
+        : "فایل‌های خروجی آماده است.";
     }
-  } catch (e) { $("msg").textContent = "نقشه ساخته نشد: " + e; }
-  b.disabled = false; b.textContent = "ساخت نقشه‌های اتوکد";
+  } catch (e) { $("msg").textContent = "تهیه نقشه با خطا مواجه شد: " + e; }
+  b.disabled = false; b.textContent = "تهیه نقشه‌های اتوکد";
 });
 
 const OUTLINE_FIELDS = {};
@@ -647,7 +650,7 @@ $("form").addEventListener("submit", async ev => {
     const d = await r.json();
     if (d.error) { $("msg").textContent = d.error; $("go").disabled = false; return; }
     render(d);
-    $("msg").textContent = "ثبت شد — شناسه " + d.id;
+    $("msg").textContent = "محاسبه ثبت شد — شماره " + d.id;
     lastId = d.id;
   } catch (err) {
     $("msg").textContent = "ارتباط با سرور برقرار نشد: " + err;
@@ -662,6 +665,39 @@ $("preset").addEventListener("input", () => { if (fixedLayout) clearFixedLayout(
 $("preset").addEventListener("change", () => drawPreview());
 populateEquipment();
 drawPreview();
+
+// ---- راهنمای فیلدها: دکمه «؟» کنار هر عنوان و حالت راهنما (نمایش خودکار هنگام انتخاب فیلد)
+function showHelp(id){
+  const g = GUIDE[id]; if (!g) return;
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  $("helpPanel").innerHTML = `<button class="x" type="button" aria-label="بستن">×</button>
+    <div class="sec">${esc(g.section)}</div>
+    <h3>${esc(g.title)}${g.symbol ? ` <b dir="ltr">${esc(g.symbol)}</b>` : ""}${g.unit ? ` <small dir="ltr">(${esc(g.unit)})</small>` : ""}</h3>
+    <dl><dt>تعریف</dt><dd>${esc(g.what)}</dd><dt>منبع داده</dt><dd>${esc(g.source)}</dd>
+      <dt>مقدار معمول</dt><dd>${esc(g.typical)}</dd><dt>اثر در محاسبه</dt><dd>${esc(g.effect)}</dd></dl>
+    <a href="/guide#${encodeURIComponent(id)}" target="_blank">مشاهده در راهنمای کامل</a>`;
+  $("helpPanel").classList.add("on");
+  $("helpPanel").querySelector(".x").addEventListener("click", () => $("helpPanel").classList.remove("on"));
+}
+document.querySelectorAll("#form input[id], #form select[id]").forEach(el => {
+  const id = GUIDE[el.id] ? el.id : el.id.replace(/^g2_/, "");
+  if (!GUIDE[id] || el.type === "hidden") return;
+  const label = el.type === "checkbox" ? el.closest("label")
+    : (el.closest(".f") ? el.closest(".f").querySelector("label") : null);
+  if (!label) return;
+  const dot = document.createElement("button");
+  dot.type = "button"; dot.className = "help-dot"; dot.textContent = "؟";
+  dot.title = "شرح این فیلد"; dot.setAttribute("aria-label", "شرح " + GUIDE[id].title);
+  dot.addEventListener("click", ev => { ev.preventDefault(); showHelp(id); });
+  if (!label.querySelector(".help-dot")) label.appendChild(dot);
+  el.addEventListener("focus", () => { if (document.body.classList.contains("guide-mode")) showHelp(id); });
+});
+$("guideToggle").addEventListener("click", () => {
+  const on = document.body.classList.toggle("guide-mode");
+  $("guideToggle").classList.toggle("on", on);
+  $("guideToggle").textContent = on ? "خروج از حالت راهنما" : "حالت راهنما";
+  if (on) showHelp("voltage"); else $("helpPanel").classList.remove("on");
+});
 
 function render(d){
   const g = d.geometry;

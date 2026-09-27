@@ -44,7 +44,7 @@ def compare(search, opt):
     """
     rows, seen = [], {}
     chosen = {"governing": str(opt.governing), "bearing": opt.bearing}
-    for key, label, o in PROFILES + [("selected", "انتخاب شما", chosen)]:
+    for key, label, o in PROFILES + [("selected", "روش انتخاب‌شده", chosen)]:
         sig = (o["governing"], o["bearing"])
         if sig not in seen:
             r = search(*sig)

@@ -43,7 +43,7 @@ def _calc(client, tag="LA", **extra):
 
 
 @pytest.mark.parametrize("path", ["/", "/calculate", "/history", "/catalog", "/codes",
-                                  "/codes?a=1&b=2", "/settings", "/users", "/audit", "/account"])
+                                  "/codes?a=1&b=2", "/settings", "/users", "/audit", "/account", "/guide"])
 def test_pages(client, path):
     assert client.get(path).status_code == 200
 
@@ -298,3 +298,17 @@ def test_keyplan_upload(client):
     r = client.post("/api/keyplan", data={"file": (open(__file__, "rb"), "x.txt")}, headers=h,
                     content_type="multipart/form-data")
     assert r.status_code == 400
+
+
+def test_guide_covers_every_form_field(client):
+    """هر فیلد فرم محاسبه در راهنما شرح دارد (فیلدهای تجهیز دوم همان شرح تجهیز اول)."""
+    import re
+    from guide import by_id
+    g = by_id()
+    html = client.get("/calculate").get_data(as_text=True)
+    fields = set(re.findall(r'<(?:input|select)[^>]*id="([A-Za-z0-9_]+)"', html)) - {"kind"}
+    missing = sorted(f for f in fields if f not in g and f.replace("g2_", "", 1) not in g)
+    assert not missing, missing
+    page = client.get("/guide").get_data(as_text=True)
+    assert "نوع زمین" in page and "Vs30" in page
+    assert 'id="guideToggle"' in html

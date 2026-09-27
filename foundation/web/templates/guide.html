@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}راهنما{% endblock %}
+{% block body %}
+<header class="page">
+  <div><h1>راهنمای ورودی‌ها</h1><p>شرح تک‌تک فیلدهای صفحه محاسبه: تعریف، منبع داده، مقدار معمول و اثر در محاسبه</p></div>
+  <input class="guide-search" id="q" type="search" placeholder="جست‌وجو در راهنما…" autocomplete="off">
+</header>
+
+<div class="guide">
+  <nav class="guide-toc sheet">
+    {% for s in guide %}<a href="#sec-{{ s.id }}">{{ s.title }}</a>{% endfor %}
+  </nav>
+  <div>
+    {% for s in guide %}
+    <section class="sheet guide-sec" id="sec-{{ s.id }}">
+      <h2>{{ s.title }}</h2>
+      <p class="note">{{ s.intro }}</p>
+      {% for f in s.fields %}
+      <article class="guide-item" id="{{ f.id }}" data-text="{{ (f.title ~ ' ' ~ (f.symbol or '') ~ ' ' ~ f.what)|e }}">
+        <h3>{{ f.title }}{% if f.symbol %} <b dir="ltr">{{ f.symbol }}</b>{% endif %}{% if f.unit %} <span class="unit" dir="ltr">({{ f.unit }})</span>{% endif %}</h3>
+        <dl>
+          <dt>تعریف</dt><dd>{{ f.what }}</dd>
+          <dt>منبع داده</dt><dd>{{ f.source }}</dd>
+          <dt>مقدار معمول</dt><dd>{{ f.typical }}</dd>
+          <dt>اثر در محاسبه</dt><dd>{{ f.effect }}</dd>
+        </dl>
+      </article>
+      {% endfor %}
+    </section>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById("q").addEventListener("input", e => {
+  const q = e.target.value.trim();
+  document.querySelectorAll(".guide-item").forEach(el => {
+    el.style.display = !q || el.dataset.text.includes(q) ? "" : "none";
+  });
+  document.querySelectorAll(".guide-sec").forEach(sec => {
+    sec.style.display = [...sec.querySelectorAll(".guide-item")].some(i => i.style.display !== "none") ? "" : "none";
+  });
+});
+if (location.hash) {
+  const el = document.getElementById(location.hash.slice(1));
+  if (el) { el.classList.add("flash-target"); setTimeout(() => el.scrollIntoView({block: "center"}), 50); }
+}
+</script>
+{% endblock %}

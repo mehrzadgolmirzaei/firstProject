@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.7.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.7.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -113,6 +113,7 @@ def calculate():
                            catalog=[dict(r) for r in cat],
                            builtin={k: asdict(v) for k, v in ALL_EQUIPMENT.items()},
                            voltages=VOLTAGE_LEVELS, types=EQUIPMENT_TYPES,
+                           guide=__import__("guide").by_id(),
                            # ترتیب فهرست تجهیز (tojson کلیدها را الفبایی می‌کند)
                            voltage_order={v: list(l["types"].items())
                                           for v, l in VOLTAGE_LEVELS.items()},
@@ -412,11 +413,11 @@ def api_drawing(cid):
     auth.record("تولید نقشه", "calculation", cid, {"2d": n2, "3d": n3})
     return jsonify({"files": [
         {"kind": "2d", "name": n2, "url": url_for("download", name=n2),
-         "label": f"نقشه دوبعدی — ساخت (۱:{out['scale']:.0f})"},
+         "label": f"نقشه دوبعدی (مقیاس ۱:{out['scale']:.0f})"},
         {"kind": "3d", "name": n3, "url": url_for("download", name=n3),
-         "label": "مدل سه‌بعدی — ارائه"}] + [
+         "label": "مدل سه‌بعدی"}] + [
         {"kind": "sap", "name": n, "url": url_for("download", name=n),
-         "label": "مدل SAP سازه (اختیاری — برای مشاور)"} for n in sap],
+         "label": "مدل SAP سازه"} for n in sap],
         "warnings": out["warnings"]})
 
 
@@ -465,6 +466,14 @@ def calculation_print(cid):
     data["results"] = json.loads(data["results"])
     data["inputs"] = json.loads(data["inputs"])
     return render_template("print.html", calc=data, conf=st.load(), options=design_options())
+
+
+# ================================================================= راهنما
+@app.route("/guide")
+@auth.login_required
+def guide_page():
+    from guide import GUIDE
+    return render_template("guide.html", guide=GUIDE)
 
 
 # ================================================================= آیین‌نامه
