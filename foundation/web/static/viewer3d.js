@@ -18,7 +18,45 @@
     plate:  0x969EA6,
     grout:  0xC6BEAC,
     ground: 0x2A333B,
+    chord:  0x7F8C96,   // نبشی اصلی پایه سازه — گالوانیزه
+    brace:  0xA7B1B8,
+    beam:   0x5F6D78,
   };
+
+  /**
+   * اعضای سازه فولادی با مقطع واقعی (نبشی / ناودانی) — همه اعضای یک نوع در یک هندسه.
+   * s.profile: چندضلعی‌های مقطع در صفحه محورهای محلی ۲ و ۳ (mm)، از steel.py
+   */
+  function steelMesh(members, color, k) {
+    const pos = [];
+    const P3 = (v) => [v[0] * k, v[2] * k, -v[1] * k];
+    const at = (o, e2, e3, u, w) => [o[0] + u * e2[0] + w * e3[0],
+      o[1] + u * e2[1] + w * e3[1], o[2] + u * e2[2] + w * e3[2]];
+    members.forEach((mb) => {
+      mb.profile.forEach((poly) => {
+        const a = poly.map(([u, w]) => P3(at(mb.p, mb.e2, mb.e3, u, w)));
+        const b = poly.map(([u, w]) => P3(at(mb.q, mb.e2, mb.e3, u, w)));
+        const n = poly.length;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          pos.push(...a[i], ...a[j], ...b[j], ...a[i], ...b[j], ...b[i]);
+        }
+        const tri = THREE.ShapeUtils.triangulateShape(
+          poly.map(([u, w]) => new THREE.Vector2(u, w)), []);
+        tri.forEach(([i, j, l]) => {
+          pos.push(...a[i], ...a[j], ...a[l]);
+          pos.push(...b[i], ...b[l], ...b[j]);
+        });
+      });
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({
+      color, roughness: 0.55, metalness: 0.35, side: THREE.DoubleSide, flatShading: true });
+    mat.userData.opacity = 1;
+    return new THREE.Mesh(g, mat);
+  }
 
   function Viewer(container) {
     this.el = container;
@@ -205,8 +243,17 @@
         a.dia * k, C.anchor));
     });
 
-    this.group.position.y = -top / 2;
-    this.dist = Math.max(4.5, Math.max(L, B) * 2.6);
+    // سازه فولادی از مدل SAP کتابخانه
+    let height = top;
+    const steel = m.steel || [];
+    ["chord", "brace", "beam"].forEach((kind) => {
+      const list = steel.filter((s) => s.kind === kind);
+      if (list.length) this.group.add(steelMesh(list, C[kind], k));
+    });
+    steel.forEach((s) => { height = Math.max(height, s.p[2] * k, s.q[2] * k); });
+
+    this.group.position.y = -height / 2;
+    this.dist = Math.max(4.5, Math.max(L, B) * 2.6, height * 2.1);
     this.build0 = 0;                 // شروع انیمیشن ساخت
     this.autoRotate = true;
     const empty = this.el.querySelector(".empty");

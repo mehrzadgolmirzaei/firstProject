@@ -300,7 +300,8 @@
         <div class="legend" id="legend" style="display:none">
           <i style="background:#D4D0C8"></i>بتن<br>
           <i style="background:#7E5440"></i>آرماتور<br>
-          <i style="background:#B0B6BC"></i>میل مهار
+          <i style="background:#B0B6BC"></i>میل مهار<br>
+          <i style="background:#7F8C96"></i>سازه فولادی (از مدل SAP)
         </div>
         <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
         <div class="readouts" id="readouts"></div>
@@ -326,6 +327,12 @@
     <div class="sheet" id="checksBox" style="display:none">
       <h2>کنترل‌های طراحی</h2>
       <div id="checks"></div>
+    </div>
+
+    <div class="sheet" id="steelBox" style="display:none">
+      <h2>سازه فولادی — از مدل SAP</h2>
+      <div id="steel"></div>
+      <p class="note">وزن اعضا از مقطع × طول مدل SAP است؛ ورق اتصال، پیچ و صفحه کف در آن نیست.</p>
     </div>
 
     <div class="sheet" id="designBox" style="display:none">
@@ -587,7 +594,8 @@ $("form").addEventListener("submit", async ev => {
       n_pedestal: num("n_pedestal"), npol: num("npol"),
       anchor_gauge: num("anchor_gauge"), anchor_dia: num("anchor_dia"),
       anchor_n: num("anchor_n"), op_moment: num("op_moment"),
-      pedestal_spacing: num("pedestal_spacing")
+      pedestal_spacing: num("pedestal_spacing"),
+      structure: eq.structure || ""
     },
     layout: layoutPayload(),
     "seismic.k_lateral": num("k_lateral"),
@@ -682,6 +690,13 @@ function render(d){
       `<td>${OPTIONS.governing[r.governing]}</td><td>${OPTIONS.bearing[r.bearing]}</td>` +
       `<td class="num">${r.L === null ? "—" : fmt(r.L) + " × " + fmt(r.B)}</td></tr>`).join("") +
     "</tbody>";
+  const st = d.structures || [];
+  $("steelBox").style.display = st.length ? "block" : "none";
+  $("steel").innerHTML = st.map(x =>
+    `<div class="kv"><span>${x.tag} — ${x.file}</span><span>ارتفاع ${fmt(x.height)} m · ` +
+    `${x.members} عضو (${x.sections.join("، ")}) · وزن اعضا ${fmt(x.member_weight, 0)} kg ` +
+    `(در محاسبه Ws = ${fmt(x.Ws, 0)} kg)</span></div>` +
+    x.notes.map(n => `<p class="note" style="color:var(--fail)">${n}</p>`).join("")).join("");
   if (d.clashes && d.clashes.length) {
     $("sub").textContent += " · تداخل جزئیات: " + d.clashes.join("، ");
   }

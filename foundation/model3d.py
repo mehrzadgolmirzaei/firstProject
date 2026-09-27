@@ -31,6 +31,9 @@ LAYERS = {
     "F-ANCHOR": ((176, 182, 188), 0.0),     # میل مهار، مهره، واشر
     "F-PLATE": ((150, 158, 166), 0.0),      # صفحه کف
     "F-GROUT": ((198, 190, 172), 0.25),
+    "S-CHORD": ((158, 166, 172), 0.0),      # نبشی‌های اصلی پایه — گالوانیزه
+    "S-BRACE": ((176, 184, 190), 0.0),      # مهاربندها
+    "S-BEAM": ((140, 150, 158), 0.0),       # ناودانی‌های تیر سر سازه
 }
 SIDES = 16          # تعداد وجه منشور جایگزین مقطع دایره‌ای میلگرد
 
@@ -92,6 +95,7 @@ class Foundation3D:
         for bar in fm.bars:
             self.bar(bar)
         self._anchorage()
+        self._steel()
         self._view()
         return self
 
@@ -127,14 +131,39 @@ class Foundation3D:
                     self.rod((a.x, a.y, z0), (a.x, a.y, z0 + 0.8 * d), 1.7 * d, "F-ANCHOR",
                              sides=6)
 
+    def _steel(self):
+        """سازه فولادی: هر عضو با مقطع واقعی (نبشی، ناودانی، دوبل ناودانی)."""
+        import steel
+        from ezdxf.math import Vec3
+        from ezdxf.render import MeshBuilder
+        for m in self.fm.steel:
+            layer = {"chord": "S-CHORD", "brace": "S-BRACE"}.get(m.kind, "S-BEAM")
+            for a, b in zip(steel.section_points(m, m.p), steel.section_points(m, m.q)):
+                mesh = MeshBuilder()
+                n = len(a)
+                mesh.vertices = [Vec3(v) for v in a + b]
+                e1 = [m.q[k] - m.p[k] for k in range(3)]
+                # جهت وجه‌ها طوری که نرمال‌ها رو به بیرون باشد
+                flip = sum(e1[k] * c for k, c in enumerate(steel._cross(m.e2, m.e3))) < 0
+                bottom, top = list(range(n))[::-1], list(range(n, 2 * n))
+                if flip:
+                    bottom, top = bottom[::-1], top[::-1]
+                mesh.faces = [bottom, top]
+                for i in range(n):
+                    j = (i + 1) % n
+                    f = [i, j, n + j, n + i]
+                    mesh.faces.append(f[::-1] if flip else f)
+                self._solid(mesh, layer)
+
     def _view(self):
         """نمای ایزومتریک با سایه‌زنی، تا فایل از همان اول سه‌بعدی باز شود."""
         fm = self.fm
         vp = self.doc.viewports.get("*Active")[0]
-        vp.dxf.target = (0, 0, fm.top / 2)
+        ztop = max([fm.top] + [max(m.p[2], m.q[2]) for m in fm.steel])
+        vp.dxf.target = (0, 0, ztop / 2)
         vp.dxf.direction = (1, -1.2, 0.9)
         vp.dxf.center = (0, 0)
-        vp.dxf.height = max(fm.L, fm.B, fm.top) * 2.2
+        vp.dxf.height = max(fm.L, fm.B, ztop) * 2.2
         vp.dxf.render_mode = 6          # Gouraud + edges
 
     def save(self, path):

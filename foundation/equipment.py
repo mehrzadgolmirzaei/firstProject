@@ -48,6 +48,8 @@ class Equipment:
     # فیلدهایی که باید هر پروژه از اوت‌لاین سازنده خوانده و دستی وارد شوند.
     # تا پر نشوند محاسبه اجرا نمی‌شود، تا کسی سهواً با عدد پیش‌فرض نقشه نگیرد.
     requires_outline: list = field(default_factory=list)
+    # سازه نگهدارنده از کتابخانه SAP (مسیر نسبت به پوشه structures/)؛ خالی = ندارد
+    structure: str = ""
 
     def __post_init__(self):
         if self.he is None:
@@ -125,7 +127,7 @@ _K63 = dict(Ce=0.5, Cs=2.05, Wc=50, anchor_n=4, anchor_dia=20, anchor_gauge=370,
 CATALOG_KIMIA63 = {
     "LA63": Equipment("LA63", "63kV Lightning Arrester", He=1.044, he=0.522, Ae=0.20, We=20,
                       Hs=2.85, hs=1.43, As=1.40, Ws=400, Fc=100, Fc_sc=200, npol=3,
-                      n_pedestal=2, pedestal_spacing=1.70, **_K63),
+                      n_pedestal=2, pedestal_spacing=1.70, structure="63kV/LA.s2k", **_K63),
     "CB63": Equipment("CB63", "63kV Circuit Breaker", He=1.92, he=0.96, Ae=0.45, We=261,
                       Hs=2.22, hs=1.11, As=1.40, Ws=210, Fc=125, Fc_sc=125, npol=3,
                       op_vertical=1100, op_horizontal=1100, op_moment=3200,
@@ -133,22 +135,22 @@ CATALOG_KIMIA63 = {
                       **{**_K63, "anchor_dia": 25, "anchor_gauge": 400}),
     "CT63": Equipment("CT63", "63kV Current Transformer", He=1.55, he=0.785, Ae=0.65, We=395,
                       Hs=2.00, hs=1.00, As=1.30, Ws=400, Fc=250, Fc_sc=250, npol=3,
-                      n_pedestal=2, pedestal_spacing=1.70, **_K63),
+                      n_pedestal=2, pedestal_spacing=1.70, structure="63kV/CT1.s2k", **_K63),
     "DSE63": Equipment("DSE63", "63kV Disconnector with Earthing Switch", He=1.33, he=0.665,
                        Ae=0.30, We=240, Hs=2.50, hs=1.25, As=1.40, Ws=560, Fc=220, Fc_sc=220,
-                       npol=3, n_pedestal=2, pedestal_spacing=1.70, **_K63),
+                       npol=3, n_pedestal=2, pedestal_spacing=1.70, structure="63kV/DS1.s2k", **_K63),
     "DS2_63": Equipment("DS2_63", "63kV Disconnector (type 2)", He=1.41, he=0.705, Ae=0.30,
                         We=240, Hs=4.10, hs=2.05, As=1.90, Ws=600, Fc=220, Fc_sc=220, npol=3,
-                        n_pedestal=2, pedestal_spacing=1.70, **_K63),
+                        n_pedestal=2, pedestal_spacing=1.70, structure="63kV/DS2.s2k", **_K63),
     "CVT63": Equipment("CVT63", "63kV Capacitive Voltage Transformer", He=1.645, he=0.585,
                        Ae=0.60, We=320, Hs=2.00, hs=1.00, As=1.17, Ws=350, Fc=250, Fc_sc=250,
-                       npol=3, n_pedestal=3, pedestal_spacing=1.50, **_K63),
+                       npol=3, n_pedestal=3, pedestal_spacing=1.50, structure="63kV/CVT2000.s2k", **_K63),
     "CVT63_1": Equipment("CVT63_1", "63kV CVT — single phase", He=1.645, he=0.585, Ae=0.60,
                          We=320, Hs=2.00, hs=1.00, As=1.17, Ws=150, Fc=250, Fc_sc=250, npol=1,
-                         n_pedestal=1, **_K63),
+                         n_pedestal=1, structure="63kV/CVT2000.s2k", **_K63),
     "PI63": Equipment("PI63", "63kV Post Insulator (C8)", He=0.77, he=0.385, Ae=0.30, We=36,
                       Hs=4.58, hs=2.29, As=2.20, Ws=620, Fc=320, Fc_sc=640, npol=3,
-                      n_pedestal=2, pedestal_spacing=1.70, **_K63),
+                      n_pedestal=2, pedestal_spacing=1.70, structure="63kV/PI(4.58).s2k", **_K63),
 }
 
 

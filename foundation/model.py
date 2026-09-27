@@ -68,6 +68,8 @@ class FoundationModel:
     anchor_projection: float = 150.0                    # بیرون‌زدگی از روی بتن (mm)
     anchor_hook: float = 0.0                            # قلاب انتهایی (×d)؛ صفر = صاف
     base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
+    steel: list = field(default_factory=list)           # اعضای سازه فولادی (steel.Member)
+    steel_notes: list = field(default_factory=list)     # سازه از کدام فایل SAP، هشدارها
 
     @property
     def top(self):
@@ -212,6 +214,18 @@ def build(res, layout, des, cfg) -> FoundationModel:
             for sy in (-1, 1):
                 fm.anchors.append(Anchor(p.x + sx * gge / 2, p.y + sy * gge / 2, eq.anchor_dia,
                                          fm.top - emb, fm.top + an.projection))
+
+    # --- سازه فولادی هر تجهیز از کتابخانه SAP، پای سازه روی صفحه کف
+    import steel
+    base_z = fm.top + an.grout + an.plate_thickness
+    for gi, grp in enumerate(layout.groups):
+        st = steel.structure_for(grp.eq)
+        if st is None:
+            continue
+        peds = [(p.x, p.y) for p, o in zip(fm.pedestals, owner) if o == gi]
+        members, warn = steel.place(st, peds, base_z)
+        fm.steel += members
+        fm.steel_notes += [f"سازه {grp.eq.tag}: {st.name}.s2k — {len(members)} عضو"] + warn
     return fm
 
 
@@ -256,6 +270,15 @@ def clashes(fm: FoundationModel) -> list:
 
 def to_dict(fm: FoundationModel) -> dict:
     """نسخه JSON مدل برای نمای سه‌بعدی مرورگر؛ همان مختصات فایل‌های اتوکد."""
+    steel_members = fm.steel
+    fm.steel = []
     d = asdict(fm)
+    fm.steel = steel_members
     d["top"] = fm.top
+    # سازه فولادی برای مرورگر: دو سر عضو، محورهای محلی و مقطع (mm)
+    d["steel"] = [{"p": m.p, "q": m.q, "e2": m.e2, "e3": m.e3, "kind": m.kind,
+                   "section": m.section.name,
+                   "profile": [list(map(list, part)) for part in
+                               (m.profile if isinstance(m.profile[0], list) else [m.profile])]}
+                  for m in steel_members]
     return d
