@@ -347,8 +347,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='three.min.js') }}"></script>
-<script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
+<script src="{{ url_for('static', filename='three.min.js', v=VERSION) }}"></script>
+<script src="{{ url_for('static', filename='viewer3d.js', v=VERSION) }}"></script>
 <script>
 const BUILTIN = {{ builtin|tojson }};
 const VOLTAGES = {{ voltages|tojson }};

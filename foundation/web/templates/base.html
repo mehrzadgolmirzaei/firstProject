@@ -7,7 +7,7 @@
 <title>{% block title %}سامانه طراحی فونداسیون{% endblock %}</title>
 <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css', v=VERSION) }}">
 {% block head %}{% endblock %}
 </head>
 <body>
@@ -15,7 +15,7 @@
   <nav class="side">
     <div class="brand">
       <b>فونداسیون تجهیزات پست</b>
-      <span>طراحی، کنترل و ترسیم</span>
+      <span>طراحی، کنترل و ترسیم · نسخه {{ VERSION }}</span>
     </div>
     {% set p = request.path %}
     <a href="{{ url_for('dashboard') }}" class="{{ 'on' if p == '/' }}">خانه</a>
