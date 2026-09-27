@@ -135,36 +135,6 @@ def layout_problems(layout: PadLayout, b: float, L: float = 0.0, B: float = 0.0)
     return errs
 
 
-def structure_checks(layout):
-    """
-    سازه هر تجهیز از کتابخانه SAP در برابر اعدادی که در محاسبه رفته:
-    ارتفاع سازه Hs، فاصله پایه‌ها و وزن اعضا (وزن ورق و پیچ در مدل SAP نیست).
-    """
-    import steel
-    out = []
-    for g in layout.groups:
-        st = steel.structure_for(g.eq)
-        if st is None:
-            continue
-        sm = st.summary()
-        notes = []
-        if abs(sm["height"] - g.eq.Hs) > 0.01:
-            notes.append(f"ارتفاع سازه در مدل SAP {sm['height']:.2f} m است ولی در محاسبه "
-                         f"Hs = {g.eq.Hs:.2f} m")
-        if g.positions and len(g.positions) > 1 and sm["legs"] > 1:
-            xs = sorted(g.positions)
-            sp = ((xs[-1][0] - xs[0][0]) ** 2 + (xs[-1][1] - xs[0][1]) ** 2) ** 0.5 / (len(xs) - 1)
-            if abs(sp - sm["leg_spacing"]) > 0.02:
-                notes.append(f"فاصله پایه‌های سازه {sm['leg_spacing']:.2f} m با فاصله ستون‌ها "
-                             f"{sp:.2f} m نمی‌خواند")
-        per_eq = g.eq.Ws if sm["legs"] > 1 or g.n == 1 else g.eq.Ws / g.n
-        out.append({"tag": g.eq.tag, "file": st.name + ".s2k", "height": sm["height"],
-                    "member_weight": sm["member_weight"], "Ws": per_eq,
-                    "legs": sm["legs"], "leg_spacing": sm["leg_spacing"],
-                    "members": sm["members"], "sections": sm["sections"], "notes": notes})
-    return out
-
-
 def to_dict(res, seis, des, qty, bbs, eq, cfg):
     """خروجی قابل ذخیره در دیتابیس و قابل مصرف در رابط کاربری."""
     g = res.geometry
@@ -208,7 +178,6 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
                     "tension": x["anchor"].tension}
                    for i, (x, (_, u)) in enumerate(zip(des.get("groups", []), res.group_forces))],
         "bbs": bbs,
-        "structures": structure_checks(res.layout),
         "model": model.to_dict(fm),
         "clashes": clashes,
         "options": {"governing": str(cfg.design.governing), "bearing": cfg.design.bearing},
