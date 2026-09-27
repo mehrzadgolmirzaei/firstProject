@@ -69,6 +69,22 @@ class Rebar:
 
 
 @dataclass
+class Anchorage:
+    """
+    میل مهار و اتصال پای سازه. مقادیر پیش‌فرض از دیتیل استاندارد دفتر
+    (08-CT: گروت ۵۰، بیرون‌زدگی کل ۱۵۰ از روی بتن) و یادداشت ۱۰ نقشه.
+    طول مدفون ورودی نیست؛ در design/anchor.py محاسبه می‌شود.
+    """
+    fy: float = 4000.0             # تنش تسلیم میلگرد میل مهار (kg/cm²)
+    fu: float = 6000.0             # مقاومت کششی نهایی (kg/cm²)
+    grout: float = 50.0            # ضخامت گروت زیر صفحه کف (mm)
+    projection: float = 150.0      # بیرون‌زدگی میل مهار از روی بتن (mm)
+    plate_thickness: float = 20.0  # ضخامت صفحه کف (mm) — برای ترسیم
+    hook: float = 4.0              # طول قلاب انتهایی بر حسب قطر (×d)
+    rounding: float = 50.0         # گرد کردن طول مدفون به بالا (mm)
+
+
+@dataclass
 class Foundation:
     hp: float = 1.00               # ارتفاع ستون (m)
     b: float = 0.80                # ضلع ستون (m)
@@ -76,6 +92,7 @@ class Foundation:
     search_min: float = 1.0        # بازه جست‌وجوی ابعاد پی
     search_max: float = 5.0
     search_step: float = 0.10
+    min_projection: float = 0.10   # حداقل بیرون‌زدگی پی از بر ستون (m)
 
 
 @dataclass
@@ -137,6 +154,7 @@ class ProjectConfig:
     wind: Wind = field(default_factory=Wind)
     rebar: Rebar = field(default_factory=Rebar)
     foundation: Foundation = field(default_factory=Foundation)
+    anchorage: Anchorage = field(default_factory=Anchorage)
     design: DesignOptions = field(default_factory=DesignOptions)
     title_block: TitleBlock = field(default_factory=TitleBlock)
     drawing: DrawingSetup = field(default_factory=DrawingSetup)
@@ -158,6 +176,7 @@ class ProjectConfig:
     def _from_dict(cls, raw: dict):
         sub = {"materials": Materials, "soil": SoilData, "seismic": SeismicData,
                "wind": Wind, "rebar": Rebar, "foundation": Foundation, "design": DesignOptions,
+               "anchorage": Anchorage,
                "title_block": TitleBlock, "drawing": DrawingSetup}
         kwargs = {}
         for key, value in raw.items():

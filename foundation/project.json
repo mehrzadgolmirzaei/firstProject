@@ -50,7 +50,17 @@
     "tf": 0.4,
     "search_min": 1.0,
     "search_max": 5.0,
-    "search_step": 0.1
+    "search_step": 0.1,
+    "min_projection": 0.1
+  },
+  "anchorage": {
+    "fy": 4000.0,
+    "fu": 6000.0,
+    "grout": 50.0,
+    "projection": 150.0,
+    "plate_thickness": 20.0,
+    "hook": 4.0,
+    "rounding": 50.0
   },
   "design": {
     "governing": "notebook",

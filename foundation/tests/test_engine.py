@@ -96,3 +96,32 @@ def test_bearing_envelope_takes_worse_of_nmin_nmax():
     hi = _run_opt("CB", "notebook", "max").checks[1].value
     both = _run_opt("CB", "notebook", "envelope").checks[1].value
     assert both == pytest.approx(max(lo, hi))
+
+
+# ------------------------------------------------------------ میل مهار و دو ستون
+def test_anchor_embed_is_computed_not_input():
+    """طول مدفون از طول مهاری آرماتور ستون Ф18 (۶۷۹ mm) ← ۷۰۰؛ همان دیتیل دفتر برای CT."""
+    cfg = ProjectConfig()
+    res, seis, des, *_ = run(CATALOG["CT"], cfg)
+    a = des["anchor"]
+    assert a.embed == 700 and a.ok
+    assert a.tension > 0
+
+
+def test_anchor_embed_flags_insufficient_depth():
+    cfg = ProjectConfig()
+    cfg.foundation.hp, cfg.foundation.tf = 0.3, 0.3
+    res, seis, des, *_ = run(CATALOG["LA"], cfg)
+    assert not des["anchor"].ok and "عمق موجود" in des["anchor"].note
+
+
+def test_two_pedestals_fit_on_pad():
+    """فاصله محور ۱٫۷ و ستون ۰٫۶: پی دست‌کم ۱٫۷+۰٫۶+۲×۰٫۱ = ۲٫۵ و بدون تداخل."""
+    from dataclasses import replace
+    import model
+    cfg = ProjectConfig()
+    cfg.foundation.b = 0.6
+    eq = replace(CATALOG["CT"], n_pedestal=2, pedestal_spacing=1.7)
+    res, seis, des, *_ = run(eq, cfg)
+    assert res.geometry.L >= 2.5 - 1e-9
+    assert model.clashes(model.build(res, eq, des, cfg)) == []

@@ -44,9 +44,10 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
     return {
         "geometry": {"L": g.L, "B": g.B, "tf": g.tf, "hp": g.hp, "b": g.b,
                      "n_pedestal": eq.n_pedestal,
-                     "pedestal_spacing": eq.pedestal_spacing or (g.B / 2 if eq.n_pedestal > 1 else 0),
+                     "pedestal_spacing": model.pedestal_spacing(eq, g.B),
                      "anchor_n": eq.anchor_n, "anchor_dia": eq.anchor_dia,
-                     "anchor_gauge": eq.anchor_gauge, "anchor_embed": eq.anchor_embed,
+                     "anchor_gauge": eq.anchor_gauge,
+                     "anchor_embed": des["anchor"].embed if "anchor" in des else None,
                      "cover": cfg.materials.cover, "lean": cfg.materials.lean,
                      "tie_dia": cfg.rebar.tie_dia, "tie_spacing": cfg.rebar.tie_spacing},
         "seismic": {"ch": seis.ch, "cv": seis.cv, "edition": seis.edition,
@@ -65,7 +66,9 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
                     "steps": [list(s) for s in c.steps]} for c in res.checks],
         "design": {k: {"title": d.title, "ok": d.ok, "note": d.note,
                        "bars": d.bar_count, "dia": d.bar_dia, "spacing": d.spacing,
-                       "as_req": d.as_req, "steps": [list(s) for s in d.steps]}
+                       "as_req": d.as_req, "steps": [list(s) for s in d.steps],
+                       **({"embed": d.embed, "tension": d.tension, "shear": d.shear}
+                          if hasattr(d, "embed") else {})}
                    for k, d in des.items()},
         "bbs": bbs,
         "model": model.to_dict(fm),

@@ -39,51 +39,83 @@
     </div>
 
     <fieldset>
-      <legend>تجهیز</legend>
+      <legend>تجهیز — از اوت‌لاین سازنده</legend>
       <div class="row">
-        <div class="f"><label><b>He</b> ارتفاع (m)</label><input id="He" type="number" step="0.001"></div>
-        <div class="f"><label><b>he</b> مرکز ثقل (m)</label><input id="he" type="number" step="0.001"></div>
-        <div class="f"><label><b>Ae</b> سطح دید (m²)</label><input id="Ae" type="number" step="0.01"></div>
-        <div class="f"><label><b>Ce</b> ضریب درگ</label><input id="Ce" type="number" step="0.01" value="0.5"></div>
-        <div class="f"><label><b>We</b> وزن (kg)</label><input id="We" type="number" step="1"></div>
-        <div class="f"><label>تعداد ستون</label><input id="n_pedestal" type="number" step="1" value="1"></div>
+        <div class="f"><label><b>He</b> ارتفاع تجهیز (m)</label><input id="He" type="number" step="0.001">
+          <small class="hint">از پای تجهیز (روی سازه) تا بالاترین نقطه آن</small></div>
+        <div class="f"><label><b>he</b> ارتفاع مرکز ثقل (m)</label><input id="he" type="number" step="0.001">
+          <small class="hint">از پای تجهیز؛ خالی = نصف He</small></div>
+        <div class="f"><label><b>Ae</b> سطح بادگیر (m²)</label><input id="Ae" type="number" step="0.01">
+          <small class="hint">تصویر تجهیز روی صفحه عمود بر باد</small></div>
+        <div class="f"><label><b>Ce</b> ضریب درگ تجهیز</label><input id="Ce" type="number" step="0.01" value="0.5">
+          <small class="hint">مقطع استوانه‌ای ۰٫۵ تا ۰٫۷</small></div>
+        <div class="f"><label><b>We</b> وزن تجهیز (kg)</label><input id="We" type="number" step="1">
+          <small class="hint">وزن کل یک فاز، با روغن/گاز</small></div>
+        <div class="f"><label>تعداد ستون (پدستال)</label><input id="n_pedestal" type="number" step="1" value="1" min="1" max="2">
+          <small class="hint">۱ برای تجهیز تک‌پایه، ۲ برای سکسیونر و سازه دوپایه</small></div>
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>اتصال به فونداسیون</legend>
+      <legend>اتصال به فونداسیون — از نقشه سازه نگهدارنده</legend>
       <div class="row">
-        <div class="f"><label>فاصله محور ستون‌ها (m)</label>
-          <input id="pedestal_spacing" type="number" step="0.05" placeholder="خالی = B/2"></div>
-        <div class="f"><label>تعداد میل مهار</label><input id="anchor_n" type="number" step="1" value="4"></div>
-        <div class="f"><label>قطر میل مهار (mm)</label><input id="anchor_dia" type="number" step="1" value="20"></div>
-        <div class="f"><label>گِیج میل مهار (mm)</label><input id="anchor_gauge" type="number" step="10" value="450"></div>
-        <div class="f"><label>طول مدفون (mm)</label><input id="anchor_embed" type="number" step="10" value="600"></div>
-        <div class="f"><label>ضلع صفحه کف (mm)</label><input id="base_plate" type="number" step="10" value="0"></div>
+        <div class="f" id="spacingField"><label>فاصله محور تا محور ستون‌ها (m)</label>
+          <input id="pedestal_spacing" type="number" step="0.05" placeholder="برای دو ستون لازم است">
+          <small class="hint">فقط برای دو ستون. پی دست‌کم به اندازه «این فاصله + عرض ستون +
+            دو برابر حداقل بیرون‌زدگی» بزرگ می‌شود تا هر دو ستون کامل رویش بنشینند.</small></div>
+        <div class="f"><label>تعداد میل مهار در هر ستون</label><input id="anchor_n" type="number" step="1" value="4">
+          <small class="hint">الگوی مربعی؛ نیمی از آن‌ها در هر ردیف کشش می‌گیرند</small></div>
+        <div class="f"><label>قطر میل مهار (mm)</label><input id="anchor_dia" type="number" step="1" value="20">
+          <small class="hint">قطر اسمی رزوه، مثلاً ۲۰ برای M20</small></div>
+        <div class="f"><label>فاصله محور تا محور میل مهارها (mm)</label>
+          <input id="anchor_gauge" type="number" step="10" value="450">
+          <small class="hint">فاصله مرکز به مرکز دو میل مهار مجاور روی صفحه کف پای سازه،
+            در هر دو جهت (الگوی مربعی). از نقشه صفحه کف سازه نگهدارنده؛ استاندارد دفتر ۴۵۰.
+            همین فاصله بازوی زوج‌نیروی کششی میل مهارهاست.</small></div>
+        <div class="f"><label>ضلع صفحه کف (mm)</label><input id="base_plate" type="number" step="10" value="0">
+          <small class="hint">صفحه کف پای سازه؛ صفر = نامشخص (فقط در ترسیم اثر دارد)</small></div>
+        <div class="f"><label>طول مدفون میل مهار</label>
+          <input id="anchor_embed_out" type="text" readonly value="خودکار — بعد از محاسبه">
+          <small class="hint">سامانه حساب می‌کند: بیشترینِ طول مهاری آرماتور ستون، طول مهاری
+            میل مهار قلاب‌دار و ۱۲ برابر قطر؛ گرد به ۵۰ میلی‌متر. مراحل در «میل مهار» پایین صفحه.</small></div>
       </div>
-      <p class="note" style="margin:0">گِیج، فاصله مرکز تا مرکز میل مهارهاست و از اوت‌لاین سازنده می‌آید.
-        اگر فاصله ستون‌ها خالی بماند، نصف عرض پی فرض می‌شود و همین در گزارش ثبت می‌گردد.</p>
     </fieldset>
 
     <fieldset>
-      <legend>استراکچر</legend>
+      <legend>استراکچر (سازه نگهدارنده)</legend>
       <div class="row">
-        <div class="f"><label><b>Hs</b> ارتفاع (m)</label><input id="Hs" type="number" step="0.01"></div>
-        <div class="f"><label><b>Ws</b> وزن (kg)</label><input id="Ws" type="number" step="1"></div>
-        <div class="f"><label><b>As</b> سطح دید (m²)</label><input id="As" type="number" step="0.01"></div>
-        <div class="f"><label><b>Cs</b> ضریب درگ</label><input id="Cs" type="number" step="0.01" value="2.05"></div>
+        <div class="f"><label><b>Hs</b> ارتفاع سازه (m)</label><input id="Hs" type="number" step="0.01">
+          <small class="hint">از روی ستون بتنی تا پای تجهیز</small></div>
+        <div class="f"><label><b>Ws</b> وزن سازه (kg)</label><input id="Ws" type="number" step="1">
+          <small class="hint">وزن کل سازه فولادی، از جدول وزن نقشه سازه</small></div>
+        <div class="f"><label><b>As</b> سطح بادگیر سازه (m²)</label><input id="As" type="number" step="0.01">
+          <small class="hint">سطح مؤثر اعضای مشبک در برابر باد</small></div>
+        <div class="f"><label><b>Cs</b> ضریب درگ سازه</label><input id="Cs" type="number" step="0.01" value="2.05">
+          <small class="hint">سازه مشبک ۲٫۰۵ (دفترچه محاسبات سازه)</small></div>
       </div>
     </fieldset>
 
     <fieldset>
-      <legend>هادی و بار مانور</legend>
+      <legend>هادی و بارهای مانور</legend>
       <div class="row">
-        <div class="f"><label><b>Wc</b> وزن هادی (kg)</label><input id="Wc" type="number" step="1" value="50"></div>
-        <div class="f"><label><b>Fc</b> کشش عادی (kg)</label><input id="Fc" type="number" step="1"></div>
-        <div class="f"><label><b>Fc,sc</b> اتصال کوتاه</label><input id="Fc_sc" type="number" step="1"></div>
-        <div class="f"><label>نقاط اتصال (m)</label><input id="conductor_points" placeholder="خالی = He"></div>
-        <div class="f"><label>بار قائم مانور</label><input id="op_vertical" type="number" step="1" value="0"></div>
-        <div class="f"><label>بار افقی مانور</label><input id="op_horizontal" type="number" step="1" value="0"></div>
+        <div class="f"><label><b>Wc</b> وزن هادی (kg)</label><input id="Wc" type="number" step="1" value="50">
+          <small class="hint">سهم وزن هادی روی ترمینال هر فاز</small></div>
+        <div class="f"><label><b>Fc</b> کشش هادی — حالت عادی (kg)</label><input id="Fc" type="number" step="1">
+          <small class="hint">نیروی افقی هادی روی ترمینال (Terminal load) از محاسبات مکانیکال</small></div>
+        <div class="f"><label><b>Fc,sc</b> کشش هادی — اتصال کوتاه (kg)</label><input id="Fc_sc" type="number" step="1">
+          <small class="hint">در حالت اتصال کوتاه؛ خالی = همان Fc</small></div>
+        <div class="f"><label>ارتفاع نقاط اتصال هادی (m)</label><input id="conductor_points" placeholder="خالی = He">
+          <small class="hint">از پای تجهیز، با ویرگول جدا کنید؛ مثلاً ۳٫۱۱، ۵٫۱۳ برای دو ترمینال</small></div>
+        <div class="f"><label>بار قائم مانور (kg)</label><input id="op_vertical" type="number" step="1" value="0">
+          <small class="hint">نیروی قائمی که هنگام قطع و وصل (مانور) تجهیز به پای سازه وارد می‌شود —
+            از اوت‌لاین سازنده (Operating / Dynamic load). به N_max اضافه و از N_min کم می‌شود.
+            بیشتر برای کلید قدرت و سکسیونر؛ برای بقیه صفر.</small></div>
+        <div class="f"><label>بار افقی مانور (kg)</label><input id="op_horizontal" type="number" step="1" value="0">
+          <small class="hint">نیروی افقی ناشی از مانور در پای سازه — از اوت‌لاین سازنده.
+            به برش پایه V اضافه می‌شود.</small></div>
+        <div class="f"><label>لنگر مانور (kg·m)</label><input id="op_moment" type="number" step="1" value="0">
+          <small class="hint">لنگر ناشی از مانور در پای سازه، اگر سازنده جدا داده باشد.
+            به لنگر M اضافه می‌شود.</small></div>
       </div>
     </fieldset>
 
@@ -186,9 +218,9 @@
       <div class="viewer" id="viewer">
         <div class="empty">پس از محاسبه، مدل فونداسیون اینجا ساخته می‌شود</div>
         <div class="legend" id="legend" style="display:none">
-          <i style="background:#8E9AA4"></i>بتن<br>
-          <i style="background:#B4653A"></i>آرماتور<br>
-          <i style="background:#6FA8C7"></i>میل مهار
+          <i style="background:#D4D0C8"></i>بتن<br>
+          <i style="background:#7E5440"></i>آرماتور<br>
+          <i style="background:#B0B6BC"></i>میل مهار
         </div>
         <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
         <div class="readouts" id="readouts"></div>
@@ -228,7 +260,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="{{ url_for('static', filename='three.min.js') }}"></script>
 <script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
 <script>
 const BUILTIN = {{ builtin|tojson }};
@@ -273,7 +305,7 @@ $("preset").addEventListener("change", e => {
                n_pedestal:"n_pedestal", op_vertical:"op_vertical", op_horizontal:"op_horizontal"};
   for (const k in map) if ($(k) && eq[map[k]] !== undefined && eq[map[k]] !== null) $(k).value = eq[map[k]];
   $("conductor_points").value = (eq.conductor_points || []).join(", ");
-  ["anchor_n","anchor_dia","anchor_gauge","anchor_embed","base_plate","pedestal_spacing"]
+  ["anchor_n","anchor_dia","anchor_gauge","base_plate","pedestal_spacing","op_moment"]
     .forEach(k => { if (eq[k] !== undefined && eq[k] !== null) $(k).value = eq[k]; });
   // فیلدهایی که باید از اوت‌لاین بیایند خالی و علامت‌گذاری می‌شوند
   document.querySelectorAll(".needs-outline").forEach(el => {
@@ -321,7 +353,7 @@ $("form").addEventListener("submit", async ev => {
       op_vertical: num("op_vertical"), op_horizontal: num("op_horizontal"),
       n_pedestal: num("n_pedestal"),
       anchor_gauge: num("anchor_gauge"), anchor_dia: num("anchor_dia"),
-      anchor_n: num("anchor_n"), anchor_embed: num("anchor_embed"),
+      anchor_n: num("anchor_n"), op_moment: num("op_moment"),
       base_plate: num("base_plate"),
       pedestal_spacing: num("pedestal_spacing")
     },
@@ -407,10 +439,12 @@ function render(d){
   if (d.clashes && d.clashes.length) {
     $("sub").textContent += " · تداخل جزئیات: " + d.clashes.join("، ");
   }
-  const pad = d.design.pad, ped = d.design.pedestal;
+  const pad = d.design.pad, ped = d.design.pedestal, anc = d.design.anchor;
+  $("anchor_embed_out").value = anc ? `${fmt(anc.embed, 0)} mm (محاسبه‌شده)` : "—";
   $("rebar").innerHTML =
     `<div class="kv"><span>آرماتور پی</span><span>${pad.bars}Ф${pad.dia}@${fmt(pad.spacing,0)}</span></div>
      <div class="kv"><span>آرماتور ستون</span><span>${ped.bars}Ф${ped.dia}</span></div>
+     <div class="kv"><span>میل مهار</span><span>${anc.bars}M${anc.dia} · مدفون ${fmt(anc.embed,0)} mm</span></div>
      <div class="kv"><span>برش پانچ</span><span>${d.design.punching.note}</span></div>
      <div class="kv"><span>برش یک‌طرفه</span><span>${d.design.oneway.note}</span></div>`;
   const q = d.quantities;

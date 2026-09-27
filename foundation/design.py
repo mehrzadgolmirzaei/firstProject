@@ -211,7 +211,102 @@ def check_oneway(res, geo, mat, n_ped=1):
         ])
 
 
-def design_all(res, eq, mat, rebar=None):
+# سطح مقطع تنش کششی پیچ (mm²) — ISO 898-1
+TENSILE_AREA = {12: 84.3, 16: 157, 20: 245, 22: 303, 24: 353, 27: 459, 30: 561, 33: 694, 36: 817}
+KG_CM2_TO_MPA = 0.0980665
+
+
+def development_length(db, fy, fc):
+    """
+    طول مهاری میلگرد مستقیم در کشش (mm) — مبحث نهم / ACI 318 جدول 25.4.2.3،
+    با ψt = ψe = λ = 1:  l_d = fy/(2.1·√f'c)·d_b برای قطر ۱۹ و کمتر، و /1.7 برای بزرگ‌تر.
+    fy و fc بر حسب kg/cm².
+    """
+    fy_m, fc_m = fy * KG_CM2_TO_MPA, fc * KG_CM2_TO_MPA
+    k = 2.1 if db <= 19 else 1.7
+    return max(fy_m / (k * math.sqrt(fc_m)) * db, 300.0)
+
+
+def hooked_length(db, fy, fc):
+    """طول مهاری میلگرد قلاب‌دار (mm) — ACI 318 بند 25.4.3.1: l_dh = 0.24·fy/√f'c·d_b ≥ max(8d_b, 150)."""
+    fy_m, fc_m = fy * KG_CM2_TO_MPA, fc * KG_CM2_TO_MPA
+    return max(0.24 * fy_m / math.sqrt(fc_m) * db, 8 * db, 150.0)
+
+
+def design_anchor(res, eq, mat, anch, ped):
+    """
+    میل مهار پای سازه.
+
+    نیرو: لنگر پای سازه سهم هر ستون، به صورت زوج‌نیرو روی ردیف میل مهارها،
+    منهای سهم وزن (N_min) هر میل مهار:
+        T_u = M_u / (n_ped · g · n_row) − N_u,min / (n_ped · n)
+
+    طول مدفون (خودکار) — بیشترینِ:
+      ۱) طول مهاری میلگرد طولی ستون (l_d). مخروط شکست بتن زیر میل مهار باید
+         آرماتور ستون را قطع کند و آرماتور دو طرف آن گیرایی داشته باشد؛ پس
+         میل مهار دست‌کم به اندازه l_d آرماتور ستون در بتن می‌رود.
+      ۲) طول مهاری خود میل مهار قلاب‌دار (l_dh).
+      ۳) حداقل ۱۲ برابر قطر میل مهار.
+    به بالا گرد می‌شود و نباید از عمق موجود (ستون + پی − پوشش − شبکه پی) بیشتر شود.
+    """
+    geo, u = res.geometry, res.ultimate
+    n_ped, n = eq.n_pedestal, max(eq.anchor_n, 1)
+    d, g = eq.anchor_dia, eq.anchor_gauge
+    rows = max(1, n // 2)
+    m_ped = u.M / n_ped                                    # kg·m
+    n_min = u.Nmin / n_ped                                 # kg
+    t_u = max(0.0, m_ped * 1000 / (g * rows) - n_min / n) if g else 0.0
+    v_u = u.V / n_ped / n
+
+    a_se = TENSILE_AREA.get(int(d), 0.78 * math.pi * d * d / 4)      # mm²
+    phi_nsa = 0.75 * a_se / 100 * anch.fu                           # kg
+    phi_vsa = 0.65 * 0.6 * a_se / 100 * anch.fu * 0.8               # kg، با ضریب ۰٫۸ گروت
+    inter = t_u / phi_nsa + v_u / phi_vsa if phi_nsa and phi_vsa else 0.0
+    steel_ok = t_u <= phi_nsa and v_u <= phi_vsa and inter <= 1.2
+
+    ld_ped = development_length(ped.bar_dia, mat.fy, mat.fc)
+    ldh = hooked_length(d, anch.fy, mat.fc)
+    l_min = 12 * d
+    required = max(ld_ped, ldh, l_min)
+    embed = math.ceil(required / anch.rounding) * anch.rounding
+    pad_bar = 14
+    available = (geo.hp + geo.tf) * 1000 - mat.cover - 2 * pad_bar
+    ok = steel_ok and embed <= available
+    governs = {ld_ped: "طول مهاری آرماتور ستون", ldh: "طول مهاری میل مهار قلاب‌دار",
+               l_min: "حداقل ۱۲d"}[required]
+    note = ""
+    if embed > available:
+        note = (f"طول مدفون لازم {embed:.0f} mm از عمق موجود {available:.0f} mm بیشتر است — "
+                "h_p یا t_f را زیاد کنید")
+    elif not steel_ok:
+        note = "مقطع میل مهار برای کشش/برش کافی نیست — قطر یا تعداد را زیاد کنید"
+
+    sd = SectionDesign(
+        "میل مهار", 0, 0, 0, 0, 0, 0, 0, int(d), bar_count=n, ok=ok, note=note,
+        steps=[
+            ("نیروی کششی هر میل مهار",
+             "T_u = M_u/(n_ped·g·n_row) − N_u,min/(n_ped·n)",
+             f"{u.M:.0f}/({n_ped}×{g/1000:.3f}×{rows}) − {u.Nmin:.0f}/({n_ped}×{n}) = {t_u:.0f} kg"),
+            ("برش هر میل مهار", "V_u = V/(n_ped·n)", f"{v_u:.0f} kg"),
+            ("مقاومت کششی فولاد", "φN_sa = 0.75·A_se·f_u",
+             f"0.75×{a_se:.0f} mm²×{anch.fu:.0f} = {phi_nsa:.0f} kg"),
+            ("مقاومت برشی فولاد", "φV_sa = 0.65·0.6·A_se·f_u·0.8 (گروت)", f"{phi_vsa:.0f} kg"),
+            ("اندرکنش", "T/φN + V/φV ≤ 1.2", f"{inter:.2f}"),
+            ("۱) مهاری آرماتور ستون", f"l_d = fy/(2.1√f'c)·d_b  (Ф{ped.bar_dia})",
+             f"{ld_ped:.0f} mm"),
+            ("۲) مهاری میل مهار قلاب‌دار", "l_dh = 0.24·fy/√f'c·d_b ≥ max(8d, 150)",
+             f"{ldh:.0f} mm"),
+            ("۳) حداقل", "12·d", f"{l_min:.0f} mm"),
+            ("طول مدفون", f"max(۱، ۲، ۳) ← {governs}، گرد به {anch.rounding:.0f}",
+             f"{embed:.0f} mm  (عمق موجود {available:.0f} mm)"),
+        ])
+    sd.embed = embed
+    sd.tension = t_u
+    sd.shear = v_u
+    return sd
+
+
+def design_all(res, eq, mat, rebar=None, anchorage=None):
     geo = res.geometry
     n = eq.n_pedestal
     col_dia = rebar.col_dia if rebar else 18
@@ -222,4 +317,8 @@ def design_all(res, eq, mat, rebar=None):
     pad = design_pad(res, geo, mat, n, bar_dia=pad_dia)
     punch = check_punching(res, geo, mat, n)
     oneway = check_oneway(res, geo, mat, n)
-    return {"pedestal": ped, "pad": pad, "punching": punch, "oneway": oneway}
+    if anchorage is None:
+        from config import Anchorage
+        anchorage = Anchorage()
+    anchor = design_anchor(res, eq, mat, anchorage, ped)
+    return {"pedestal": ped, "pad": pad, "punching": punch, "oneway": oneway, "anchor": anchor}

@@ -53,7 +53,7 @@ def report(res, eq, soil, seis, qty, bbs, des, cfg):
             o.append(f"- {lab}: `{formula}` → {subst}")
         o += [f"- **نتیجه: {ck.value:.2f} {ck.direction} {ck.limit:.2f} {ck.unit}**", ""]
     o.append("## طراحی مقطع")
-    for key in ("pedestal", "pad", "punching", "oneway"):
+    for key in ("pedestal", "pad", "punching", "oneway", "anchor"):
         d = des[key]
         o.append(f"### {d.title} — {'قبول' if d.ok else 'مردود'}")
         for lab, formula, subst in d.steps:
@@ -150,6 +150,9 @@ def main():
     pad, ped = des["pad"], des["pedestal"]
     print(f"   آرماتور پی   {pad.bar_count}Ф{pad.bar_dia}@{pad.spacing:.0f}")
     print(f"   آرماتور ستون {ped.bar_count}Ф{ped.bar_dia}")
+    anc = des["anchor"]
+    print(f"   میل مهار     {anc.bar_count}M{anc.bar_dia} ، طول مدفون {anc.embed:.0f} mm "
+          f"(کشش {anc.tension:.0f} kg) {'' if anc.ok else '⚠ ' + anc.note}")
     for key in ("punching", "oneway"):
         print(f"   {des[key].title:24} {des[key].note}")
     print(f"   بتن {qty['concrete']:.2f} m3 | مگر {qty['lean']:.3f} m3 | "

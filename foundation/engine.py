@@ -318,10 +318,23 @@ def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
     return r
 
 
+def pedestal_fit(eq: Equipment, b: float, min_projection: float) -> float:
+    """کوچک‌ترین ضلع پی که ستون‌ها با فاصله داده‌شده کامل رویش بنشینند (m)."""
+    if eq.n_pedestal <= 1:
+        return b + 2 * min_projection
+    return eq.pedestal_spacing + b + 2 * min_projection
+
+
 def find_dimensions(eq: Equipment, soil: SoilAndMaterials, wind: WindParams,
                     ch: float, cv: float, hp=1.0, b=0.8, tf=0.4,
-                    lo=1.0, hi=5.0, step=0.1, governing="notebook", bearing="min"):
-    """کوچک‌ترین پی مربعی که هر چهار کنترل را پاس کند."""
+                    lo=1.0, hi=5.0, step=0.1, governing="notebook", bearing="min",
+                    min_projection=0.10):
+    """
+    کوچک‌ترین پی مربعی که هر چهار کنترل را پاس کند و ستون‌ها را کامل در خود
+    جا دهد: ضلع ≥ فاصله محور ستون‌ها + عرض ستون + ۲ × حداقل بیرون‌زدگی.
+    """
+    if eq.n_pedestal > 1 and eq.pedestal_spacing:
+        lo = max(lo, pedestal_fit(eq, b, min_projection))
     i = 0
     while True:
         side = round(lo + i * step, 2)

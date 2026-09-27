@@ -152,7 +152,7 @@ def config_from_form(form) -> ProjectConfig:
     for group, keys in (("materials", ("fc", "fy", "cover", "lean")),
                         ("soil", ("q_base", "q_factor")),
                         ("wind", ("v_normal", "v_high")),
-                        ("foundation", ("hp", "b", "tf")),
+                        ("foundation", ("hp", "b", "tf", "min_projection")),
                         ("rebar", ("pad_dia", "col_dia", "tie_dia", "tie_spacing"))):
         target = getattr(cfg, group)
         for key in keys:
@@ -195,6 +195,19 @@ def api_calculate():
         eq = build_equipment(form.get("equipment") or {})
     except (TypeError, ValueError) as exc:
         return jsonify({"error": f"ورودی نامعتبر است: {exc}"}), 400
+
+    # دو ستون: فاصله محور ستون‌ها باید معلوم باشد و ستون‌ها روی هم نیفتند
+    if eq.n_pedestal not in (1, 2):
+        return jsonify({"error": "تعداد ستون باید ۱ یا ۲ باشد."}), 400
+    if eq.n_pedestal == 2:
+        b = cfg.foundation.b
+        if not eq.pedestal_spacing:
+            return jsonify({"error": "برای دو ستون، «فاصله محور تا محور ستون‌ها» را از نقشه "
+                                     "سازه وارد کنید."}), 400
+        if eq.pedestal_spacing < b + 0.10:
+            return jsonify({"error": f"فاصله محور ستون‌ها ({eq.pedestal_spacing:.2f} m) باید "
+                                     f"دست‌کم عرض ستون + ۱۰ سانت ({b + 0.10:.2f} m) باشد، "
+                                     "وگرنه دو ستون روی هم می‌افتند."}), 400
 
     # تجهیزاتی که سازه‌شان را سازنده می‌دهد: تا اعداد اوت‌لاین وارد نشود،
     # محاسبه اجرا نمی‌شود تا کسی سهواً با عدد نمونه نقشه نگیرد.

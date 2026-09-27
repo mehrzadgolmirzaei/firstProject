@@ -198,3 +198,7 @@ table.compare tr.on td{background:#EEF3F6;font-weight:600}
 table.compare:empty{display:none}
 table.compare td.num{white-space:nowrap}
 small.case{color:var(--ink-2);font-weight:400;font-size:11px}
+
+/* ------------------------------------------------------------ توضیح زیر فیلدها */
+.f small.hint{display:block;margin-top:3px;font-size:11px;line-height:1.6;color:var(--ink-2)}
+.f input[readonly]{background:var(--rule-soft);color:var(--steel);font-weight:600}

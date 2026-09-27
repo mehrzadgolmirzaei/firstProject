@@ -63,14 +63,15 @@ def run(equipment: Equipment, cfg: ProjectConfig):
         return find_dimensions(equipment, soil, wind, seis.ch, seis.cv,
                                hp=f.hp, b=f.b, tf=f.tf,
                                lo=f.search_min, hi=f.search_max, step=f.search_step,
-                               governing=governing, bearing=bearing)
+                               governing=governing, bearing=bearing,
+                               min_projection=f.min_projection)
 
     res = search(opt.governing, opt.bearing)
     if res is not None:
         res.comparison = compare(search, opt)
     if res is None:
         return None, seis, None, None, None
-    des = design_all(res, equipment, soil, cfg.rebar)
+    des = design_all(res, equipment, soil, cfg.rebar, cfg.anchorage)
     qty = quantities(res, equipment, soil)
     bbs = bar_schedule(model.build(res, equipment, des, cfg))
     qty["rebar"] = sum(r["weight"] for r in bbs)

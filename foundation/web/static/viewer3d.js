@@ -7,14 +7,17 @@
 (function (global) {
   "use strict";
 
+  // همان پالت ملایم فایل سه‌بعدی اتوکد (model3d.py)
   const C = {
-    lean:   0x2A3742,
-    pad:    0x8E9AA4,
-    pedestal: 0xA9B4BC,
-    rebar:  0xB4653A,   // مسی — آرماتور
-    tie:    0xC98457,
-    anchor: 0x6FA8C7,   // فولادی روشن — میل مهار
-    ground: 0x1B2630,
+    lean:   0x807C74,
+    pad:    0xD4D0C8,
+    pedestal: 0xD4D0C8,
+    rebar:  0x7E5440,   // قهوه‌ای زنگ‌زده مات
+    tie:    0x96705A,
+    anchor: 0xB0B6BC,   // فولاد گالوانیزه
+    plate:  0x969EA6,
+    grout:  0xC6BEAC,
+    ground: 0x2A333B,
   };
 
   function Viewer(container) {
@@ -23,8 +26,8 @@
     if (!this.ready) return;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x151E27);
-    this.scene.fog = new THREE.Fog(0x151E27, 9, 22);
+    this.scene.background = new THREE.Color(0x1F272F);
+    this.scene.fog = new THREE.Fog(0x1F272F, 10, 26);
 
     this.camera = new THREE.PerspectiveCamera(38, 4 / 3, 0.1, 200);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -130,8 +133,8 @@
   function segment(a, b, dia, color) {
     const dir = new THREE.Vector3().subVectors(b, a);
     const len = dir.length();
-    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.6 });
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(dia / 2, dia / 2, len, 8), m);
+    const m = new THREE.MeshStandardMaterial({ color, roughness: 0.65, metalness: 0.2 });
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(dia / 2, dia / 2, len, 12), m);
     mesh.position.copy(a).add(b).multiplyScalar(0.5);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
     return mesh;
@@ -184,6 +187,18 @@
       for (let i = 0; i + 1 < pts.length; i++) {
         this.group.add(segment(pts[i], pts[i + 1], bar.dia * k, color));
       }
+    });
+    // گروت و صفحه کف روی هر ستون
+    m.pedestals.forEach((p) => {
+      const side = Math.min((m.base_plate || 0) || 600, p.size - 50) * k;
+      const gr = (m.grout || 50) * k, pt = (m.plate_t || 20) * k;
+      const g = box(side + 0.05, gr, side + 0.05, C.grout);
+      g.position.set(p.x * k, top + gr / 2, -p.y * k);
+      this.group.add(g);
+      const pl = box(side, pt, side, C.plate);
+      pl.material.metalness = 0.3;
+      pl.position.set(p.x * k, top + gr + pt / 2, -p.y * k);
+      this.group.add(pl);
     });
     m.anchors.forEach((a) => {
       this.group.add(segment(P([a.x, a.y, a.z_bottom]), P([a.x, a.y, a.z_top]),

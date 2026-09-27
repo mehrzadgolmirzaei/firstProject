@@ -105,7 +105,7 @@
       <div class="kv"><span>ستون</span><span>{{ r.geometry.n_pedestal }} × {{ '%.2f'|format(r.geometry.b) }} m ، h={{ '%.2f'|format(r.geometry.hp) }}</span></div>
       <div class="kv"><span>آرماتور پی</span><span>{{ r.design.pad.bars }}Ф{{ r.design.pad.dia }}@{{ r.design.pad.spacing|round|int }}</span></div>
       <div class="kv"><span>آرماتور ستون</span><span>{{ r.design.pedestal.bars }}Ф{{ r.design.pedestal.dia }}</span></div>
-      <div class="kv"><span>میل مهار</span><span>{{ r.geometry.anchor_n }}M{{ r.geometry.anchor_dia }} @ {{ r.geometry.anchor_gauge|round|int }}</span></div>
+      <div class="kv"><span>میل مهار</span><span>{{ r.geometry.anchor_n }}M{{ r.geometry.anchor_dia }} ، فاصله {{ r.geometry.anchor_gauge|round|int }}{% if r.geometry.anchor_embed %} ، مدفون {{ r.geometry.anchor_embed|round|int }}{% endif %}</span></div>
       {% if r.options %}
       <div class="kv"><span>حالت بار حاکم</span><span class="txt">{{ options.governing[r.options.governing] }}</span></div>
       <div class="kv"><span>تنش خاک</span><span class="txt">{{ options.bearing[r.options.bearing] }}</span></div>
@@ -168,7 +168,7 @@
 
 <section>
   <h2>طراحی مقطع</h2>
-  {% for key in ['pedestal','pad','punching','oneway'] %}
+  {% for key in ['pedestal','pad','punching','oneway','anchor'] if key in r.design %}
   {% set dz = r.design[key] %}
   <div class="chk">
     <div class="top"><b>{{ dz.title }}</b>

@@ -60,6 +60,12 @@ class FoundationModel:
     anchors: list = field(default_factory=list)
     bars: list = field(default_factory=list)
     pad_spacing: float = 0.0
+    grout: float = 50.0                                 # ضخامت گروت (mm)
+    plate_t: float = 20.0                               # ضخامت صفحه کف (mm)
+    anchor_embed: float = 0.0                           # طول مدفون محاسبه‌شده (mm)
+    anchor_projection: float = 150.0                    # بیرون‌زدگی از روی بتن (mm)
+    anchor_hook: float = 4.0                            # طول قلاب انتهایی (×d)
+    base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
 
     @property
     def top(self):
@@ -80,6 +86,16 @@ def _grid(length, cover, spacing):
         out.append(v)
         v += spacing
     return out
+
+
+def pedestal_spacing(eq, B):
+    """
+    فاصله محور تا محور ستون‌ها (m). برای تجهیز دوستونه باید از نقشه سازه وارد
+    شود؛ اگر نشده (فقط کاتالوگ قدیمی خط فرمان)، نصف عرض پی فرض می‌شود.
+    """
+    if eq.n_pedestal <= 1:
+        return 0.0
+    return eq.pedestal_spacing or B / 2
 
 
 def pedestal_bar_positions(core, count):
@@ -107,7 +123,7 @@ def build(res, eq, des, cfg) -> FoundationModel:
 
     # --- ستون‌ها
     n = eq.n_pedestal
-    sp = eq.pedestal_spacing * 1000 or (B / 2 if n > 1 else 0)
+    sp = pedestal_spacing(eq, g.B) * 1000
     xs = [0.0] if n == 1 else [-sp / 2, sp / 2]
     fm.pedestals = [Pedestal(x, 0.0, b) for x in xs]
 
@@ -163,13 +179,18 @@ def build(res, eq, des, cfg) -> FoundationModel:
         fm.bars.append(Bar("04", r.standee_dia, [(x, -100, z_bot + d), (x, -100, z_top - d),
                                                  (x, 100, z_top - d), (x, 100, z_bot + d)]))
 
-    # --- میل مهار
+    # --- میل مهار: طول مدفون از طراحی (design.design_anchor)، نه ورودی
+    an = cfg.anchorage
+    fm.grout, fm.plate_t, fm.anchor_projection = an.grout, an.plate_thickness, an.projection
+    fm.anchor_hook = an.hook
+    fm.base_plate = float(eq.base_plate or 0)
+    fm.anchor_embed = des["anchor"].embed if "anchor" in des else 600.0
     gge = eq.anchor_gauge
     for p in fm.pedestals:
         for sx in (-1, 1):
             for sy in (-1, 1):
                 fm.anchors.append(Anchor(p.x + sx * gge / 2, p.y + sy * gge / 2, eq.anchor_dia,
-                                         fm.top - eq.anchor_embed, fm.top + 200))
+                                         fm.top - fm.anchor_embed, fm.top + an.projection))
     return fm
 
 
@@ -189,17 +210,20 @@ def clashes(fm: FoundationModel) -> list:
         return any(abs(x - p.x) <= p.size / 2 - margin and abs(y - p.y) <= p.size / 2 - margin
                    and fm.tf - margin <= z <= fm.top - margin for p in fm.pedestals)
 
+    names = {"01": "شبکه زیرین پی", "02": "میلگرد طولی ستون", "03": "شبکه رویی پی",
+             "04": "خرک", "05": "خاموت ستون"}
+    bad = {}
     for bar in fm.bars:
         r = bar.dia / 2
-        for x, y, z in bar.points:
-            if not inside(x, y, z, fm.cover * 0.5 - r - tol):
-                out.append(f"میلگرد {bar.mark} (Ф{bar.dia:.0f}) در ({x:.0f}, {y:.0f}, {z:.0f}) "
-                           f"از بتن بیرون زده یا پوشش ندارد")
-                break
-    for a in fm.anchors:
-        if not any(abs(a.x - p.x) <= p.size / 2 - a.dia and abs(a.y - p.y) <= p.size / 2 - a.dia
-                   for p in fm.pedestals):
-            out.append(f"میل مهار ({a.x:.0f}, {a.y:.0f}) بیرون از ستون است")
+        if any(not inside(x, y, z, fm.cover * 0.5 - r - tol) for x, y, z in bar.points):
+            bad[bar.mark] = bad.get(bar.mark, 0) + 1
+    for mark, count in bad.items():
+        out.append(f"{count} عدد {names.get(mark, mark)} ({mark}) از بتن بیرون زده یا پوشش ندارد")
+    outside = sum(1 for a in fm.anchors
+                  if not any(abs(a.x - p.x) <= p.size / 2 - a.dia
+                             and abs(a.y - p.y) <= p.size / 2 - a.dia for p in fm.pedestals))
+    if outside:
+        out.append(f"{outside} میل مهار بیرون از ستون است — فاصله محور میل مهارها از عرض ستون بیشتر است")
     for i, p in enumerate(fm.pedestals):
         if abs(p.x) + p.size / 2 > fm.L / 2 + tol or abs(p.y) + p.size / 2 > fm.B / 2 + tol:
             out.append(f"ستون {i + 1} از پی بیرون زده")

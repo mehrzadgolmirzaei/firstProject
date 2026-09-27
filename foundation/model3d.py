@@ -18,18 +18,21 @@ from ezdxf.acis import api as acis
 from ezdxf.render import forms
 
 # نام لایه → (رنگ RGB، شفافیت ۰ تا ۱)
+# پالت ملایم و واقعی: بتن خاکستری گرم، آرماتور قهوه‌ای زنگ‌زده مات،
+# میل مهار و صفحه فولاد گالوانیزه، گروت بژ. رنگ‌های اشباع‌شده عمداً نیست.
 LAYERS = {
-    "F-LEAN": ((96, 100, 104), 0.0),
-    "F-CONCRETE": ((176, 182, 188), 0.55),
-    "F-REBAR-01": ((190, 96, 50), 0.0),     # شبکه زیرین
-    "F-REBAR-02": ((214, 120, 60), 0.0),    # میلگرد طولی ستون
-    "F-REBAR-03": ((168, 80, 40), 0.0),     # شبکه رویی
-    "F-REBAR-04": ((150, 110, 70), 0.0),    # خرک
-    "F-REBAR-05": ((230, 150, 90), 0.0),    # خاموت
-    "F-ANCHOR": ((110, 168, 200), 0.0),
-    "F-GROUT": ((140, 140, 130), 0.3),
+    "F-LEAN": ((128, 124, 116), 0.0),
+    "F-CONCRETE": ((212, 208, 200), 0.60),
+    "F-REBAR-01": ((126, 84, 64), 0.0),     # شبکه زیرین
+    "F-REBAR-02": ((112, 74, 56), 0.0),     # میلگرد طولی ستون
+    "F-REBAR-03": ((138, 94, 72), 0.0),     # شبکه رویی
+    "F-REBAR-04": ((120, 98, 80), 0.0),     # خرک
+    "F-REBAR-05": ((150, 112, 90), 0.0),    # خاموت
+    "F-ANCHOR": ((176, 182, 188), 0.0),     # میل مهار، مهره، واشر
+    "F-PLATE": ((150, 158, 166), 0.0),      # صفحه کف
+    "F-GROUT": ((198, 190, 172), 0.25),
 }
-SIDES = 12          # تعداد وجه منشور جایگزین مقطع دایره‌ای میلگرد
+SIDES = 16          # تعداد وجه منشور جایگزین مقطع دایره‌ای میلگرد
 
 
 class Foundation3D:
@@ -93,30 +96,35 @@ class Foundation3D:
         return self
 
     def _anchorage(self):
-        """میل مهار با قلاب انتهایی، گروت، صفحه کف و دو مهره."""
+        """
+        مطابق دیتیل استاندارد دفتر: گروت زیر صفحه کف، صفحه کف، واشر و دو مهره،
+        میل مهار با قلاب انتهایی رو به داخل ستون. ابعاد از مدل مرکزی.
+        """
         fm, eq = self.fm, self.eq
-        grout, plate_t = 30.0, 20.0
+        grout, plate_t = fm.grout, fm.plate_t
         for p in fm.pedestals:
             mine = [a for a in fm.anchors if abs(a.x - p.x) <= p.size / 2]
             if not mine:
                 continue
-            gge = eq.anchor_gauge
-            side = eq.base_plate or gge + 150
+            side = eq.base_plate or eq.anchor_gauge + 150
+            side = min(side, p.size - 50)
             z = fm.top
-            self.box(p.x - side / 2 - 25, p.y - side / 2 - 25, z,
-                     p.x + side / 2 + 25, p.y + side / 2 + 25, z + grout, "F-GROUT")
+            g = side / 2 + 25
+            self.box(p.x - g, p.y - g, z, p.x + g, p.y + g, z + grout, "F-GROUT")
             self.box(p.x - side / 2, p.y - side / 2, z + grout,
-                     p.x + side / 2, p.y + side / 2, z + grout + plate_t, "F-ANCHOR")
+                     p.x + side / 2, p.y + side / 2, z + grout + plate_t, "F-PLATE")
             for a in mine:
                 d = a.dia
                 self.rod((a.x, a.y, a.z_bottom), (a.x, a.y, a.z_top), d, "F-ANCHOR")
                 hx = 1 if a.x < p.x else -1                   # قلاب رو به داخل ستون
-                self.rod((a.x - hx * d / 2, a.y, a.z_bottom), (a.x + hx * 4 * d, a.y, a.z_bottom),
-                         d, "F-ANCHOR")
+                self.rod((a.x - hx * d / 2, a.y, a.z_bottom),
+                         (a.x + hx * fm.anchor_hook * d, a.y, a.z_bottom), d, "F-ANCHOR")
                 zn = z + grout + plate_t
+                self.rod((a.x, a.y, zn), (a.x, a.y, zn + 4), 2.2 * d, "F-ANCHOR", sides=24)
                 for k in range(2):
-                    self.rod((a.x, a.y, zn + k * 0.9 * d), (a.x, a.y, zn + k * 0.9 * d + 0.8 * d),
-                             1.9 * d, "F-ANCHOR", sides=6)
+                    z0 = zn + 4 + k * 0.85 * d
+                    self.rod((a.x, a.y, z0), (a.x, a.y, z0 + 0.8 * d), 1.7 * d, "F-ANCHOR",
+                             sides=6)
 
     def _view(self):
         """نمای ایزومتریک با سایه‌زنی، تا فایل از همان اول سه‌بعدی باز شود."""

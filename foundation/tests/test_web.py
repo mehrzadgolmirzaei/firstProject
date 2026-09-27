@@ -157,3 +157,20 @@ def test_print_report_shows_only_chosen_method(client):
     for w in ("پیشنهاد", "مقایسه"):
         m = re.search(w, html)
         assert m is None, html[max(0, m.start() - 200):m.end() + 50]
+
+
+def test_two_pedestals_need_valid_spacing(client):
+    from equipment import CATALOG
+    eq = asdict(CATALOG["CT"])
+    eq.update(n_pedestal=2, pedestal_spacing=None)
+    h = {"X-CSRF-Token": client.csrf}
+    r = client.post("/api/calculate", json={"equipment": eq}, headers=h)
+    assert r.status_code == 400 and "فاصله محور" in r.get_json()["error"]
+    eq.update(pedestal_spacing=0.5)
+    r = client.post("/api/calculate", json={"equipment": eq, "foundation.b": 0.6}, headers=h)
+    assert r.status_code == 400 and "روی هم" in r.get_json()["error"]
+    eq.update(pedestal_spacing=1.7)
+    d = client.post("/api/calculate", json={"equipment": eq, "foundation.b": 0.6},
+                    headers=h).get_json()
+    assert d["geometry"]["L"] >= 2.5 - 1e-9 and d["clashes"] == []
+    assert d["design"]["anchor"]["embed"] == 700
