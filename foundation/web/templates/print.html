@@ -102,7 +102,11 @@
         {{ 'همه کنترل‌ها قبول' if calc.status=='ok' else 'نیازمند بازبینی' }}</div>
     </div>
     <div>
+      {% if r.geometry.layout %}<div class="kv"><span>چیدمان</span><span>{{ r.geometry.layout }}</span></div>{% endif %}
       <div class="kv"><span>ستون</span><span>{{ r.geometry.n_pedestal }} × {{ '%.2f'|format(r.geometry.b) }} m ، h={{ '%.2f'|format(r.geometry.hp) }}</span></div>
+      {% for g in r.groups if r.groups|length > 1 %}
+      <div class="kv"><span>{{ g.tag }} (npol={{ g.npol }})</span><span>{{ g.n }} ستون {{ g.pedestal }}Ф{{ g.pedestal_dia }} · میل مهار مدفون {{ g.embed|round|int }} mm · حالت {{ g.case }}</span></div>
+      {% endfor %}
       <div class="kv"><span>آرماتور پی</span><span>{{ r.design.pad.bars }}Ф{{ r.design.pad.dia }}@{{ r.design.pad.spacing|round|int }}</span></div>
       <div class="kv"><span>آرماتور ستون</span><span>{{ r.design.pedestal.bars }}Ф{{ r.design.pedestal.dia }}</span></div>
       <div class="kv"><span>میل مهار</span><span>{{ r.geometry.anchor_n }}M{{ r.geometry.anchor_dia }} ، فاصله {{ r.geometry.anchor_gauge|round|int }}{% if r.geometry.anchor_embed %} ، مدفون {{ r.geometry.anchor_embed|round|int }}{% endif %}</span></div>

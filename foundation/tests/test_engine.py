@@ -51,7 +51,10 @@ def test_quantities_match_drawing_06_4LA_C():
 
 
 def test_pad_rebar_matches_drawing():
+    """نقشه کامی‌آباد ۱۰Ф۱۴@۲۰۰ دارد (فاصله واقعی ۲۰۴)؛ با قاعده floor همان درمی‌آید.
+    قاعده پیش‌فرض ceil (دفترچه ۶۳) ۱۱ عدد می‌دهد تا فاصله از ۲۰۰ بیشتر نشود."""
     cfg, soil, _, res = _run("LA", 4)
+    cfg.rebar.pad_count_rule = "floor"
     des = design_all(res, CATALOG["LA"], soil, cfg.rebar)
     pad = des["pad"]
     assert (pad.bar_count, pad.bar_dia, pad.spacing) == (10, 14, 200)
@@ -125,3 +128,10 @@ def test_two_pedestals_fit_on_pad():
     res, seis, des, *_ = run(eq, cfg)
     assert res.geometry.L >= 2.5 - 1e-9
     assert model.clashes(model.build(res, eq, des, cfg)) == []
+
+
+def test_pedestal_min_ratio_explains_kami_abad_16_bars():
+    """ستون ۸۰ سانتی با ρg ≥ ۰٫۰۰۵ ← ۱۶Ф۱۸ ؛ همان چیزی که در نقشه اجرایی کامی‌آباد آمده."""
+    cfg, soil, _, res = _run("LA", 4)
+    des = design_all(res, CATALOG["LA"], soil, cfg.rebar)
+    assert (des["pedestal"].bar_count, des["pedestal"].bar_dia) == (16, 18)

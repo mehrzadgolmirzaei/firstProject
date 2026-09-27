@@ -63,6 +63,10 @@ class Rebar:
     pad_spacing_max: float = 200   # حداکثر فاصله شبکه (mm)
     col_dia: int = 18              # قطر آرماتور ستون
     col_min_bars: int = 8          # حداقل تعداد میلگرد ستون (استاندارد دفتر)
+    pedestal_min_ratio: float = 0.005   # حداقل آرماتور طولی ستون نسبت به مقطع کل (ρg)
+    pad_count_rule: str = "ceil"   # ceil: فاصله هرگز از حداکثر بیشتر نشود (دفترچه ۶۳)
+                                   # floor: تعداد کمتر، فاصله کمی بیشتر (نقشه کامی‌آباد)
+    pad_hook: float = 0.0          # قلاب میلگرد پی (mm)؛ صفر = ضخامت پی − ۲ پوشش
     tie_dia: int = 10
     tie_spacing: float = 150
     standee_dia: int = 14
@@ -82,7 +86,9 @@ class Anchorage:
     plate_thickness: float = 20.0  # ضخامت صفحه کف (mm) — برای ترسیم
     hook: float = 4.0              # طول قلاب انتهایی بر حسب قطر (×d)
     rod_dia: float = 0.0           # قطر میلگرد بدنه (mm)؛ صفر = قطر رزوه + ۲ (M20 روی Ф22)
-    rounding: float = 50.0         # گرد کردن طول مدفون به بالا (mm)
+    rounding: float = 100.0        # گرد کردن طول مدفون به بالا (mm)
+    threads_per_mm: float = 0.5    # n_t در A_se = π/4·(d − 0.9743/n_t)² (مطابق دفترچه ۶۳)
+    cb_ktr: float = 2.5            # (c + K_tr)/d_b در طول مهاری
 
 
 @dataclass
@@ -94,6 +100,8 @@ class Foundation:
     search_max: float = 5.0
     search_step: float = 0.10
     min_projection: float = 0.10   # حداقل بیرون‌زدگی پی از بر ستون (m)
+    L: float = 0.0                 # طول پی (m)؛ صفر = سامانه طراحی می‌کند
+    B: float = 0.0                 # عرض پی (m)؛ اگر L و B هر دو داده شوند فقط کنترل می‌شود
 
 
 @dataclass

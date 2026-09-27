@@ -48,31 +48,41 @@ def compare(search, opt):
         sig = (o["governing"], o["bearing"])
         if sig not in seen:
             r = search(*sig)
-            seen[sig] = None if r is None else r.geometry.L
-        rows.append({"key": key, "label": label, **o, "side": seen[sig],
+            seen[sig] = None if r is None else (r.geometry.L, r.geometry.B)
+        dims = seen[sig]
+        rows.append({"key": key, "label": label, **o,
+                     "side": dims and dims[0], "L": dims and dims[0], "B": dims and dims[1],
                      "selected": sig == (chosen["governing"], chosen["bearing"])})
     return rows
 
 
 def run(equipment: Equipment, cfg: ProjectConfig):
+    """یک تجهیز روی پی خودش (منفرد، یا مشترک اگر چند ستون با فاصله معلوم دارد)."""
+    from padlayout import PadLayout
+    return run_layout(PadLayout.single(equipment), cfg)
+
+
+def run_layout(layout, cfg: ProjectConfig):
+    """یک پی با یک یا چند گروه تجهیز (padlayout.PadLayout)."""
+    equipment = layout.main
     soil, wind = from_config(cfg)
     seis = seismic_coefficients(equipment, cfg)
     f, opt = cfg.foundation, cfg.design
 
     def search(governing, bearing):
-        return find_dimensions(equipment, soil, wind, seis.ch, seis.cv,
+        return find_dimensions(layout, soil, wind, seis.ch, seis.cv,
                                hp=f.hp, b=f.b, tf=f.tf,
                                lo=f.search_min, hi=f.search_max, step=f.search_step,
                                governing=governing, bearing=bearing,
-                               min_projection=f.min_projection)
+                               min_projection=f.min_projection, L=f.L, B=f.B)
 
     res = search(opt.governing, opt.bearing)
     if res is not None:
         res.comparison = compare(search, opt)
     if res is None:
         return None, seis, None, None, None
-    des = design_all(res, equipment, soil, cfg.rebar, cfg.anchorage)
+    des = design_all(res, layout, soil, cfg.rebar, cfg.anchorage)
     qty = quantities(res, equipment, soil)
-    bbs = bar_schedule(model.build(res, equipment, des, cfg))
+    bbs = bar_schedule(model.build(res, layout, des, cfg))
     qty["rebar"] = sum(r["weight"] for r in bbs)
     return res, seis, des, qty, bbs

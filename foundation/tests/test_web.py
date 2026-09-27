@@ -174,3 +174,86 @@ def test_two_pedestals_need_valid_spacing(client):
                     headers=h).get_json()
     assert d["geometry"]["L"] >= 2.5 - 1e-9 and d["clashes"] == []
     assert d["design"]["anchor"]["embed"] == 700
+
+
+def _preset_payload(key):
+    """همان payload که «نمونه آماده» در فرم می‌سازد."""
+    from presets import FOUNDATION_PRESETS, ALL_EQUIPMENT
+    p = FOUNDATION_PRESETS[key]
+    s = p["site"]
+    g1, *rest = p["groups"]
+    groups = [{"axis": g1["axis"], "x": g1["x"], "y": g1["y"], "case": g1["case"]}]
+    for g in rest:
+        groups.append({"equipment": {"tag": g["tag"]}, "axis": g["axis"], "x": g["x"],
+                       "y": g["y"], "case": g["case"]})
+    return {"equipment": asdict(ALL_EQUIPMENT[g1["tag"]]),
+            "layout": {"kind": "combined", "groups": groups},
+            "seismic.edition": "4", "seismic.a": s["seismic"]["a"], "seismic.b": s["seismic"]["b"],
+            "seismic.i": s["seismic"]["i"], "seismic.r": s["seismic"]["r"],
+            "soil.q_base": s["soil"]["q_base"], "soil.q_factor": s["soil"]["q_factor"],
+            "foundation.hp": s["foundation"]["hp"], "foundation.tf": s["foundation"]["tf"],
+            "foundation.b": p["b"], "foundation.L": p["L"], "foundation.B": p["B"],
+            "rebar.col_dia": s["rebar"]["col_dia"], "rebar.pad_dia": s["rebar"]["pad_dia"]}
+
+
+# (FS واژگونی، تنش خاک) — دفترچه VP-63POST-CAL-0004
+@pytest.mark.parametrize("key,fs,q", [
+    ("K63-LA", 2.32, 0.68), ("K63-CB", 2.02, 0.72), ("K63-CT", 2.06, 0.77),
+    ("K63-DSE", 2.19, 0.73), ("K63-DS2", 2.19, 0.72),
+    ("K63-LACVT", 3.74, 0.54), ("K63-PICVT", 2.45, 0.64)])
+def test_kimia_presets_reproduce_notebook(client, app, key, fs, q):
+    r = client.post("/api/calculate", json=_preset_payload(key),
+                    headers={"X-CSRF-Token": client.csrf})
+    d = r.get_json()
+    assert r.status_code == 200, d
+    assert d["checks"][0]["value"] == pytest.approx(fs, abs=0.02)
+    assert d["checks"][1]["value"] == pytest.approx(q, abs=0.01)
+    assert d["clashes"] == []
+    # نقشه از اسنپ‌شات دوباره ساخته می‌شود و همان چیدمان را دارد
+    r = client.post(f"/api/drawing/{d['id']}", headers={"X-CSRF-Token": client.csrf})
+    assert r.status_code == 200, r.get_json()
+
+
+def test_combined_pad_layout_saved_and_described(client, app):
+    d = client.post("/api/calculate", json=_preset_payload("K63-LACVT"),
+                    headers={"X-CSRF-Token": client.csrf}).get_json()
+    assert d["geometry"]["n_pedestal"] == 5
+    assert d["geometry"]["layout"] == "LA63×2 + CVT63×3"
+    assert [g["tag"] for g in d["groups"]] == ["LA63", "CVT63"]
+    saved = json.loads(app.db.query("SELECT inputs FROM calculations WHERE id=?",
+                                    (d["id"],), one=True)["inputs"])
+    assert saved["layout"]["kind"] == "combined"
+    assert saved["layout"]["groups"][1]["equipment"]["tag"] == "CVT63"
+
+
+def test_combined_pad_validation(client):
+    h = {"X-CSRF-Token": client.csrf}
+    body = _preset_payload("K63-LACVT")
+    body["layout"]["groups"][1]["y"] = 0.3            # ردیف CVT روی ردیف LA
+    r = client.post("/api/calculate", json=body, headers=h)
+    assert r.status_code == 400 and "روی هم" in r.get_json()["error"]
+    body = _preset_payload("K63-LA")
+    body["foundation.L"] = 2.0                         # ستون‌ها از پی بیرون می‌زنند
+    r = client.post("/api/calculate", json=body, headers=h)
+    assert r.status_code == 400 and "بیرون" in r.get_json()["error"]
+    body = _preset_payload("K63-LA")
+    body["foundation.B"] = None                        # فقط یک ضلع
+    r = client.post("/api/calculate", json=body, headers=h)
+    assert r.status_code == 400 and "هر دو" in r.get_json()["error"]
+
+
+def test_npol_changes_loads(client):
+    """npol تعداد فاز روی یک سازه است و در بار ضرب می‌شود."""
+    from equipment import CATALOG
+    one = _calc(client, "LA").get_json()
+    eq = asdict(CATALOG["LA"]); eq["npol"] = 3
+    three = client.post("/api/calculate", json={"equipment": eq, "seismic.edition": "5"},
+                        headers={"X-CSRF-Token": client.csrf}).get_json()
+    assert three["governing"]["N"] > one["governing"]["N"] + 2 * CATALOG["LA"].We - 1
+
+
+def test_calculate_page_has_presets_and_npol(client):
+    html = client.get("/calculate").get_data(as_text=True)
+    for s in ('id="npol"', 'id="fpreset"', "K63-LACVT", 'id="kind"', "LA63"):
+        assert s in html
+    assert 'id="base_plate"' not in html

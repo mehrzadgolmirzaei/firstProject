@@ -16,7 +16,7 @@
     <span class="big">{{ '%.2f'|format(r.geometry.L) }} × {{ '%.2f'|format(r.geometry.B) }} × {{ '%.2f'|format(r.geometry.tf) }}</span>
     <span class="unit">متر — پی</span>
   </div>
-  <p class="note">ستون {{ r.geometry.n_pedestal }} عدد {{ '%.2f'|format(r.geometry.b) }}×{{ '%.2f'|format(r.geometry.b) }}
+  <p class="note">{% if r.geometry.layout %}{{ r.geometry.layout }} · {% endif %}ستون {{ r.geometry.n_pedestal }} عدد {{ '%.2f'|format(r.geometry.b) }}×{{ '%.2f'|format(r.geometry.b) }}
     به ارتفاع {{ '%.2f'|format(r.geometry.hp) }} m ·
     حالت حاکم {{ r.governing.name }} ·
     Ch={{ '%.3f'|format(r.seismic.ch) }} Cv={{ '%.3f'|format(r.seismic.cv) }}

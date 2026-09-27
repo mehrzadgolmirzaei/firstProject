@@ -12,11 +12,25 @@
     <h2>ورودی</h2>
 
     <div class="f">
+      <label>نمونه آماده (دفترچه تأییدشده)</label>
+      <select id="fpreset">
+        <option value="">— بدون نمونه —</option>
+        {% for key, p in foundation_presets.items() %}
+        <option value="{{ key }}">{{ p.title }}</option>
+        {% endfor %}
+      </select>
+      <small class="hint">همه فرم را با اعداد دفترچه پر می‌کند (تجهیزها، چیدمان ستون‌ها، ابعاد پی،
+        زلزله، خاک)؛ بعد هر عددی را خواستید عوض کنید.</small>
+    </div>
+
+    <div class="f">
       <label>تجهیز</label>
       <select id="preset">
         <option value="">— انتخاب کنید —</option>
-        {% for tag, eq in builtin.items() %}
-        <option value="{{ tag }}">{{ tag }} — {{ eq.title }}</option>
+        {% for label, tags in builtin_groups %}
+        <optgroup label="{{ label }}">
+          {% for tag in tags %}<option value="{{ tag }}">{{ tag }} — {{ builtin[tag].title }}</option>{% endfor %}
+        </optgroup>
         {% endfor %}
       </select>
     </div>
@@ -51,8 +65,93 @@
           <small class="hint">مقطع استوانه‌ای ۰٫۵ تا ۰٫۷</small></div>
         <div class="f"><label><b>We</b> وزن تجهیز (kg)</label><input id="We" type="number" step="1">
           <small class="hint">وزن کل یک فاز، با روغن/گاز</small></div>
-        <div class="f"><label>تعداد ستون (پدستال)</label><input id="n_pedestal" type="number" step="1" value="1" min="1" max="2">
-          <small class="hint">۱ برای تجهیز تک‌پایه، ۲ برای سکسیونر و سازه دوپایه</small></div>
+        <div class="f"><label><b>npol</b> تعداد فاز روی یک سازه</label>
+          <input id="npol" type="number" step="1" value="1" min="1" max="3">
+          <small class="hint">چند تجهیز (فاز) روی همین یک سازه نشسته است. پست ۲۳۰/۴۰۰ معمولاً ۱
+            (هر فاز سازه خودش)؛ پست ۶۳ معمولاً ۳ (سه فاز روی یک سازه). وزن و نیروی باد و کشش هادی
+            تجهیز در این عدد ضرب می‌شود.</small></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>نوع پی و چیدمان ستون‌ها</legend>
+      <div class="row">
+        <div class="f"><label>نوع پی</label>
+          <select id="kind">
+            <option value="single">منفرد مربعی — پست ۲۳۰ و ۴۰۰</option>
+            <option value="combined">مشترک مستطیلی — پست ۶۳</option>
+          </select>
+          <small class="hint">پست ۶۳ به خاطر کمبود فضا: یک پی مستطیلی زیر یک سازه چندستونه،
+            یا دو تجهیز روی یک پی (مثل LA/CVT و PI/CVT).</small></div>
+        <div class="f"><label>تعداد ستون (پدستال) این تجهیز</label>
+          <input id="n_pedestal" type="number" step="1" value="1" min="1" max="4">
+          <small class="hint">تعداد پایه سازه که هر کدام روی یک ستون بتنی می‌نشیند</small></div>
+        <div class="f" id="spacingField"><label>فاصله محور تا محور ستون‌ها (m)</label>
+          <input id="pedestal_spacing" type="number" step="0.05" placeholder="برای بیش از یک ستون لازم است">
+          <small class="hint">از نقشه سازه (مثلاً ۱٫۷۰ برای LA و CT پست ۶۳، ۱٫۵۰ برای CB).
+            پی دست‌کم «این فاصله + عرض ستون + دو برابر حداقل بیرون‌زدگی» می‌شود.</small></div>
+      </div>
+      <div class="row combined-only">
+        <div class="f"><label>راستای ردیف ستون‌ها</label>
+          <select id="axis"><option value="x">در امتداد L (x)</option><option value="y">در امتداد B (y)</option></select>
+          <small class="hint">x در امتداد ضلع بلند L؛ بار جانبی در راستای B فرض می‌شود</small></div>
+        <div class="f"><label>مرکز ردیف x (m)</label><input id="gx" type="number" step="0.05" value="0">
+          <small class="hint">فاصله از مرکز پی در امتداد L</small></div>
+        <div class="f"><label>مرکز ردیف y (m)</label><input id="gy" type="number" step="0.05" value="0">
+          <small class="hint">فاصله از مرکز پی در امتداد B</small></div>
+        <div class="f"><label>حالت بار حاکم این تجهیز</label>
+          <select id="gcase"><option value="">طبق روش کنترل پایین</option>
+            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          <small class="hint">برای وقتی دفترچه برای هر تجهیز حالت جدا برداشته</small></div>
+      </div>
+      <div class="row">
+        <div class="f"><label><b>L</b> طول پی (m)</label><input id="L" type="number" step="0.05" placeholder="خالی = طراحی خودکار">
+          <small class="hint">اگر L و B هر دو وارد شوند، سامانه همان پی را کنترل می‌کند (مثل دفترچه)؛
+            خالی = کوچک‌ترین پی که همه کنترل‌ها را پاس کند.</small></div>
+        <div class="f"><label><b>B</b> عرض پی (m)</label><input id="B" type="number" step="0.05" placeholder="خالی = طراحی خودکار">
+          <small class="hint">در راستای بار جانبی (M_r = W·B/2)</small></div>
+      </div>
+
+      <div class="combined-only">
+        <label class="check-inline"><input type="checkbox" id="g2on"> تجهیز دوم روی همین پی</label>
+        <div id="g2" style="display:none">
+          <div class="row">
+            <div class="f"><label>تجهیز دوم</label>
+              <select id="g2tag">
+                {% for label, tags in builtin_groups %}
+                <optgroup label="{{ label }}">
+                  {% for tag in tags %}<option value="{{ tag }}">{{ tag }} — {{ builtin[tag].title }}</option>{% endfor %}
+                </optgroup>
+                {% endfor %}
+              </select>
+              <small class="hint">بقیه مشخصات از کاتالوگ؛ اعداد زیر را از اوت‌لاین همین پروژه کنترل کنید</small></div>
+            <div class="f"><label><b>npol</b></label><input id="g2_npol" type="number" step="1"></div>
+            <div class="f"><label><b>He</b> (m)</label><input id="g2_He" type="number" step="0.001"></div>
+            <div class="f"><label><b>he</b> (m)</label><input id="g2_he" type="number" step="0.001"></div>
+            <div class="f"><label><b>Ae</b> (m²)</label><input id="g2_Ae" type="number" step="0.01"></div>
+            <div class="f"><label><b>We</b> (kg)</label><input id="g2_We" type="number" step="1"></div>
+            <div class="f"><label><b>Hs</b> (m)</label><input id="g2_Hs" type="number" step="0.01"></div>
+            <div class="f"><label><b>As</b> (m²)</label><input id="g2_As" type="number" step="0.01"></div>
+            <div class="f"><label><b>Ws</b> (kg)</label><input id="g2_Ws" type="number" step="1"></div>
+            <div class="f"><label><b>Fc</b> (kg)</label><input id="g2_Fc" type="number" step="1"></div>
+            <div class="f"><label><b>Fc,sc</b> (kg)</label><input id="g2_Fc_sc" type="number" step="1"></div>
+            <div class="f"><label>قطر میل مهار (mm)</label><input id="g2_anchor_dia" type="number" step="1"></div>
+            <div class="f"><label>فاصله میل مهارها (mm)</label><input id="g2_anchor_gauge" type="number" step="10"></div>
+          </div>
+          <div class="row">
+            <div class="f"><label>تعداد ستون</label><input id="g2_n" type="number" step="1" min="1" max="4"></div>
+            <div class="f"><label>فاصله محور ستون‌ها (m)</label><input id="g2_spacing" type="number" step="0.05"></div>
+            <div class="f"><label>راستای ردیف</label>
+              <select id="g2_axis"><option value="x">x</option><option value="y">y</option></select></div>
+            <div class="f"><label>مرکز x (m)</label><input id="g2_x" type="number" step="0.05" value="0"></div>
+            <div class="f"><label>مرکز y (m)</label><input id="g2_y" type="number" step="0.05" value="0"></div>
+            <div class="f"><label>حالت بار حاکم</label>
+              <select id="g2_case"><option value="">طبق روش کنترل</option>
+                <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+          </div>
+          <p class="note" style="margin:0">نیروهای حاکم دو تجهیز با هم جمع می‌شوند (مثل دفترچه ۶۳)؛
+            ستون و میل مهار هر تجهیز با نیروی خودش طراحی می‌شود.</p>
+        </div>
       </div>
     </fieldset>
 
@@ -70,14 +169,13 @@
         <div class="f"><label>فاصله محور تا محور میل مهارها (mm)</label>
           <input id="anchor_gauge" type="number" step="10" value="450">
           <small class="hint">فاصله مرکز به مرکز دو میل مهار مجاور روی صفحه کف پای سازه،
-            در هر دو جهت (الگوی مربعی). از نقشه صفحه کف سازه نگهدارنده؛ استاندارد دفتر ۴۵۰.
+            در هر دو جهت (الگوی مربعی). از نقشه صفحه کف سازه نگهدارنده؛ مثلاً ۴۵۰ در پست ۲۳۰/۴۰۰ و ۳۷۰ در پست ۶۳ (CB: ۴۰۰).
             همین فاصله بازوی زوج‌نیروی کششی میل مهارهاست.</small></div>
-        <div class="f"><label>ضلع صفحه کف (mm)</label><input id="base_plate" type="number" step="10" value="0">
-          <small class="hint">صفحه کف پای سازه؛ صفر = نامشخص (فقط در ترسیم اثر دارد)</small></div>
         <div class="f"><label>طول مدفون میل مهار</label>
           <input id="anchor_embed_out" type="text" readonly value="خودکار — بعد از محاسبه">
-          <small class="hint">سامانه حساب می‌کند: بیشترینِ طول مهاری آرماتور ستون، طول مهاری
-            میل مهار قلاب‌دار و ۱۲ برابر قطر؛ گرد به ۵۰ میلی‌متر. مراحل در «میل مهار» پایین صفحه.</small></div>
+          <small class="hint">سامانه حساب می‌کند (روش دفترچه ۶۳):
+            L<sub>d</sub> = 0.9·fy/√f'c/2.5 × قطر میله، گرد به بالا به ۱۰۰ میلی‌متر.
+            مراحل در «میل مهار» پایین صفحه.</small></div>
       </div>
     </fieldset>
 
@@ -104,8 +202,10 @@
           <small class="hint">نیروی افقی هادی روی ترمینال (Terminal load) از محاسبات مکانیکال</small></div>
         <div class="f"><label><b>Fc,sc</b> کشش هادی — اتصال کوتاه (kg)</label><input id="Fc_sc" type="number" step="1">
           <small class="hint">در حالت اتصال کوتاه؛ خالی = همان Fc</small></div>
-        <div class="f"><label>ارتفاع نقاط اتصال هادی (m)</label><input id="conductor_points" placeholder="خالی = He">
-          <small class="hint">از پای تجهیز، با ویرگول جدا کنید؛ مثلاً ۳٫۱۱، ۵٫۱۳ برای دو ترمینال</small></div>
+        <div class="f"><label>ارتفاع ترمینال هادی روی تجهیز (m)</label><input id="conductor_points" placeholder="خالی = He">
+          <small class="hint">ارتفاع نقطه‌ای که هادی به تجهیز وصل می‌شود، از پای تجهیز (نه تعداد فاز —
+            آن npol است). اگر تجهیز دو ترمینال در دو ارتفاع دارد با ویرگول جدا کنید، مثلاً ۳٫۱۱، ۵٫۱۳
+            برای CB؛ خالی یعنی ترمینال بالای تجهیز (= He).</small></div>
         <div class="f"><label>بار قائم مانور (kg)</label><input id="op_vertical" type="number" step="1" value="0">
           <small class="hint">نیروی قائمی که هنگام قطع و وصل (مانور) تجهیز به پای سازه وارد می‌شود —
             از اوت‌لاین سازنده (Operating / Dynamic load). به N_max اضافه و از N_min کم می‌شود.
@@ -172,11 +272,17 @@
     </fieldset>
 
     <fieldset>
-      <legend>ابعاد اولیه ستون و پی</legend>
+      <legend>ستون بتنی و ضخامت پی</legend>
       <div class="row three">
         <div class="f"><label><b>hp</b> (m)</label><input id="hp" type="number" step="0.05" value="1"></div>
         <div class="f"><label><b>b</b> (m)</label><input id="bcol" type="number" step="0.05" value="0.8"></div>
         <div class="f"><label><b>tf</b> (m)</label><input id="tf" type="number" step="0.05" value="0.4"></div>
+      </div>
+      <div class="row">
+        <div class="f"><label>قطر آرماتور پی (mm)</label>
+          <input id="pad_dia" type="number" step="1" value="{{ defaults.rebar.pad_dia }}"></div>
+        <div class="f"><label>قطر آرماتور ستون (mm)</label>
+          <input id="col_dia" type="number" step="1" value="{{ defaults.rebar.col_dia }}"></div>
       </div>
     </fieldset>
 
@@ -264,6 +370,7 @@
 <script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
 <script>
 const BUILTIN = {{ builtin|tojson }};
+const FPRESETS = {{ foundation_presets|tojson }};
 const OPTIONS = {{ options|tojson }};
 const $ = id => document.getElementById(id);
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
@@ -295,6 +402,68 @@ $("mkdxf").addEventListener("click", async () => {
 const OUTLINE_FIELDS = {};
 Object.keys(BUILTIN).forEach(k => OUTLINE_FIELDS[k] = BUILTIN[k].requires_outline || []);
 
+function fillEquipment(tag){
+  $("preset").value = tag;
+  $("preset").dispatchEvent(new Event("change"));
+}
+
+const G2_FIELDS = ["npol","He","he","Ae","We","Hs","As","Ws","Fc","Fc_sc","anchor_dia","anchor_gauge"];
+function fillGroup2(tag){
+  const eq = BUILTIN[tag]; if (!eq) return;
+  $("g2tag").value = tag;
+  G2_FIELDS.forEach(k => { const v = eq[k]; $("g2_" + k).value = (v === null || v === undefined) ? "" : v; });
+  $("g2_n").value = eq.n_pedestal;
+  $("g2_spacing").value = eq.pedestal_spacing || "";
+}
+$("g2tag").addEventListener("change", e => fillGroup2(e.target.value));
+$("g2on").addEventListener("change", e => {
+  $("g2").style.display = e.target.checked ? "block" : "none";
+  if (e.target.checked && !$("g2_He").value) fillGroup2($("g2tag").value);
+});
+
+function applyKind(){
+  const combined = $("kind").value === "combined";
+  document.querySelectorAll(".combined-only").forEach(el => el.style.display = combined ? "" : "none");
+}
+$("kind").addEventListener("change", applyKind);
+applyKind();
+
+// نمونه آماده: کل فرم با اعداد دفترچه
+$("fpreset").addEventListener("change", e => {
+  const p = FPRESETS[e.target.value]; if (!p) return;
+  const g1 = p.groups[0], site = p.site || {};
+  $("kind").value = "combined"; applyKind();
+  fillEquipment(g1.tag);
+  const eq = BUILTIN[g1.tag];
+  $("n_pedestal").value = g1.n || eq.n_pedestal;
+  $("pedestal_spacing").value = g1.spacing || eq.pedestal_spacing || "";
+  $("axis").value = g1.axis || "x"; $("gx").value = g1.x || 0; $("gy").value = g1.y || 0;
+  $("gcase").value = g1.case || "";
+  $("L").value = p.L; $("B").value = p.B; $("bcol").value = p.b;
+  const g2 = p.groups[1];
+  $("g2on").checked = !!g2; $("g2").style.display = g2 ? "block" : "none";
+  if (g2) {
+    fillGroup2(g2.tag);
+    if (g2.n) $("g2_n").value = g2.n;
+    if (g2.spacing) $("g2_spacing").value = g2.spacing;
+    $("g2_axis").value = g2.axis || "x"; $("g2_x").value = g2.x || 0; $("g2_y").value = g2.y || 0;
+    $("g2_case").value = g2.case || "";
+  }
+  const s = site.seismic || {};
+  if (s.edition) { $("edition").value = String(s.edition); $("edition").dispatchEvent(new Event("change")); }
+  if (s.a !== undefined) { $("a").value = s.a; $("b4").value = s.b; $("i4").value = s.i; $("r4").value = s.r; }
+  const so = site.soil || {};
+  if (so.q_base) $("q_base").value = so.q_base;
+  if (so.q_factor) $("q_factor").value = so.q_factor;
+  const fd = site.foundation || {};
+  if (fd.hp) $("hp").value = fd.hp;
+  if (fd.tf) $("tf").value = fd.tf;
+  const rb = site.rebar || {};
+  if (rb.col_dia) $("col_dia").value = rb.col_dia;
+  if (rb.pad_dia) $("pad_dia").value = rb.pad_dia;
+  $("msg").textContent = "فرم با اعداد دفترچه پر شد: " + p.title;
+});
+
 $("preset").addEventListener("change", e => {
   const eq = BUILTIN[e.target.value];
   const need = OUTLINE_FIELDS[e.target.value] || [];
@@ -302,11 +471,14 @@ $("preset").addEventListener("change", e => {
   if (!eq) return;
   const map = {He:"He", he:"he", Ae:"Ae", Ce:"Ce", We:"We", Hs:"Hs", Ws:"Ws",
                As:"As", Cs:"Cs", Wc:"Wc", Fc:"Fc", Fc_sc:"Fc_sc",
-               n_pedestal:"n_pedestal", op_vertical:"op_vertical", op_horizontal:"op_horizontal"};
+               n_pedestal:"n_pedestal", npol:"npol", op_vertical:"op_vertical", op_horizontal:"op_horizontal"};
   for (const k in map) if ($(k) && eq[map[k]] !== undefined && eq[map[k]] !== null) $(k).value = eq[map[k]];
   $("conductor_points").value = (eq.conductor_points || []).join(", ");
-  ["anchor_n","anchor_dia","anchor_gauge","base_plate","pedestal_spacing","op_moment"]
+  ["anchor_n","anchor_dia","anchor_gauge","op_moment"]
     .forEach(k => { if (eq[k] !== undefined && eq[k] !== null) $(k).value = eq[k]; });
+  $("pedestal_spacing").value = eq.pedestal_spacing || "";
+  // تجهیزهای پست ۶۳ روی پی مشترک مستطیلی می‌نشینند
+  if (eq.npol > 1 && eq.pedestal_spacing) { $("kind").value = "combined"; applyKind(); }
   // فیلدهایی که باید از اوت‌لاین بیایند خالی و علامت‌گذاری می‌شوند
   document.querySelectorAll(".needs-outline").forEach(el => {
     el.classList.remove("needs-outline"); el.placeholder = "";
@@ -337,6 +509,20 @@ $("edition").addEventListener("change", e => {
 
 const num = id => $(id).value === "" ? null : parseFloat($(id).value);
 
+function layoutPayload(){
+  const kind = $("kind").value;
+  const groups = [{n: num("n_pedestal"), spacing: num("pedestal_spacing"), axis: $("axis").value,
+                   x: num("gx"), y: num("gy"), case: $("gcase").value || null}];
+  if (kind === "combined" && $("g2on").checked) {
+    const tag = $("g2tag").value, equipment = {tag: tag};
+    G2_FIELDS.forEach(k => equipment[k] = num("g2_" + k));
+    groups.push({equipment: equipment, n: num("g2_n"), spacing: num("g2_spacing"),
+                 axis: $("g2_axis").value, x: num("g2_x"), y: num("g2_y"),
+                 case: $("g2_case").value || null});
+  }
+  return {kind: kind, groups: groups};
+}
+
 $("form").addEventListener("submit", async ev => {
   ev.preventDefault();
   $("go").disabled = true; $("msg").textContent = "در حال محاسبه…";
@@ -351,12 +537,12 @@ $("form").addEventListener("submit", async ev => {
       Wc: num("Wc"), Fc: num("Fc"), Fc_sc: num("Fc_sc"),
       conductor_points: $("conductor_points").value,
       op_vertical: num("op_vertical"), op_horizontal: num("op_horizontal"),
-      n_pedestal: num("n_pedestal"),
+      n_pedestal: num("n_pedestal"), npol: num("npol"),
       anchor_gauge: num("anchor_gauge"), anchor_dia: num("anchor_dia"),
       anchor_n: num("anchor_n"), op_moment: num("op_moment"),
-      base_plate: num("base_plate"),
       pedestal_spacing: num("pedestal_spacing")
     },
+    layout: layoutPayload(),
     "seismic.k_lateral": num("k_lateral"),
     "seismic.edition": $("edition").value,
     "seismic.ss": num("ss"), "seismic.s1": num("s1"),
@@ -368,6 +554,8 @@ $("form").addEventListener("submit", async ev => {
     "materials.fc": num("fc"), "materials.fy": num("fy"),
     "materials.cover": num("cover"), "materials.lean": num("lean"),
     "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf"),
+    "foundation.L": num("L"), "foundation.B": num("B"),
+    "rebar.pad_dia": num("pad_dia"), "rebar.col_dia": num("col_dia"),
     "design.governing": $("governing").value, "design.bearing": $("bearing").value
   };
   try {
@@ -401,16 +589,21 @@ function render(d){
     `<span>L <b>${fmt(g.L)}</b></span><span>B <b>${fmt(g.B)}</b></span>` +
     `<span>t<sub>f</sub> <b>${fmt(g.tf)}</b></span><span>h<sub>p</sub> <b>${fmt(g.hp)}</b></span>` +
     `<span>ستون <b>${g.n_pedestal}</b></span>`;
+  const groupsText = (d.groups || []).length > 1
+    ? " · " + d.groups.map(x => `${x.tag}: ${x.n} ستون ${x.pedestal}Ф${x.pedestal_dia}، ` +
+        `میل مهار مدفون ${fmt(x.embed,0)}، حالت ${x.case}`).join(" | ")
+    : "";
   $("dim").textContent = `${fmt(g.L)} × ${fmt(g.B)} × ${fmt(g.tf)}`;
   const v = $("verdict");
   v.className = "verdict " + (d.ok ? "ok" : "ng");
   v.textContent = d.ok ? "همه کنترل‌ها قبول" : "نیازمند بازبینی";
   $("sub").textContent =
-    `ستون ${g.n_pedestal} عدد ${fmt(g.b)}×${fmt(g.b)} به ارتفاع ${fmt(g.hp)} m · ` +
+    `${g.layout} · ستون ${g.n_pedestal} عدد ${fmt(g.b)}×${fmt(g.b)} به ارتفاع ${fmt(g.hp)} m · ` +
     `حالت حاکم ${d.governing.name} · Ch=${fmt(d.seismic.ch,3)} Cv=${fmt(d.seismic.cv,3)} ` +
     `(۲۸۰۰ ویرایش ${d.seismic.edition})` +
     (d.seismic.period ? ` · T=${fmt(d.seismic.period,4)} s → ${d.seismic.method === "rigid" ? "صلب" : "غیرصلب"}`
-                      : ` · روش ${d.seismic.method === "rigid" ? "صلب" : "استاتیکی"} (انتخاب دستی)`);
+                      : ` · روش ${d.seismic.method === "rigid" ? "صلب" : "استاتیکی"} (انتخاب دستی)`) +
+    groupsText;
 
   $("checks").innerHTML = d.checks.map(c => {
     const ratio = c.dir === ">" ? c.limit / c.value : c.value / c.limit;
@@ -434,7 +627,7 @@ function render(d){
     "<th>ابعاد پی (m)</th></tr></thead><tbody>" +
     d.comparison.map(r => `<tr class="${r.selected ? 'on' : ''}"><td>${r.label}</td>` +
       `<td>${OPTIONS.governing[r.governing]}</td><td>${OPTIONS.bearing[r.bearing]}</td>` +
-      `<td class="num">${r.side === null ? "—" : fmt(r.side) + " × " + fmt(r.side)}</td></tr>`).join("") +
+      `<td class="num">${r.L === null ? "—" : fmt(r.L) + " × " + fmt(r.B)}</td></tr>`).join("") +
     "</tbody>";
   if (d.clashes && d.clashes.length) {
     $("sub").textContent += " · تداخل جزئیات: " + d.clashes.join("، ");

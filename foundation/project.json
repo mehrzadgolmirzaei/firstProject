@@ -42,7 +42,10 @@
     "col_min_bars": 8,
     "tie_dia": 10,
     "tie_spacing": 150,
-    "standee_dia": 14
+    "standee_dia": 14,
+    "pedestal_min_ratio": 0.005,
+    "pad_count_rule": "ceil",
+    "pad_hook": 0.0
   },
   "foundation": {
     "hp": 1.0,
@@ -51,7 +54,9 @@
     "search_min": 1.0,
     "search_max": 5.0,
     "search_step": 0.1,
-    "min_projection": 0.1
+    "min_projection": 0.1,
+    "L": 0.0,
+    "B": 0.0
   },
   "anchorage": {
     "fy": 4000.0,
@@ -60,8 +65,10 @@
     "projection": 150.0,
     "plate_thickness": 20.0,
     "hook": 4.0,
-    "rounding": 50.0,
-    "rod_dia": 0.0
+    "rounding": 100.0,
+    "rod_dia": 0.0,
+    "threads_per_mm": 0.5,
+    "cb_ktr": 2.5
   },
   "design": {
     "governing": "notebook",

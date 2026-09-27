@@ -313,6 +313,20 @@ class FoundationDrawing:
 
     # ================================================== نماها
     # هر نما نسبت به مبدأ خودش ترسیم می‌شود؛ _layout مبدأ را تعیین می‌کند.
+    def _cut_y(self):
+        """
+        تراز برش A-A: ردیفی که بیشترین ستون را دارد (در تساوی، نزدیک‌ترین به محور پی)،
+        تا در پی مشترک چندردیفه برش از وسط ستون‌ها بگذرد نه از فاصله بین ردیف‌ها.
+        """
+        rows = {}
+        for p in self.fm.pedestals:
+            rows.setdefault(round(p.y, 1), []).append(p)
+        y = max(rows, key=lambda k: (len(rows[k]), -abs(k)))
+        return rows[y][0].y
+
+    def _in_cut(self, p, y):
+        return abs(p.y - y) <= p.size / 2 + 1e-6
+
     def _plan(self):
         fm = self.fm
         L, B, lm = fm.L, fm.B, fm.lean_margin
@@ -333,20 +347,49 @@ class FoundationDrawing:
             self.line((a.x - 2.2 * r, a.y), (a.x + 2.2 * r, a.y), LO.LY_DIM)
             self.line((a.x, a.y - 2.2 * r), (a.x, a.y + 2.2 * r), LO.LY_DIM)
 
-        self.dim_h((-L / 2, -B / 2), (L / 2, -B / 2), -B / 2 - lm - u(8))
-        self.dim_v((L / 2, -B / 2), (L / 2, B / 2), L / 2 + lm + u(15))
+        # زنجیره اندازه محور ستون‌ها (پی چندستونه) و اندازه کلی
+        xs = sorted({round(p.x, 3) for p in fm.pedestals})
+        ys = sorted({round(p.y, 3) for p in fm.pedestals})
+        chain_x = len(xs) > 1 or abs(xs[0]) > 1e-6
+        chain_y = len(ys) > 1 or abs(ys[0]) > 1e-6
+        yb = -B / 2 - lm - u(8)
+        if chain_x:
+            pts = [-L / 2] + xs + [L / 2]
+            for a, b in zip(pts, pts[1:]):
+                if b - a > 1:
+                    self.dim_h((a, -B / 2), (b, -B / 2), yb)
+            yb -= u(7)
+        self.dim_h((-L / 2, -B / 2), (L / 2, -B / 2), yb)
+        xr = L / 2 + lm + u(8)
+        if chain_y:
+            pts = [-B / 2] + ys + [B / 2]
+            for a, b in zip(pts, pts[1:]):
+                if b - a > 1:
+                    self.dim_v((L / 2, a), (L / 2, b), xr)
+            xr += u(7)
+        self.dim_v((L / 2, -B / 2), (L / 2, B / 2), xr)
 
-        # خط برش A-A از محور ستون‌ها
+        # نام تجهیز هر گروه، در پی مشترک با بیش از یک تجهیز
+        tags = {}
+        for p in fm.pedestals:
+            tags.setdefault(p.group, []).append(p)
+        if len(tags) > 1:
+            for peds in tags.values():
+                p = min(peds, key=lambda q: (q.x, q.y))
+                self.text((p.x - p.size / 2, p.y + p.size / 2 + u(1.5)), p.tag, LO.H_TINY)
+
+        # خط برش A-A از محور ردیف اصلی ستون‌ها
+        yc = self._cut_y()
         ext = lm + u(2)
-        self.line((-L / 2 - ext, 0), (L / 2 + ext, 0), LO.LY_DIM)
-        self.section_mark((-L / 2 - ext - u(3.2), 0), "A")
-        self.section_mark((L / 2 + ext + u(3.2), 0), "A")
+        self.line((-L / 2 - ext, yc), (L / 2 + ext, yc), LO.LY_DIM)
+        self.section_mark((-L / 2 - ext - u(3.2), yc), "A")
+        self.section_mark((L / 2 + ext + u(3.2), yc), "A")
 
         pad = self.des["pad"]
         top_bar = max((b.points[1][1] for b in fm.bars_by_mark("01")), default=0)
         self.leader((L * 0.12, top_bar), (-L * 0.08, B / 2 + lm + u(5)),
                     f"{pad.bar_count}%%C{pad.bar_dia}@{pad.spacing:.0f}  T&B  E.W.", u(4))
-        self.view_title((-L / 2, -B / 2 - lm - u(15)), "PLAN", f"Sc.1:{self.s:.0f}")
+        self.view_title((-L / 2, yb - u(7)), "PLAN", f"Sc.1:{self.s:.0f}")
 
     def _section_a(self):
         fm = self.fm
@@ -359,7 +402,9 @@ class FoundationDrawing:
         self.hatch_rect(L / 2 + lm, -lean, hw, gl + lean, u(7.5))
         self.rect(-L / 2 - lm, -lean, L + 2 * lm, lean, LO.LY_DETAIL)
         self.rect(-L / 2, 0, L, tf, LO.LY_CONCRETE)
-        for p in fm.pedestals:
+        yc = self._cut_y()
+        cut = [p for p in fm.pedestals if self._in_cut(p, yc)]
+        for p in cut:
             self.rect(p.x - p.size / 2, tf, p.size, fm.hp, LO.LY_CONCRETE)
         self.line((-L / 2 - lm - hw, gl), (L / 2 + lm + hw, gl), LO.LY_DETAIL)
         self.text((-L / 2 - lm - hw, gl + u(1)), "F.S.L.", LO.H_TINY)
@@ -371,39 +416,44 @@ class FoundationDrawing:
             along_x = [b for b in bars if abs(b.points[1][0] - b.points[2][0]) > 1]
             along_y = [b for b in bars if abs(b.points[1][0] - b.points[2][0]) <= 1]
             if along_x:
-                cut = min(along_x, key=lambda b: abs(b.points[1][1]))
-                self.polyline([(x, z) for x, _, z in cut.points], LO.LY_REBAR)
+                near = min(along_x, key=lambda b: abs(b.points[1][1] - yc))
+                self.polyline([(x, z) for x, _, z in near.points], LO.LY_REBAR)
             for b in along_y:
                 self.circle((b.points[1][0], b.points[1][2]), b.dia / 2, LO.LY_REBAR)
 
         # ستون: میلگردهای طولی دو وجه، خاموت‌ها و میل مهارها
-        for p in fm.pedestals:
+        for p in cut:
             verts = [b for b in fm.bars_by_mark("02")
-                     if abs(b.points[1][0] - p.x) <= p.size / 2]
+                     if abs(b.points[1][0] - p.x) <= p.size / 2
+                     and abs(b.points[1][1] - p.y) <= p.size / 2]
             xs = sorted({round(b.points[1][0], 3) for b in verts})
             for x in (xs[0], xs[-1]) if xs else ():
                 bar = next(b for b in verts if round(b.points[1][0], 3) == x)
                 self.polyline([(px, pz) for px, _, pz in bar.points], LO.LY_REBAR)
             for t in fm.bars_by_mark("05"):
-                if abs(t.points[0][0] + t.points[1][0] - 2 * p.x) < 1:
+                if (abs(t.points[0][0] + t.points[1][0] - 2 * p.x) < 1
+                        and abs(t.points[0][1] + t.points[2][1] - 2 * p.y) < 1):
                     self.line((t.points[0][0], t.points[0][2]), (t.points[1][0], t.points[1][2]),
                               LO.LY_REBAR)
-        for x in sorted({a.x for a in fm.anchors}):
-            a = next(a for a in fm.anchors if a.x == x)
+        cut_anchors = [a for a in fm.anchors if any(
+            abs(a.x - p.x) <= p.size / 2 and abs(a.y - p.y) <= p.size / 2 for p in cut)]
+        for x in sorted({a.x for a in cut_anchors}):
+            a = next(a for a in cut_anchors if a.x == x)
             self.line((a.x, a.z_bottom), (a.x, a.z_top), LO.LY_DETAIL)
 
         # برش B-B از میانه ستون‌ها
         zc = tf + fm.hp * 0.45
-        xl = min(p.x - p.size / 2 for p in fm.pedestals) - u(2)
-        xr = max(p.x + p.size / 2 for p in fm.pedestals) + u(2)
+        xl = min(p.x - p.size / 2 for p in cut) - u(2)
+        xr = max(p.x + p.size / 2 for p in cut) + u(2)
         self.line((xl, zc), (xr, zc), LO.LY_DIM)
         self.section_mark((xl - u(3.2), zc), "B")
         self.section_mark((xr + u(3.2), zc), "B")
 
         # برچسب‌ها
-        ped, pad = self.des["pedestal"], self.des["pad"]
+        p0, p1 = cut[0], cut[-1]
+        groups = self.des.get("groups") or [{"pedestal": self.des["pedestal"]}]
+        ped, pad = groups[min(p0.group, len(groups) - 1)]["pedestal"], self.des["pad"]
         r = self.cfg.rebar
-        p0, p1 = fm.pedestals[0], fm.pedestals[-1]
         core = p0.size / 2 - fm.cover
         self.leader((p0.x - core, gl - u(4)), (p0.x - p0.size / 2 - u(8), top + u(6)),
                     f"{ped.bar_count}%%C{ped.bar_dia}", -u(4))
@@ -428,7 +478,8 @@ class FoundationDrawing:
         r = self.cfg.rebar
         self.rect(-b / 2, -b / 2, b, b, LO.LY_CONCRETE)
         tie = next((t for t in fm.bars_by_mark("05")
-                    if abs(t.points[0][0] + t.points[1][0] - 2 * p.x) < 1), None)
+                    if abs(t.points[0][0] + t.points[1][0] - 2 * p.x) < 1
+                    and abs(t.points[0][1] + t.points[2][1] - 2 * p.y) < 1), None)
         if tie:
             self.polyline([(x - p.x, y - p.y) for x, y, _ in tie.points], LO.LY_REBAR, close=True)
         for bar in fm.bars_by_mark("02"):
@@ -436,7 +487,7 @@ class FoundationDrawing:
             if abs(x) <= b / 2 and abs(y) <= b / 2:
                 self.circle((x, y), bar.dia / 2, LO.LY_REBAR)
         for a in fm.anchors:
-            if abs(a.x - p.x) <= b / 2:
+            if abs(a.x - p.x) <= b / 2 and abs(a.y - p.y) <= b / 2:
                 self.circle((a.x - p.x, a.y - p.y), a.dia / 2, LO.LY_DETAIL)
 
         core = b / 2 - fm.cover
@@ -765,7 +816,7 @@ class FoundationDrawing:
     # ================================================== ساخت نقشه
     def build(self, res, eq, soil, qty, bbs, seismic, des):
         self.des, self.eq = des, eq
-        self.fm = M.build(res, eq, des, self.cfg)
+        self.fm = M.build(res, getattr(res, "layout", eq), des, self.cfg)
         origins = self._layout()
         self.insert_frame()
         self._draw_at("plan", self._plan, origins["plan"])

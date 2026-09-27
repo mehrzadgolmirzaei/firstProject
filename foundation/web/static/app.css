@@ -202,3 +202,4 @@ small.case{color:var(--ink-2);font-weight:400;font-size:11px}
 /* ------------------------------------------------------------ توضیح زیر فیلدها */
 .f small.hint{display:block;margin-top:3px;font-size:11px;line-height:1.6;color:var(--ink-2)}
 .f input[readonly]{background:var(--rule-soft);color:var(--steel);font-weight:600}
+.check-inline{display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0 8px;cursor:pointer}

@@ -43,6 +43,8 @@ class Pedestal:
     x: float
     y: float
     size: float               # ضلع مقطع مربعی
+    group: int = 0            # شماره گروه تجهیز روی پی
+    tag: str = ""             # برچسب تجهیز همان گروه
 
 
 @dataclass
@@ -88,7 +90,7 @@ def _grid(length, cover, spacing):
     return out
 
 
-def pedestal_spacing(eq, B):
+def pedestal_spacing(eq, B):  # noqa: D401 — سازگاری با کد قدیمی
     """
     فاصله محور تا محور ستون‌ها (m). برای تجهیز دوستونه باید از نقشه سازه وارد
     شود؛ اگر نشده (فقط کاتالوگ قدیمی خط فرمان)، نصف عرض پی فرض می‌شود.
@@ -112,7 +114,20 @@ def pedestal_bar_positions(core, count):
     return pts
 
 
-def build(res, eq, des, cfg) -> FoundationModel:
+def _grid_n(length, cover, db, n):
+    """n میلگرد با فاصله مساوی از پوشش تا پوشش (مرکز میلگرد در cover + d/2)."""
+    first, last = -length / 2 + cover + db / 2, length / 2 - cover - db / 2
+    if n <= 1:
+        return [0.0]
+    step = (last - first) / (n - 1)
+    return [first + i * step for i in range(n)]
+
+
+def build(res, layout, des, cfg) -> FoundationModel:
+    from padlayout import PadLayout
+    from equipment import Equipment
+    if isinstance(layout, Equipment):
+        layout = PadLayout.single(layout)
     g = res.geometry
     m = cfg.materials
     r = cfg.rebar
@@ -121,50 +136,54 @@ def build(res, eq, des, cfg) -> FoundationModel:
     fm = FoundationModel(L=L, B=B, tf=tf, hp=hp, b=b, cover=cov, lean=float(m.lean),
                          lean_margin=100.0, soil_cover=cfg.soil.soil_cover * 1000)
 
-    # --- ستون‌ها
-    n = eq.n_pedestal
-    sp = pedestal_spacing(eq, g.B) * 1000
-    xs = [0.0] if n == 1 else [-sp / 2, sp / 2]
-    fm.pedestals = [Pedestal(x, 0.0, b) for x in xs]
+    # --- ستون‌ها، از چیدمان (هر ستون می‌داند مال کدام گروه است)
+    fm.pedestals = [Pedestal(x * 1000, y * 1000, b, i, layout.groups[i].eq.tag)
+                    for x, y, i in layout.positions(g.B)]
+    owner = [i for _, _, i in layout.positions(g.B)]
+    groups = des.get("groups") or [{"pedestal": des["pedestal"], "anchor": des["anchor"]}]
 
-    # --- شبکه پی: دو لایه، هر لایه دو جهت، با قلاب ۱۰d در دو سر
+    # --- شبکه پی: دو لایه، هر لایه دو جهت؛ تعداد هر جهت از طراحی پی.
+    # قلاب دو سر تا لایه مقابل (ضخامت پی − ۲ پوشش) مثل نقشه‌های دفتر.
     pad = des["pad"]
     s = pad.spacing
     fm.pad_spacing = s
     d = pad.bar_dia
-    hook = 10 * d
+    n_L = getattr(pad, "n_L", None) or len(_grid(L, cov, s))
+    n_B = getattr(pad, "n_B", None) or len(_grid(B, cov, s))
+    hook = r.pad_hook or (tf - 2 * cov - 2 * d)
     z_bot = cov + d / 2
     z_top = tf - cov - d / 2
-    for layer, (mark_x, z1, z2, up) in {
-            "bottom": ("01", z_bot, z_bot + d, 1), "top": ("03", z_top, z_top - d, -1)}.items():
-        for y in _grid(B, cov, s):                       # میلگردهای راستای x
+    xs_L = _grid_n(L, cov, d, n_L)                       # محل میلگردهای راستای y
+    ys_B = _grid_n(B, cov, d, n_B)                       # محل میلگردهای راستای x
+    for mark, z1, z2, up in (("01", z_bot, z_bot + d, 1), ("03", z_top, z_top - d, -1)):
+        for y in ys_B:
             x0, x1 = -L / 2 + cov, L / 2 - cov
-            fm.bars.append(Bar(mark_x, d, [(x0, y, z1 + up * hook), (x0, y, z1),
-                                           (x1, y, z1), (x1, y, z1 + up * hook)]))
-        for x in _grid(L, cov, s):                       # میلگردهای راستای y
+            fm.bars.append(Bar(mark, d, [(x0, y, z1 + up * hook), (x0, y, z1),
+                                         (x1, y, z1), (x1, y, z1 + up * hook)]))
+        for x in xs_L:
             y0, y1 = -B / 2 + cov, B / 2 - cov
-            fm.bars.append(Bar(mark_x, d, [(x, y0, z2 + up * hook), (x, y0, z2),
-                                           (x, y1, z2), (x, y1, z2 + up * hook)]))
+            fm.bars.append(Bar(mark, d, [(x, y0, z2 + up * hook), (x, y0, z2),
+                                         (x, y1, z2), (x, y1, z2 + up * hook)]))
 
-    # --- ستون: میلگرد طولی با قلاب ۱۵d در کف پی، و خاموت
-    ped = des["pedestal"]
+    # --- ستون: میلگرد طولی با قلاب ۱۵d در کف پی، و خاموت؛ هر ستون با طراحی گروه خودش
     core = b - 2 * cov
-    for p in fm.pedestals:
+    for p, gi in zip(fm.pedestals, owner):
+        ped = groups[gi]["pedestal"]
         for dx, dy in pedestal_bar_positions(core, ped.bar_count):
             x, y = p.x + dx, p.y + dy
             z0, z1 = z_bot + d, tf + hp - cov
             # قلاب ۱۵d رو به بیرون مقطع؛ اگر از لبه پی بیرون بزند، رو به داخل
-            hook = 15 * ped.bar_dia
+            hk = 15 * ped.bar_dia
             if abs(dx) >= abs(dy):
                 sx = 1 if dx > 0 else -1
-                if abs(x + sx * hook) > L / 2 - cov:
+                if abs(x + sx * hk) > L / 2 - cov:
                     sx = -sx
-                hx, hy = sx * hook, 0.0
+                hx, hy = sx * hk, 0.0
             else:
                 sy = 1 if dy > 0 else -1
-                if abs(y + sy * hook) > B / 2 - cov:
+                if abs(y + sy * hk) > B / 2 - cov:
                     sy = -sy
-                hx, hy = 0.0, sy * hook
+                hx, hy = 0.0, sy * hk
             fm.bars.append(Bar("02", ped.bar_dia, [(x + hx, y + hy, z0), (x, y, z0), (x, y, z1)]))
         z = tf + TIE_START
         while z <= tf + hp - TIE_START + 1e-6:
@@ -175,22 +194,24 @@ def build(res, eq, des, cfg) -> FoundationModel:
             z += r.tie_spacing
 
     # --- خرک بین دو لایه، یکی روی هر میلگرد راستای y
-    for x in _grid(L, cov, s):
+    for x in xs_L:
         fm.bars.append(Bar("04", r.standee_dia, [(x, -100, z_bot + d), (x, -100, z_top - d),
                                                  (x, 100, z_top - d), (x, 100, z_bot + d)]))
 
-    # --- میل مهار: طول مدفون از طراحی (design.design_anchor)، نه ورودی
+    # --- میل مهار: طول مدفون از طراحی هر گروه، نه ورودی
     an = cfg.anchorage
     fm.grout, fm.plate_t, fm.anchor_projection = an.grout, an.plate_thickness, an.projection
     fm.anchor_hook = an.hook
-    fm.base_plate = float(eq.base_plate or 0)
-    fm.anchor_embed = des["anchor"].embed if "anchor" in des else 600.0
-    gge = eq.anchor_gauge
-    for p in fm.pedestals:
+    fm.base_plate = float(layout.main.base_plate or 0)
+    fm.anchor_embed = max(x["anchor"].embed for x in groups)
+    for p, gi in zip(fm.pedestals, owner):
+        eq = layout.groups[gi].eq
+        emb = groups[gi]["anchor"].embed
+        gge = eq.anchor_gauge
         for sx in (-1, 1):
             for sy in (-1, 1):
                 fm.anchors.append(Anchor(p.x + sx * gge / 2, p.y + sy * gge / 2, eq.anchor_dia,
-                                         fm.top - fm.anchor_embed, fm.top + an.projection))
+                                         fm.top - emb, fm.top + an.projection))
     return fm
 
 

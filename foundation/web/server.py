@@ -17,10 +17,11 @@ import database as db
 import auth
 import codeprofiles as cp
 import settings as st
-from calc_service import build_equipment, run, to_dict
+from calc_service import (build_equipment, run_layout, to_dict, layout_from_spec,
+                          layout_problems, ALL_EQUIPMENT, FOUNDATION_PRESETS)
 from config import ProjectConfig
 from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED, WHY
-from equipment import CATALOG
+from equipment import CATALOG, CATALOG_KIMIA63
 from seismic import FS_TABLE
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
@@ -106,11 +107,21 @@ def calculate():
                     " LEFT JOIN projects p ON p.id=s.project_id ORDER BY s.code")
     return render_template("calculate.html",
                            catalog=[dict(r) for r in cat],
-                           builtin={k: asdict(v) for k, v in CATALOG.items()},
+                           builtin={k: asdict(v) for k, v in ALL_EQUIPMENT.items()},
+                           builtin_groups=[("کامی‌آباد — ۲۳۰/۴۰۰", list(CATALOG)),
+                                           ("کیمیا — ۶۳", list(CATALOG_KIMIA63))],
+                           foundation_presets=FOUNDATION_PRESETS,
                            substations=[dict(r) for r in subs],
                            profiles=cp.listing(),
-                           defaults=asdict(ProjectConfig()),
+                           defaults=asdict(_office_config()),
                            options=design_options())
+
+
+def _office_config():
+    """پیش‌فرض‌ها + تنظیمات دفتر (مثلاً قطر آرماتور)، برای مقدار اولیه فرم."""
+    cfg = ProjectConfig()
+    st.apply_to(cfg, st.load(), parts=st.ENGINEERING_PARTS)
+    return cfg
 
 
 def design_options():
@@ -152,7 +163,7 @@ def config_from_form(form) -> ProjectConfig:
     for group, keys in (("materials", ("fc", "fy", "cover", "lean")),
                         ("soil", ("q_base", "q_factor")),
                         ("wind", ("v_normal", "v_high")),
-                        ("foundation", ("hp", "b", "tf", "min_projection")),
+                        ("foundation", ("hp", "b", "tf", "min_projection", "L", "B")),
                         ("rebar", ("pad_dia", "col_dia", "tie_dia", "tie_spacing"))):
         target = getattr(cfg, group)
         for key in keys:
@@ -196,29 +207,32 @@ def api_calculate():
     except (TypeError, ValueError) as exc:
         return jsonify({"error": f"ورودی نامعتبر است: {exc}"}), 400
 
-    # دو ستون: فاصله محور ستون‌ها باید معلوم باشد و ستون‌ها روی هم نیفتند
-    if eq.n_pedestal not in (1, 2):
-        return jsonify({"error": "تعداد ستون باید ۱ یا ۲ باشد."}), 400
-    if eq.n_pedestal == 2:
-        b = cfg.foundation.b
-        if not eq.pedestal_spacing:
-            return jsonify({"error": "برای دو ستون، «فاصله محور تا محور ستون‌ها» را از نقشه "
-                                     "سازه وارد کنید."}), 400
-        if eq.pedestal_spacing < b + 0.10:
-            return jsonify({"error": f"فاصله محور ستون‌ها ({eq.pedestal_spacing:.2f} m) باید "
-                                     f"دست‌کم عرض ستون + ۱۰ سانت ({b + 0.10:.2f} m) باشد، "
-                                     "وگرنه دو ستون روی هم می‌افتند."}), 400
+    # چیدمان پی: منفرد مربعی (۲۳۰/۴۰۰) یا مشترک مستطیلی با یک یا دو گروه تجهیز (۶۳)
+    try:
+        layout, layout_spec = layout_from_spec(form.get("layout"), eq)
+    except (TypeError, ValueError, KeyError) as exc:
+        return jsonify({"error": f"چیدمان پی نامعتبر است: {exc}"}), 400
+    f = cfg.foundation
+    if bool(f.L) != bool(f.B):
+        return jsonify({"error": "برای کنترل یک پی معلوم، هر دو ضلع L و B را وارد کنید؛ "
+                                 "یا هر دو را خالی بگذارید تا سامانه ابعاد را پیدا کند."}), 400
+    if layout.square and f.L and abs(f.L - f.B) > 1e-9:
+        return jsonify({"error": "پی منفرد مربعی است؛ L و B باید برابر باشند. برای پی "
+                                 "مستطیلی نوع پی را «مشترک» انتخاب کنید."}), 400
+    problems = layout_problems(layout, f.b, f.L, f.B)
+    if problems:
+        return jsonify({"error": " ".join(problems)}), 400
 
     # تجهیزاتی که سازه‌شان را سازنده می‌دهد: تا اعداد اوت‌لاین وارد نشود،
     # محاسبه اجرا نمی‌شود تا کسی سهواً با عدد نمونه نقشه نگیرد.
-    base = CATALOG.get(eq.tag)
+    base = ALL_EQUIPMENT.get(eq.tag)
     missing = []
     if base and base.requires_outline:
         raw = form.get("equipment") or {}
         LABELS = {"He": "ارتفاع تجهیز", "he": "مرکز ثقل تجهیز", "Ae": "سطح دید تجهیز",
                   "We": "وزن تجهیز", "Hs": "ارتفاع استراکچر", "As": "سطح دید استراکچر",
                   "Ws": "وزن استراکچر", "anchor_gauge": "گِیج میل مهار",
-                  "base_plate": "ضلع صفحه کف", "conductor_points": "نقاط اتصال هادی",
+                  "base_plate": "ضلع صفحه کف", "conductor_points": "ارتفاع اتصال هادی",
                   "op_vertical": "بار قائم مانور", "op_horizontal": "بار افقی مانور"}
         for key in base.requires_outline:
             val = raw.get(key)
@@ -228,7 +242,7 @@ def api_calculate():
         return jsonify({"error": "این تجهیز سازه‌اش را سازنده می‌دهد؛ این مقادیر باید از "
                                  "اوت‌لاین سازنده وارد شوند: " + "، ".join(missing)}), 400
 
-    res, seis, des, qty, bbs = run(eq, cfg)
+    res, seis, des, qty, bbs = run_layout(layout, cfg)
     if res is None:
         return jsonify({"error": "تا حد جست‌وجو ابعادی پیدا نشد که همه کنترل‌ها را پاس کند."}), 200
 
@@ -239,7 +253,8 @@ def api_calculate():
         " VALUES (?,?,?,?,?,?,?,?,?)",
         (form.get("project_id") or None, form.get("substation_id") or None,
          eq.tag, _profile_for(form, cfg.seismic.edition),
-         json.dumps({"equipment": asdict(eq), "config": asdict(cfg)}, ensure_ascii=False),
+         json.dumps({"equipment": asdict(eq), "config": asdict(cfg), "layout": layout_spec},
+                    ensure_ascii=False),
          json.dumps(payload, ensure_ascii=False),
          "ok" if payload["ok"] else "ng",
          auth.current_user()["id"], db.now()))
@@ -328,7 +343,8 @@ def api_drawing(cid):
         cfg.drawing.notes_file = str(notes_file)
 
     eq = build_equipment(saved["equipment"])
-    res, seis, des, qty, bbs = run(eq, cfg)
+    layout, _ = layout_from_spec(saved.get("layout"), eq)
+    res, seis, des, qty, bbs = run_layout(layout, cfg)
     if res is None or not _same_result(json.loads(row["results"]),
                                        to_dict(res, seis, des, qty, bbs, eq, cfg)):
         return jsonify({"error": "بازتولید محاسبه از اسنپ‌شات با نتیجه ذخیره‌شده نخواند؛ "

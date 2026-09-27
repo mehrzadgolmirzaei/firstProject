@@ -9,6 +9,7 @@
 
 واحدها: kg و m ، تنش خاک kg/cm².
 """
+import math
 from dataclasses import dataclass, field
 from equipment import Equipment
 
@@ -38,6 +39,7 @@ class SoilAndMaterials:
     lean: int = 100            # ضخامت بتن مگر (mm)
     sf_overturn: float = 1.75
     sf_sliding: float = 1.20
+    shear_offset: float = 60.0  # d = t_f − این مقدار در کنترل برش (mm) — دفترچه ۶۳: ۴۰−۶=۳۴
 
     @property
     def q_all(self) -> float:
@@ -194,12 +196,20 @@ def _bearing(w, mo, geo):
     return q, ecc, triangular
 
 
-def _checks_for(g: CaseForces, eq, geo, soil, bearing):
-    """چهار کنترل برای یک حالت بار."""
-    u = CaseForces(g.no, g.name, g.Fe, g.Fs,
-                   g.Nmax * g.factor, g.Nmin * g.factor,
-                   g.V * g.factor, g.M * g.factor, g.factor)
-    n = eq.n_pedestal
+def _ultimate(c: CaseForces) -> CaseForces:
+    return CaseForces(c.no, c.name, c.Fe, c.Fs, c.Nmax * c.factor, c.Nmin * c.factor,
+                      c.V * c.factor, c.M * c.factor, c.factor)
+
+
+def _sum(forces, no, name) -> CaseForces:
+    """جمع نیروهای چند گروه تجهیز روی یک پی."""
+    return CaseForces(no, name, sum(c.Fe for c in forces), sum(c.Fs for c in forces),
+                      sum(c.Nmax for c in forces), sum(c.Nmin for c in forces),
+                      sum(c.V for c in forces), sum(c.M for c in forces), forces[0].factor)
+
+
+def _checks_for(g: CaseForces, u: CaseForces, n: int, geo, soil, bearing):
+    """چهار کنترل برای یک حالت بار (g سرویس، u نهایی، n تعداد کل ستون‌ها)."""
     A = geo.L * geo.B
     f = lambda v, d=2: f"{v:.{d}f}"
     case_step = ("حالت بار", f"#{g.no}", g.name)
@@ -283,7 +293,7 @@ def _checks_for(g: CaseForces, eq, geo, soil, bearing):
     ]))
     for c in checks:
         c.case = g.no
-    return checks, u, w_c, w_s, w_t, ecc
+    return checks, u, w_c, w_s, w_t, ecc, mo
 
 
 def _utilisation(c: Check) -> float:
@@ -293,27 +303,70 @@ def _utilisation(c: Check) -> float:
     return c.value / c.limit if c.limit else float("inf")
 
 
-def analyse(eq: Equipment, geo: Geometry, soil: SoilAndMaterials,
+def _as_layout(obj):
+    from padlayout import PadLayout
+    return PadLayout.single(obj) if isinstance(obj, Equipment) else obj
+
+
+def _pick(cases, mode):
+    mode = str(mode)
+    if mode.isdigit():
+        return next(c for c in cases if c.no == int(mode))
+    return max(cases, key=lambda c: c.Nmax + c.V + c.M)
+
+
+def analyse(layout, geo: Geometry, soil: SoilAndMaterials,
             wind: WindParams, ch: float, cv: float,
             governing="notebook", bearing="min") -> Result:
-    cases = [case_forces(lc, eq) for lc in build_cases(eq, wind, ch, cv)]
+    """
+    کنترل‌های پایداری برای یک پی با یک یا چند گروه تجهیز.
+
+    هر گروه پنج حالت بار خودش را دارد. برای پی ترکیبی، نیروهای حاکم گروه‌ها با هم
+    جمع می‌شوند (مثل دفترچه ۶۳: V_LA + V_CVT و M_LA + M_CVT). در «پوش همه حالات»
+    حالت j همه گروه‌ها با هم جمع و هر پنج ترکیب کنترل می‌شود. حالت دستی یک گروه
+    (Group.case) بر گزینه کلی مقدم است.
+    """
+    layout = _as_layout(layout)
     governing = str(governing)
+    per_group = [[case_forces(lc, g.eq) for lc in build_cases(g.eq, wind, ch, cv)]
+                 for g in layout.groups]
+
     if governing == "envelope":
-        candidates = cases
-    elif governing.isdigit():
-        candidates = [next(c for c in cases if c.no == int(governing))]
+        candidates = [[(_pick(cs, grp.case) if grp.case else cs[j])
+                       for grp, cs in zip(layout.groups, per_group)] for j in range(5)]
     else:
-        candidates = [max(cases, key=lambda c: c.Nmax + c.V + c.M)]
+        candidates = [[_pick(cs, grp.case or governing)
+                       for grp, cs in zip(layout.groups, per_group)]]
 
-    evaluated = [(_with_operation(c, eq), *_checks_for(_with_operation(c, eq), eq, geo, soil,
-                                                      bearing)) for c in candidates]
-    # هر کنترل با بحرانی‌ترین حالت خودش
-    checks = [max((e[1][i] for e in evaluated), key=_utilisation) for i in range(4)]
-    # طراحی مقطع با حالتی که بیشترین بلندشدگی (بیشترین خروج از مرکزیت نهایی) را دارد
-    g, _, u, w_c, w_s, w_t, ecc = max(evaluated, key=lambda e: _utilisation(e[1][2]))
+    n = layout.n_ped
+    single = len(layout.groups) == 1
+    evaluated = []
+    for picks in candidates:
+        gs = [_with_operation(c, grp.eq) for c, grp in zip(picks, layout.groups)]
+        us = [_ultimate(c) for c in gs]
+        if single:
+            G, U = gs[0], us[0]
+        else:
+            name = " + ".join(f"{grp.eq.tag} #{c.no}" for c, grp in zip(picks, layout.groups))
+            G, U = _sum(gs, picks[0].no, name), _sum(us, picks[0].no, name)
+        checks, _, w_c, w_s, w_t, ecc, mo = _checks_for(G, U, n, geo, soil, bearing)
+        evaluated.append((G, U, checks, w_c, w_s, w_t, ecc, mo, list(zip(gs, us))))
 
-    r = Result(geo, cases, g, u, w_c, w_s, w_t, ecc, checks)
-    r._n = eq.n_pedestal
+    # هر کنترل با بحرانی‌ترین ترکیب خودش
+    checks = [max((e[2][i] for e in evaluated), key=_utilisation) for i in range(4)]
+    # طراحی مقطع با ترکیبی که بیشترین بلندشدگی (خروج از مرکزیت نهایی) را دارد
+    G, U, _, w_c, w_s, w_t, ecc, mo, group_forces = max(evaluated,
+                                                        key=lambda e: _utilisation(e[2][2]))
+    if single:
+        cases = per_group[0]
+    else:
+        cases = [_sum([cs[j] for cs in per_group], j + 1, per_group[0][j].name) for j in range(5)]
+
+    r = Result(geo, cases, G, U, w_c, w_s, w_t, ecc, checks)
+    r._n = n
+    r.overturning_moment = mo
+    r.group_forces = group_forces          # [(سرویس، نهایی)] هر گروه برای طراحی ستون و میل مهار
+    r.layout = layout
     r.options = {"governing": governing, "bearing": bearing}
     return r
 
@@ -325,31 +378,64 @@ def pedestal_fit(eq: Equipment, b: float, min_projection: float) -> float:
     return eq.pedestal_spacing + b + 2 * min_projection
 
 
-def find_dimensions(eq: Equipment, soil: SoilAndMaterials, wind: WindParams,
+def _ceil_step(v, step):
+    return round(math.ceil(round(v / step, 6)) * step, 3)
+
+
+def find_dimensions(layout, soil: SoilAndMaterials, wind: WindParams,
                     ch: float, cv: float, hp=1.0, b=0.8, tf=0.4,
                     lo=1.0, hi=5.0, step=0.1, governing="notebook", bearing="min",
-                    min_projection=0.10):
+                    min_projection=0.10, L=0.0, B=0.0):
     """
-    کوچک‌ترین پی مربعی که هر چهار کنترل را پاس کند و ستون‌ها را کامل در خود
-    جا دهد: ضلع ≥ فاصله محور ستون‌ها + عرض ستون + ۲ × حداقل بیرون‌زدگی.
+    ابعاد پی.
+
+    حالت کنترل (L و B هر دو داده شده): فقط همان پی کنترل می‌شود — مثل دفترچه ۶۳
+    که ابعاد را مهندس انتخاب کرده. نتیجه حتی اگر مردود باشد برگردانده می‌شود.
+
+    حالت طراحی:
+      پی منفرد  — کوچک‌ترین پی مربعی که هر چهار کنترل را پاس کند.
+      پی مشترک  — L از چیدمان ستون‌ها (+ بیرون‌زدگی دو طرف) یا مقدار داده‌شده؛
+                  B از کوچک‌ترین مقدار ممکن آن‌قدر بزرگ می‌شود که کنترل‌ها پاس شوند.
     """
-    if eq.n_pedestal > 1 and eq.pedestal_spacing:
-        lo = max(lo, pedestal_fit(eq, b, min_projection))
+    layout = _as_layout(layout)
+    args = (soil, wind, ch, cv, governing, bearing)
+
+    def check(Lx, By):
+        return analyse(layout, Geometry(Lx, By, hp, b, tf), soil, wind, ch, cv,
+                       governing, bearing)
+
+    if L and B:
+        return check(L, B)
+
+    if layout.rectangular:
+        fx, fy = layout.footprint(b)
+        Lx = L or _ceil_step(max(lo, fx + 2 * min_projection), step)
+        By = _ceil_step(max(lo, fy + 2 * min_projection), step)
+        if B:
+            return check(Lx, B)
+        while By <= hi + 1e-9:
+            res = check(Lx, By)
+            if res.ok:
+                return res
+            By = round(By + step, 3)
+        return None
+
+    if any(g.positions is not None and g.n > 1 for g in layout.groups):
+        lo = max(lo, max(layout.footprint(b)) + 2 * min_projection)
     i = 0
     while True:
         side = round(lo + i * step, 2)
         if side > hi:
             return None
-        res = analyse(eq, Geometry(side, side, hp, b, tf), soil, wind, ch, cv,
-                      governing, bearing)
+        res = check(side, side)
         if res.ok:
             return res
         i += 1
 
 
-def quantities(res: Result, eq: Equipment, soil: SoilAndMaterials) -> dict:
+def quantities(res: Result, eq, soil: SoilAndMaterials) -> dict:
     """متره — با اعداد نقشه ۰۶-۴LA_C تطبیق داده شده (۲٫۲۴ و ۰٫۴۸۴ متر مکعب)."""
-    g, n = res.geometry, eq.n_pedestal
+    g, n = res.geometry, res._n
     lean = soil.lean / 1000
     return {
         "concrete": g.L * g.B * g.tf + n * g.hp * g.b ** 2,

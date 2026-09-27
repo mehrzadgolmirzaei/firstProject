@@ -158,7 +158,7 @@ def main():
     print(f"   بتن {qty['concrete']:.2f} m3 | مگر {qty['lean']:.3f} m3 | "
           f"آرماتور {qty['rebar']:.0f} kg")
     import model
-    for c in model.clashes(model.build(res, eq, des, cfg)):
+    for c in model.clashes(model.build(res, getattr(res, "layout", eq), des, cfg)):
         print(f"   ⚠ تداخل: {c}")
     print(f"گزارش: {rpt}")
 

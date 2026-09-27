@@ -11,8 +11,8 @@
              (بند جایگزین ۴/۳ برابر آرماتور لازم — همان قاعده‌ای که دفترچه
               کامی‌آباد به کار برده و به Ф۱۴@۲۰۰ برای پی می‌رسد)
              ρ_b = 0.85·β₁·f'c/f_y · 6120/(6120 + f_y)
-    پانچ     b₀ = 4·(b + d)      φV_c = φ·1.06·√f'c·b₀·d
-    یک‌طرفه  φV_c = φ·0.53·√f'c·b_w·d
+    پانچ و یک‌طرفه: نشریه ۵۰۷ (روش دفترچه ۶۳ کیمیا)
+    ستون و میل مهار: روش دفترچه ۶۳ کیمیا (VP-63POST-CAL-0004)
 """
 import math
 from dataclasses import dataclass, field
@@ -68,35 +68,65 @@ class SectionDesign:
     steps: list = field(default_factory=list)
 
 
-def design_pedestal(nu, vu, mu_top, geo, mat, n_ped, bar_dia=18, min_bars=8):
+def design_pedestal(nu, vu, mu_top, geo, mat, n_ped, bar_dia=18, min_bars=8,
+                    min_ratio_g=0.005, tie_dia=10, tie_spacing=150):
     """
-    ستون به صورت عضو خمشی طراحی می‌شود (همان روش دفترچه کامی‌آباد).
-    لنگر پای ستون = لنگر بالای پی + برش × ارتفاع ستون، تقسیم بر تعداد ستون.
+    ستون بتنی به روش دفترچه ۶۳ (صفحه ۱۲):
+        M_u1 = (V_u·h_p + M_u) / n_p
+        d = b − پوشش − d_خاموت − ½·d_طولی
+        آرماتور یک وجه ≥ ρ·b·d   و   آرماتور کل ≥ ρg,min·b·h (۰٫۵٪)
+        تعداد مضرب ۴؛ خاموت: (A_v/s)min = 3.5·b_w/f_y ، s_max = 0.5·d
     """
     b = geo.b * 100
-    d = b - mat.cover / 10 - 2.5
+    h = b
+    d = b - mat.cover / 10 - tie_dia / 10 - 0.5 * bar_dia / 10
     mu = (mu_top + vu * geo.hp) / n_ped * 100          # kg·cm
     rho, rn = rho_required(mu, b, d, mat.fc, mat.fy)
     rmin = min_ratio(rho, mat.fy)
     rmax = 0.75 * rho_balanced(mat.fc, mat.fy)
     ok = rho is not None and rho <= rmax
     rho_used = max(rho or 0, rmin)
-    as_req = rho_used * b * d
-    count = max(min_bars, math.ceil(as_req / BAR_AREA[bar_dia] / 4) * 4)   # مضرب ۴
+    a_bar = BAR_AREA[bar_dia]
+    as_face_req = rho_used * b * d
+    as_g_req = min_ratio_g * b * h
+    count = max(min_bars, 4)
+    count = math.ceil(count / 4) * 4
+    while count * a_bar < as_g_req or (count / 4 + 1) * a_bar < as_face_req:
+        count += 4
+    as_face = (count / 4 + 1) * a_bar
+    as_tot = count * a_bar
+    per_side = count / 4 + 1
+    s_ext = (h - 2 * (mat.cover / 10 + tie_dia / 10) - bar_dia / 10) / (per_side - 1) - bar_dia / 10
+    s_min = max(1.5 * bar_dia / 10, 4.0)
+    av = 2 * BAR_AREA[tie_dia]
+    s_req = av / (3.5 * b / mat.fy)
+    s_max = 0.5 * d
+    ties_ok = tie_spacing / 10 <= min(s_req, s_max)
+    ok = ok and s_ext >= s_min and ties_ok
+    note = ""
+    if not ok:
+        note = ("فاصله خاموت بیشتر از مجاز است" if not ties_ok else
+                "مقطع ستون برای لنگر یا جای میلگردها کافی نیست — b را بزرگ کنید")
     return SectionDesign(
-        "آرماتور ستون", mu, b, d, rho_used, rmin, rmax, as_req, bar_dia,
-        bar_count=count, ok=ok,
-        note="" if ok else "مقطع ستون برای لنگر کافی نیست — b یا h_p را بزرگ کنید",
+        "آرماتور ستون", mu, b, d, rho_used, rmin, rmax, as_face_req, bar_dia,
+        bar_count=count, ok=ok, note=note,
         steps=[
-            ("لنگر پای ستون", "M_u = (M_u,top + V_u·h_p) / n",
-             f"({mu_top:.0f} + {vu:.0f}×{geo.hp:.2f}) / {n_ped} = {mu/100:.0f} kg·m"),
-            ("عمق مؤثر", "d = b − پوشش − ۲٫۵", f"{b:.0f} − {mat.cover/10:.1f} − 2.5 = {d:.1f} cm"),
-            ("Rn", "R_n = M_u / (φ·b·d²)", f"{rn:.2f} kg/cm²"),
-            ("نسبت آرماتور", "ρ = 0.85f'c/fy·(1−√(1−2Rn/0.85f'c))",
+            ("لنگر پای هر ستون", "M_u1 = (V_u·h_p + M_u) / n_p",
+             f"({vu:.0f}×{geo.hp:.2f} + {mu_top:.0f}) / {n_ped} = {mu/100:.0f} kg·m"),
+            ("عمق مؤثر", "d = b − پوشش − d_st − 0.5·d_ax",
+             f"{b:.0f} − {mat.cover/10:.1f} − {tie_dia/10:.1f} − {0.5*bar_dia/10:.1f} = {d:.1f} cm"),
+            ("Rn", "R_n = M_u1 / (φ·b·d²)", f"{rn:.4f} kg/cm²"),
+            ("نسبت آرماتور", "ρ_reqd = 0.85f'c/fy·(1−√(1−2Rn/0.85f'c))  ،  ρ_min",
              f"ρ = {rho if rho else 0:.5f}  |  ρ_min = {rmin:.5f}  |  ρ_max = {rmax:.5f}"),
-            ("سطح مقطع لازم", "A_s = ρ·b·d", f"{rho_used:.5f}×{b:.0f}×{d:.1f} = {as_req:.1f} cm²"),
-            ("انتخاب", f"{count} میلگرد Ф{bar_dia}",
-             f"{count}×{BAR_AREA[bar_dia]} = {count*BAR_AREA[bar_dia]:.1f} cm² ≥ {as_req:.1f}"),
+            ("آرماتور یک وجه", "A_s,face = (n/4 + 1)·A_b ≥ ρ·b·d",
+             f"{as_face:.2f} ≥ {as_face_req:.2f} cm²"),
+            ("آرماتور کل", f"ρg = A_st/(b·h) ≥ {min_ratio_g}",
+             f"{as_tot:.2f}/({b:.0f}×{h:.0f}) = {as_tot/(b*h):.5f}"),
+            ("فاصله میلگردها", "S_ext ≥ S_min = max(1.5d_b, 4 cm)", f"{s_ext:.1f} ≥ {s_min:.1f} cm"),
+            ("خاموت", "(A_v/s)min = 3.5·b_w/f_y  ،  s_max = 0.5·d",
+             f"Ф{tie_dia}@{tie_spacing:.0f} ≤ min({s_req:.1f} , {s_max:.1f}) cm"),
+            ("انتخاب", f"{count}Ф{bar_dia}  ،  Ф{tie_dia}@{tie_spacing:.0f}",
+             f"{count}×{a_bar} = {as_tot:.2f} cm²"),
         ])
 
 
@@ -124,10 +154,21 @@ def ultimate_pressure(res, geo, mat, n_ped):
                 L=L, B=B, tf=tf, b=b, triangular=e > B / 6)
 
 
-def design_pad(res, geo, mat, n_ped, bar_dia=14):
+def bar_count(width_cm, cover_cm, db_cm, smax_cm, rule="ceil"):
     """
-    خمش پی در مقطع بر وجه ستون، با توزیع تنش نهایی خاک.
-    q_u از بار نهایی و سطح پی گرفته می‌شود (توزیع یکنواخت معادل، سمت اطمینان).
+    تعداد میلگرد در یک عرض.
+    ceil  (دفترچه ۶۳): n = ⌈(W − 2c − d_b)/s_max⌉ + 1 — فاصله واقعی هرگز از s_max بیشتر نمی‌شود
+    floor (نقشه کامی‌آباد): n = ⌊(W − 2c)/s_max⌋ + 1
+    """
+    if rule == "floor":
+        return int((width_cm - 2 * cover_cm) // smax_cm) + 1
+    return math.ceil(round((width_cm - 2 * cover_cm - db_cm) / smax_cm, 6)) + 1
+
+
+def design_pad(res, geo, mat, n_ped, bar_dia=14, smax=200.0, rule="ceil"):
+    """
+    خمش پی در مقطع بر وجه ستون (مقطع A-A دفترچه)، با توزیع تنش نهایی خاک.
+    شبکه در هر دو جهت، رو و زیر؛ تعداد میلگرد هر جهت از عرض همان جهت.
     """
     P = ultimate_pressure(res, geo, mat, n_ped)
     L, B, tf, b, c = P["L"], P["B"], P["tf"], P["b"], P["c"]
@@ -140,75 +181,112 @@ def design_pad(res, geo, mat, n_ped, bar_dia=14):
     ok = rho is not None and rho <= rmax
     rho_used = max(rho or 0, rmin)
     as_req = rho_used * L * d
-    n_bar = max(2, math.ceil(as_req / BAR_AREA[bar_dia]))
-    width = (L - 2 * mat.cover / 10) * 10                 # عرض قابل استفاده، mm
-    smax = min(3 * tf * 10, 450.0)                        # حداکثر فاصله مجاز
-    spacing = width / (n_bar - 1) if n_bar > 1 else smax
-    spacing = min(spacing, smax, 200.0)                   # ۲۰۰ استاندارد دفتر
-    spacing = max(100.0, math.floor(spacing / 25) * 25)
-    n_bar = int(width // spacing) + 1                     # تعداد واقعی با این فاصله
-    as_prov = n_bar * BAR_AREA[bar_dia]
-    return SectionDesign(
+    a_bar = BAR_AREA[bar_dia]
+    cov, db = mat.cover / 10, bar_dia / 10
+    s = smax
+    while True:
+        n_L = bar_count(L, cov, db, s / 10, rule)       # میلگردهای توزیع‌شده در طول L
+        n_B = bar_count(B, cov, db, s / 10, rule)       # میلگردهای توزیع‌شده در عرض B
+        as_prov = n_L * a_bar
+        if as_prov >= as_req or s <= 100:
+            break
+        s -= 25
+    s_L = (L - 2 * cov - db) / (n_L - 1) * 10 if n_L > 1 else s
+    s_B = (B - 2 * cov - db) / (n_B - 1) * 10 if n_B > 1 else s
+    sd = SectionDesign(
         "آرماتور پی", mu, L, d, rho_used, rmin, rmax, as_req, bar_dia,
-        spacing=spacing, bar_count=n_bar, ok=ok and as_prov >= as_req,
+        spacing=s, bar_count=n_L, ok=ok and as_prov >= as_req,
         note="" if ok else "ضخامت پی برای خمش کافی نیست — t_f را زیاد کنید",
         steps=[
             ("توزیع تنش نهایی", "e = M_u / W_u  →  " +
-             ("مثلثی، q_max = 2W_u/(3·L·x)" if P["triangular"] else "ذوزنقه‌ای"),
+             ("مثلثی، q_max = 2W_u/(3·L·m)" if P["triangular"] else "ذوزنقه‌ای"),
              f"e = {P['e']:.1f} cm ، طول ناحیه فشاری = {P['span']:.1f} cm ، "
              f"q_max = {P['q_max']:.3f} kg/cm²"),
-            ("تنش در وجه ستون", "q_face = q_max·(span − c)/span", f"{P['q_face']:.3f} kg/cm²"),
-            ("طره", "c = (B − b)/2", f"({B:.0f}−{b:.0f})/2 = {c:.1f} cm"),
-            ("لنگر", "M_u = [0.5·q_face·c² + ⅓·(q_max−q_face)·c²]·L", f"{mu/100:.0f} kg·m"),
+            ("تنش در مقطع A-A", "q_A-A = (3m − l)/(3m)·q_max", f"{P['q_face']:.3f} kg/cm²"),
+            ("طره", "l = (B − b)/2", f"({B:.0f}−{b:.0f})/2 = {c:.1f} cm"),
+            ("لنگر", "M_u = [0.5·q_A-A·l² + ⅓·(q_max−q_A-A)·l²]·L", f"{mu/100:.0f} kg·m"),
             ("عمق مؤثر", "d = t_f − پوشش − ۱٫۵", f"{d:.1f} cm"),
             ("نسبت آرماتور", "ρ", f"{rho_used:.5f}  (ρ_min={rmin:.5f})"),
             ("سطح لازم", "A_s = ρ·L·d", f"{as_req:.1f} cm²"),
-            ("انتخاب", f"{n_bar}Ф{bar_dia}@{spacing:.0f}  در هر جهت، رو و زیر",
-             f"A_s تأمین‌شده = {as_prov:.1f} ≥ {as_req:.1f} cm²"),
+            ("تعداد", "n = ⌈(W − 2·cover − d_b)/s_max⌉ + 1" if rule == "ceil"
+             else "n = ⌊(W − 2·cover)/s_max⌋ + 1",
+             f"روی L: {n_L} عدد (فاصله {s_L/10:.1f} cm) ، روی B: {n_B} عدد (فاصله {s_B/10:.1f} cm)"),
+            ("انتخاب", f"Ф{bar_dia}@{s:.0f}  در هر جهت، رو و زیر",
+             f"A_s تأمین‌شده = {n_L}×{a_bar} = {as_prov:.2f} ≥ {as_req:.2f} cm²"),
         ])
+    sd.n_L, sd.n_B, sd.s_L, sd.s_B = n_L, n_B, s_L, s_B
+    return sd
+
+
+def _shear_setup(res, geo, mat):
+    """مقادیر مشترک برش (واحد ton و m مثل دفترچه ۶۳)."""
+    d = geo.tf - mat.shear_offset / 1000                        # m
+    fc = mat.fc * 10                                             # ton/m²
+    P = (res.ultimate.Nmax + res.w_concrete + res.w_soil) / 1000  # ton
+    pu = 1.4 * P
+    qu = (pu / (geo.L * geo.B) - mat.gamma_s / 1000 * (geo.hp - mat.soil_cover)
+          - mat.gamma_c / 1000 * geo.tf)
+    return d, fc, P, pu, qu
 
 
 def check_punching(res, geo, mat, n_ped):
-    """برش دوطرفه در محیط بحرانی به فاصله d/2 از وجه ستون."""
-    P = ultimate_pressure(res, geo, mat, n_ped)
-    L, B, tf, b = P["L"], P["B"], P["tf"], P["b"]
-    d = tf - mat.cover / 10 - 1.5
-    nu = res.ultimate.Nmax
-    qu = P["q_max"]                                    # سمت اطمینان: فشار لبه
+    """
+    برش دوطرفه — نشریه ۵۰۷ روابط ۳-۱۳ تا ۳-۱۵ (دفترچه ۶۳ صفحه ۱۷):
+        V_c1 = (1 + 2/β)·√f'c/0.6·b₀·d
+        V_c2 = (α·d/b₀ + 2)·√f'c/1.2·b₀·d        (α = 20)
+        V_c3 = √f'c/0.3·b₀·d                    φ = 0.75
+        P_u = 1.4·P ، q_u = P_u/(L·B) − γ_s·(h_p − h_e) − γ_c·t_f
+    برش وارده هر ستون: q_u × (سهم سطح پی هر ستون − (b + d)²).
+    """
+    d, fc, P, pu, qu = _shear_setup(res, geo, mat)
+    b = geo.b
     b0 = 4 * (b + d)
-    vu = nu / n_ped - qu * (b + d) ** 2 * 0
-    vc = PHI_SHEAR * 1.06 * math.sqrt(mat.fc) * b0 * d
-    return SectionDesign(
-        "برش پانچ", 0, b0, d, 0, 0, 0, 0, 0, ok=vu <= vc,
-        note=f"{vu/1000:.1f} ton ≤ {vc/1000:.1f} ton",
+    beta, alpha = 1.0, 20.0
+    vc1 = (1 + 2 / beta) * math.sqrt(fc) / 0.6 * b0 * d
+    vc2 = (alpha * d / b0 + 2) * math.sqrt(fc) / 1.2 * b0 * d
+    vc3 = math.sqrt(fc) / 0.3 * b0 * d
+    phi_vc = PHI_SHEAR * min(vc1, vc2, vc3)
+    vu = max(0.0, qu * (geo.L * geo.B / n_ped - (b + d) ** 2))
+    sd = SectionDesign(
+        "برش پانچ", 0, b0, d, 0, 0, 0, 0, 0, ok=vu <= phi_vc,
+        note=f"{vu:.1f} ton ≤ {phi_vc:.1f} ton",
         steps=[
-            ("محیط بحرانی", "b₀ = 4·(b + d)", f"4×({b:.0f}+{d:.1f}) = {b0:.0f} cm"),
-            ("برش وارده", "V_u = N_u / n   (سمت اطمینان، بدون کسر فشار داخل محیط)",
-             f"{nu:.0f} / {n_ped} = {vu:.0f} kg"),
-            ("مقاومت", "φV_c = 0.75·1.06·√f'c·b₀·d",
-             f"0.75×1.06×√{mat.fc}×{b0:.0f}×{d:.1f} = {vc:.0f} kg"),
-            ("نتیجه", "V_u ≤ φV_c", f"{vu/1000:.1f} ton ≤ {vc/1000:.1f} ton"),
+            ("عمق مؤثر و محیط", "b₀ = 4·(b + d)", f"d = {d:.2f} m ، b₀ = 4×({b:.2f}+{d:.2f}) = {b0:.2f} m"),
+            ("V_c1", "(1 + 2/β)·√f'c/0.6·b₀·d", f"{vc1:.1f} ton"),
+            ("V_c2", "(α·d/b₀ + 2)·√f'c/1.2·b₀·d  (α=20)", f"{vc2:.1f} ton"),
+            ("V_c3", "√f'c/0.3·b₀·d", f"{vc3:.1f} ton"),
+            ("مقاومت", "φV_c = 0.75·min(V_c1, V_c2, V_c3)", f"{phi_vc:.1f} ton"),
+            ("بار نهایی", "P_u = 1.4·P ، q_u = P_u/(L·B) − γ_s(h_p−h_e) − γ_c·t_f",
+             f"1.4×{P:.3f} = {pu:.2f} ton ، q_u = {qu:.3f} ton/m²"),
+            ("برش وارده", "V_u = q_u·(L·B/n − (b+d)²)", f"{vu:.2f} ton"),
+            ("نتیجه", "V_u < φV_c", f"{vu:.2f} < {phi_vc:.1f}"),
         ])
+    sd.capacity = phi_vc * 1000
+    sd.demand = vu * 1000
+    return sd
 
 
-def check_oneway(res, geo, mat, n_ped=1):
-    """برش یک‌طرفه در مقطع به فاصله d از وجه ستون."""
-    P = ultimate_pressure(res, geo, mat, 1)
-    L, B, tf, b = P["L"], P["B"], P["tf"], P["b"]
-    d = tf - mat.cover / 10 - 1.5
-    a = max(0.0, (B - b) / 2 - d)                       # طول باقی‌مانده طره
-    qu = P["q_max"]                                     # فشار لبه، سمت اطمینان
-    vu = qu * L * a
-    vc = PHI_SHEAR * 0.53 * math.sqrt(mat.fc) * L * d
-    return SectionDesign(
-        "برش یک‌طرفه", 0, L, d, 0, 0, 0, 0, 0, ok=vu <= vc,
-        note=f"{vu/1000:.1f} ton ≤ {vc/1000:.1f} ton",
-        steps=[
-            ("طول مؤثر طره", "a = (B − b)/2 − d", f"{a:.1f} cm"),
-            ("برش وارده", "V_u = q_max·L·a", f"{qu:.3f}×{L:.0f}×{a:.1f} = {vu:.0f} kg"),
-            ("مقاومت", "φV_c = 0.75·0.53·√f'c·L·d", f"{vc:.0f} kg"),
-            ("نتیجه", "V_u ≤ φV_c", f"{vu/1000:.1f} ton ≤ {vc/1000:.1f} ton"),
-        ])
+def check_oneway(res, geo, mat, footprint):
+    """
+    برش یک‌طرفه — نشریه ۵۰۷ رابطه ۳-۱۶: V_c = √f'c/0.6·b·d ، در مقطع به فاصله d
+    از بر ستون‌ها، در هر دو جهت؛ بدترین حالت گزارش می‌شود.
+    """
+    d, fc, P, pu, qu = _shear_setup(res, geo, mat)
+    fx, fy = footprint
+    rows = []
+    for label, width, length, ext in (("راستای B", geo.L, geo.B, fy), ("راستای L", geo.B, geo.L, fx)):
+        a = max(0.0, (length - ext) / 2 - d)
+        vu = qu * width * a
+        vc = PHI_SHEAR * math.sqrt(fc) / 0.6 * width * d
+        rows.append((vu / vc if vc else 0, label, width, a, vu, vc))
+    ratio, label, width, a, vu, vc = max(rows)
+    sd = SectionDesign(
+        "برش یک‌طرفه", 0, width, d, 0, 0, 0, 0, 0, ok=vu <= vc,
+        note=f"{vu:.1f} ton ≤ {vc:.1f} ton",
+        steps=[(f"{r[1]}", "a = (طول − عرض ستون‌ها)/2 − d ، V_u = q_u·b·a",
+                f"a = {r[3]:.2f} m ، V_u = {r[4]:.2f} ton ، φV_c = {r[5]:.1f} ton") for r in rows]
+        + [("نتیجه", "V_u < φV_c = 0.75·√f'c/0.6·b·d", f"{vu:.2f} < {vc:.1f}")])
+    return sd
 
 
 # سطح مقطع تنش کششی پیچ (mm²) — ISO 898-1
@@ -233,47 +311,40 @@ def hooked_length(db, fy, fc):
     return max(0.24 * fy_m / math.sqrt(fc_m) * db, 8 * db, 150.0)
 
 
-def design_anchor(res, eq, mat, anch, ped):
+def design_anchor(u, eq, n_ped, geo, mat, anch, ped=None):
     """
-    میل مهار پای سازه.
-
-    نیرو: لنگر پای سازه سهم هر ستون، به صورت زوج‌نیرو روی ردیف میل مهارها،
-    منهای سهم وزن (N_min) هر میل مهار:
-        T_u = M_u / (n_ped · g · n_row) − N_u,min / (n_ped · n)
-
-    طول مدفون (خودکار) — بیشترینِ:
-      ۱) طول مهاری میلگرد طولی ستون (l_d). مخروط شکست بتن زیر میل مهار باید
-         آرماتور ستون را قطع کند و آرماتور دو طرف آن گیرایی داشته باشد؛ پس
-         میل مهار دست‌کم به اندازه l_d آرماتور ستون در بتن می‌رود.
-      ۲) طول مهاری خود میل مهار قلاب‌دار (l_dh).
-      ۳) حداقل ۱۲ برابر قطر میل مهار.
-    به بالا گرد می‌شود و نباید از عمق موجود (ستون + پی − پوشش − شبکه پی) بیشتر شود.
+    میل مهار به روش دفترچه ۶۳ (صفحه ۱۵ و ۱۶، مبحث نهم ۹-۱۸):
+        T = M_u/(n_p·(0.5·n_ab)·d) − N_min/(n_p·n_ab)      V = V_u/(n_p·n_ab)
+        A_se = π/4·(d_a − 0.9743/n_t)²
+        φV_sa = 0.6·0.6·A_se·f_u      φN_sa = 0.65·A_se·f_u
+        اگر هر دو بیش از ۲۰٪: V/φV_sa + T/φN_sa ≤ 1.2
+        تنش ترکیبی: F'_nv = F_nv(1.3 − f_ut/φF_nt) ، F'_nt = F_nt(1.3 − f_uv/φF_nv)
+        طول مهاری: L_d = 0.9·f_y/(λ√f'c)·ψ/((c+K_tr)/d_b)·d_b  (d_b قطر بدنه، مثلاً Ф22)
+    طول مدفون = L_d گرد به بالا (پیش‌فرض ۱۰۰ mm).
     """
-    geo, u = res.geometry, res.ultimate
-    n_ped, n = eq.n_pedestal, max(eq.anchor_n, 1)
-    d, g = eq.anchor_dia, eq.anchor_gauge
-    rows = max(1, n // 2)
-    m_ped = u.M / n_ped                                    # kg·m
-    n_min = u.Nmin / n_ped                                 # kg
-    t_u = max(0.0, m_ped * 1000 / (g * rows) - n_min / n) if g else 0.0
-    v_u = u.V / n_ped / n
+    n, da, g = max(eq.anchor_n, 1), eq.anchor_dia, eq.anchor_gauge / 1000
+    t = (u.M / (n_ped * (0.5 * n) * g) - u.Nmin / (n_ped * n)) if g else 0.0
+    t = max(t, 0.0)
+    v = u.V / (n_ped * n)
+    a_se = math.pi / 4 * (da - 0.9743 / anch.threads_per_mm) ** 2 / 100      # cm²
+    phi_vsa = 0.6 * 0.6 * a_se * anch.fu
+    phi_nsa = 0.65 * a_se * anch.fu
+    both = v > 0.2 * phi_vsa and t > 0.2 * phi_nsa
+    inter = v / phi_vsa + t / phi_nsa
+    inter_ok = inter <= 1.2 if both else True
+    ab = math.pi * da ** 2 / 4 / 100                                            # cm²
+    fnv, fnt = 0.45 * anch.fu, 0.75 * anch.fu
+    fuv, fut = v / ab, t / ab
+    fnv_p = fnv * (1.3 - fut / (0.75 * fnt))
+    fnt_p = fnt * (1.3 - fuv / (0.75 * fnv))
+    comb_ok = fuv <= 0.75 * fnv_p and fut <= 0.75 * fnt_p
+    steel_ok = v <= phi_vsa and t <= phi_nsa and inter_ok and comb_ok
 
-    a_se = TENSILE_AREA.get(int(d), 0.78 * math.pi * d * d / 4)      # mm²
-    phi_nsa = 0.75 * a_se / 100 * anch.fu                           # kg
-    phi_vsa = 0.65 * 0.6 * a_se / 100 * anch.fu * 0.8               # kg، با ضریب ۰٫۸ گروت
-    inter = t_u / phi_nsa + v_u / phi_vsa if phi_nsa and phi_vsa else 0.0
-    steel_ok = t_u <= phi_nsa and v_u <= phi_vsa and inter <= 1.2
-
-    ld_ped = development_length(ped.bar_dia, mat.fy, mat.fc)
-    ldh = hooked_length(d, anch.fy, mat.fc)
-    l_min = 12 * d
-    required = max(ld_ped, ldh, l_min)
-    embed = math.ceil(required / anch.rounding) * anch.rounding
-    pad_bar = 14
-    available = (geo.hp + geo.tf) * 1000 - mat.cover - 2 * pad_bar
+    db = anch.rod_dia or da + 2
+    ld = 0.9 * (anch.fy / 10) / math.sqrt(mat.fc / 10) / anch.cb_ktr * db
+    embed = math.ceil(round(ld / anch.rounding, 6)) * anch.rounding
+    available = (geo.hp + geo.tf) * 1000 - mat.cover - 2 * 14
     ok = steel_ok and embed <= available
-    governs = {ld_ped: "طول مهاری آرماتور ستون", ldh: "طول مهاری میل مهار قلاب‌دار",
-               l_min: "حداقل ۱۲d"}[required]
     note = ""
     if embed > available:
         note = (f"طول مدفون لازم {embed:.0f} mm از عمق موجود {available:.0f} mm بیشتر است — "
@@ -282,43 +353,55 @@ def design_anchor(res, eq, mat, anch, ped):
         note = "مقطع میل مهار برای کشش/برش کافی نیست — قطر یا تعداد را زیاد کنید"
 
     sd = SectionDesign(
-        "میل مهار", 0, 0, 0, 0, 0, 0, 0, int(d), bar_count=n, ok=ok, note=note,
+        "میل مهار", 0, 0, 0, 0, 0, 0, 0, int(da), bar_count=n, ok=ok, note=note,
         steps=[
-            ("نیروی کششی هر میل مهار",
-             "T_u = M_u/(n_ped·g·n_row) − N_u,min/(n_ped·n)",
-             f"{u.M:.0f}/({n_ped}×{g/1000:.3f}×{rows}) − {u.Nmin:.0f}/({n_ped}×{n}) = {t_u:.0f} kg"),
-            ("برش هر میل مهار", "V_u = V/(n_ped·n)", f"{v_u:.0f} kg"),
-            ("مقاومت کششی فولاد", "φN_sa = 0.75·A_se·f_u",
-             f"0.75×{a_se:.0f} mm²×{anch.fu:.0f} = {phi_nsa:.0f} kg"),
-            ("مقاومت برشی فولاد", "φV_sa = 0.65·0.6·A_se·f_u·0.8 (گروت)", f"{phi_vsa:.0f} kg"),
-            ("اندرکنش", "T/φN + V/φV ≤ 1.2", f"{inter:.2f}"),
-            ("۱) مهاری آرماتور ستون", f"l_d = fy/(2.1√f'c)·d_b  (Ф{ped.bar_dia})",
-             f"{ld_ped:.0f} mm"),
-            ("۲) مهاری میل مهار قلاب‌دار", "l_dh = 0.24·fy/√f'c·d_b ≥ max(8d, 150)",
-             f"{ldh:.0f} mm"),
-            ("۳) حداقل", "12·d", f"{l_min:.0f} mm"),
-            ("طول مدفون", f"max(۱، ۲، ۳) ← {governs}، گرد به {anch.rounding:.0f}",
+            ("نیروی کششی", "T = M_u/(n_p·(0.5·n_ab)·d) − N_min/(n_p·n_ab)",
+             f"{u.M:.0f}/({n_ped}×0.5×{n}×{g:.2f}) − {u.Nmin:.0f}/({n_ped}×{n}) = {t:.0f} kg"),
+            ("نیروی برشی", "V = V_u/(n_p·n_ab)", f"{u.V:.0f}/({n_ped}×{n}) = {v:.0f} kg"),
+            ("سطح مؤثر", "A_se = π/4·(d_a − 0.9743/n_t)²",
+             f"π/4×({da:.0f} − 0.9743/{anch.threads_per_mm})² = {a_se:.2f} cm²"),
+            ("مقاومت برشی", "φV_sa = 0.6·0.6·A_se·f_u", f"{phi_vsa:.0f} kg  ≥ {v:.0f}"),
+            ("مقاومت کششی", "φN_sa = 0.65·A_se·f_u", f"{phi_nsa:.0f} kg  ≥ {t:.0f}"),
+            ("اندرکنش", "V/φV_sa + T/φN_sa ≤ 1.2", f"{inter:.2f}"),
+            ("تنش ترکیبی", "f_uv ≤ 0.75·F'_nv ، f_ut ≤ 0.75·F'_nt",
+             f"{fuv:.1f} ≤ {0.75*fnv_p:.0f} ، {fut:.1f} ≤ {0.75*fnt_p:.0f} kg/cm²"),
+            ("طول مهاری", "L_d = 0.9·f_y/(λ√f'c)·ψ/((c+K_tr)/d_b)·d_b",
+             f"0.9×{anch.fy/10:.0f}/√{mat.fc/10:.0f}/{anch.cb_ktr}×{db:.0f} = {ld:.0f} mm"),
+            ("طول مدفون", f"گرد به {anch.rounding:.0f} mm",
              f"{embed:.0f} mm  (عمق موجود {available:.0f} mm)"),
         ])
-    sd.embed = embed
-    sd.tension = t_u
-    sd.shear = v_u
+    sd.embed, sd.tension, sd.shear = embed, t, v
+    sd.a_se, sd.phi_nsa, sd.phi_vsa, sd.ld = a_se, phi_nsa, phi_vsa, ld
     return sd
 
 
-def design_all(res, eq, mat, rebar=None, anchorage=None):
+def design_all(res, layout, mat, rebar=None, anchorage=None):
+    """
+    طراحی مقطع برای همه ستون‌ها و میل مهارهای هر گروه تجهیز، پی، و برش.
+    خروجی "pedestal" و "anchor" بحرانی‌ترین گروه است؛ همه گروه‌ها در "groups".
+    """
+    from config import Anchorage, Rebar
+    from padlayout import PadLayout
+    from equipment import Equipment
+    if isinstance(layout, Equipment):
+        layout = PadLayout.single(layout)
+    rebar = rebar or Rebar()
+    anchorage = anchorage or Anchorage()
     geo = res.geometry
-    n = eq.n_pedestal
-    col_dia = rebar.col_dia if rebar else 18
-    pad_dia = rebar.pad_dia if rebar else 14
-    min_bars = rebar.col_min_bars if rebar else 8
-    ped = design_pedestal(res.ultimate.Nmax, res.ultimate.V, res.ultimate.M, geo, mat, n,
-                          bar_dia=col_dia, min_bars=min_bars)
-    pad = design_pad(res, geo, mat, n, bar_dia=pad_dia)
-    punch = check_punching(res, geo, mat, n)
-    oneway = check_oneway(res, geo, mat, n)
-    if anchorage is None:
-        from config import Anchorage
-        anchorage = Anchorage()
-    anchor = design_anchor(res, eq, mat, anchorage, ped)
-    return {"pedestal": ped, "pad": pad, "punching": punch, "oneway": oneway, "anchor": anchor}
+    forces = getattr(res, "group_forces", None) or [(res.governing, res.ultimate)]
+    groups = []
+    for grp, (g, u) in zip(layout.groups, forces):
+        ped = design_pedestal(u.Nmax, u.V, u.M, geo, mat, grp.n, bar_dia=rebar.col_dia,
+                              min_bars=rebar.col_min_bars, min_ratio_g=rebar.pedestal_min_ratio,
+                              tie_dia=rebar.tie_dia, tie_spacing=rebar.tie_spacing)
+        anc = design_anchor(u, grp.eq, grp.n, geo, mat, anchorage, ped)
+        groups.append({"tag": grp.eq.tag, "pedestal": ped, "anchor": anc})
+    pad = design_pad(res, geo, mat, layout.n_ped, bar_dia=rebar.pad_dia,
+                     smax=rebar.pad_spacing_max, rule=rebar.pad_count_rule)
+    punch = check_punching(res, geo, mat, layout.n_ped)
+    oneway = check_oneway(res, geo, mat, layout.footprint(geo.b))
+    out = {"pedestal": max((x["pedestal"] for x in groups), key=lambda p: p.bar_count),
+           "pad": pad, "punching": punch, "oneway": oneway,
+           "anchor": max((x["anchor"] for x in groups), key=lambda a: a.tension)}
+    out["groups"] = groups
+    return out
