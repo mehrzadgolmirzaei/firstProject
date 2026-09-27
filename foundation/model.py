@@ -66,7 +66,7 @@ class FoundationModel:
     plate_t: float = 20.0                               # ضخامت صفحه کف (mm)
     anchor_embed: float = 0.0                           # طول مدفون محاسبه‌شده (mm)
     anchor_projection: float = 150.0                    # بیرون‌زدگی از روی بتن (mm)
-    anchor_hook: float = 4.0                            # طول قلاب انتهایی (×d)
+    anchor_hook: float = 0.0                            # قلاب انتهایی (×d)؛ صفر = صاف
     base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
 
     @property

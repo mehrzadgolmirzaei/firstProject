@@ -64,7 +64,7 @@
     "grout": 50.0,
     "projection": 150.0,
     "plate_thickness": 20.0,
-    "hook": 4.0,
+    "hook": 0.0,
     "rounding": 100.0,
     "rod_dia": 0.0,
     "threads_per_mm": 0.5,

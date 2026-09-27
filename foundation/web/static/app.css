@@ -203,3 +203,9 @@ small.case{color:var(--ink-2);font-weight:400;font-size:11px}
 .f small.hint{display:block;margin-top:3px;font-size:11px;line-height:1.6;color:var(--ink-2)}
 .f input[readonly]{background:var(--rule-soft);color:var(--steel);font-weight:600}
 .check-inline{display:flex;align-items:center;gap:6px;font-size:13px;margin:6px 0 8px;cursor:pointer}
+.lp-wrap{margin:8px 0 10px}
+#layoutPreview{width:100%;max-width:420px;display:block;background:var(--sheet);border:1px solid var(--rule);border-radius:6px}
+#layoutPreview .lp-pad{fill:none;stroke:var(--ink-2,#666);stroke-width:.4;stroke-dasharray:1.5 1}
+#layoutPreview .lp-dim{fill:var(--ink-2,#666)}
+#layoutPreview{direction:ltr}
+.check-inline input{width:auto;margin:0}

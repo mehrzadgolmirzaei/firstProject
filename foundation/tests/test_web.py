@@ -177,31 +177,30 @@ def test_two_pedestals_need_valid_spacing(client):
 
 
 def _preset_payload(key):
-    """همان payload که «نمونه آماده» در فرم می‌سازد."""
-    from presets import FOUNDATION_PRESETS, ALL_EQUIPMENT
-    p = FOUNDATION_PRESETS[key]
-    s = p["site"]
-    g1, *rest = p["groups"]
-    groups = [{"axis": g1["axis"], "x": g1["x"], "y": g1["y"], "case": g1["case"]}]
-    for g in rest:
-        groups.append({"equipment": {"tag": g["tag"]}, "axis": g["axis"], "x": g["x"],
-                       "y": g["y"], "case": g["case"]})
-    return {"equipment": asdict(ALL_EQUIPMENT[g1["tag"]]),
-            "layout": {"kind": "combined", "groups": groups},
+    """ورودی دفترچه ۶۳ با چیدمان کی‌پلن، همان‌طور که فرم پس از خواندن کی‌پلن می‌فرستد."""
+    from equipment import ALL_EQUIPMENT
+    from kimia63_data import SITE as s, PADS
+    L, B, b, groups = PADS[key]
+    (tag1, pos1), *rest = groups
+    body_groups = [{"positions": pos1}]
+    for tag, pos in rest:
+        body_groups.append({"equipment": {"tag": tag}, "positions": pos})
+    return {"equipment": asdict(ALL_EQUIPMENT[tag1]),
+            "layout": {"kind": "combined", "source": key, "groups": body_groups},
             "seismic.edition": "4", "seismic.a": s["seismic"]["a"], "seismic.b": s["seismic"]["b"],
             "seismic.i": s["seismic"]["i"], "seismic.r": s["seismic"]["r"],
             "soil.q_base": s["soil"]["q_base"], "soil.q_factor": s["soil"]["q_factor"],
             "foundation.hp": s["foundation"]["hp"], "foundation.tf": s["foundation"]["tf"],
-            "foundation.b": p["b"], "foundation.L": p["L"], "foundation.B": p["B"],
+            "foundation.b": b, "foundation.L": L, "foundation.B": B,
             "rebar.col_dia": s["rebar"]["col_dia"], "rebar.pad_dia": s["rebar"]["pad_dia"]}
 
 
 # (FS واژگونی، تنش خاک) — دفترچه VP-63POST-CAL-0004
 @pytest.mark.parametrize("key,fs,q", [
-    ("K63-LA", 2.32, 0.68), ("K63-CB", 2.02, 0.72), ("K63-CT", 2.06, 0.77),
-    ("K63-DSE", 2.19, 0.73), ("K63-DS2", 2.19, 0.72),
-    ("K63-LACVT", 3.74, 0.54), ("K63-PICVT", 2.45, 0.64)])
-def test_kimia_presets_reproduce_notebook(client, app, key, fs, q):
+    ("LA-2.5-1.5", 2.32, 0.68), ("CB-2-3.2", 2.02, 0.72), ("CT-3-1.7", 2.06, 0.77),
+    ("DS-DSE-2.5-1.8", 2.19, 0.73), ("DS2-2.5-2.1", 2.19, 0.72),
+    ("LA+CVT-3-2.5", 3.74, 0.54), ("PI-CVT-3-3", 2.45, 0.64)])
+def test_kimia63_notebook_through_web(client, app, key, fs, q):
     r = client.post("/api/calculate", json=_preset_payload(key),
                     headers={"X-CSRF-Token": client.csrf})
     d = r.get_json()
@@ -215,7 +214,7 @@ def test_kimia_presets_reproduce_notebook(client, app, key, fs, q):
 
 
 def test_combined_pad_layout_saved_and_described(client, app):
-    d = client.post("/api/calculate", json=_preset_payload("K63-LACVT"),
+    d = client.post("/api/calculate", json=_preset_payload("LA+CVT-3-2.5"),
                     headers={"X-CSRF-Token": client.csrf}).get_json()
     assert d["geometry"]["n_pedestal"] == 5
     assert d["geometry"]["layout"] == "LA63×2 + CVT63×3"
@@ -224,19 +223,21 @@ def test_combined_pad_layout_saved_and_described(client, app):
                                     (d["id"],), one=True)["inputs"])
     assert saved["layout"]["kind"] == "combined"
     assert saved["layout"]["groups"][1]["equipment"]["tag"] == "CVT63"
+    assert saved["layout"]["groups"][1]["positions"] == [[-1.5, -0.75], [0.0, -0.75], [1.5, -0.75]]
+    assert saved["layout"]["source"] == "LA+CVT-3-2.5"
 
 
 def test_combined_pad_validation(client):
     h = {"X-CSRF-Token": client.csrf}
-    body = _preset_payload("K63-LACVT")
-    body["layout"]["groups"][1]["y"] = 0.3            # ردیف CVT روی ردیف LA
+    body = _preset_payload("LA+CVT-3-2.5")
+    body["layout"]["groups"][1]["positions"] = [(-0.85, 0.5)]   # ستون CVT روی ستون LA
     r = client.post("/api/calculate", json=body, headers=h)
     assert r.status_code == 400 and "روی هم" in r.get_json()["error"]
-    body = _preset_payload("K63-LA")
+    body = _preset_payload("LA-2.5-1.5")
     body["foundation.L"] = 2.0                         # ستون‌ها از پی بیرون می‌زنند
     r = client.post("/api/calculate", json=body, headers=h)
     assert r.status_code == 400 and "بیرون" in r.get_json()["error"]
-    body = _preset_payload("K63-LA")
+    body = _preset_payload("LA-2.5-1.5")
     body["foundation.B"] = None                        # فقط یک ضلع
     r = client.post("/api/calculate", json=body, headers=h)
     assert r.status_code == 400 and "هر دو" in r.get_json()["error"]
@@ -252,8 +253,45 @@ def test_npol_changes_loads(client):
     assert three["governing"]["N"] > one["governing"]["N"] + 2 * CATALOG["LA"].We - 1
 
 
-def test_calculate_page_has_presets_and_npol(client):
+def test_calculate_page_fields(client):
     html = client.get("/calculate").get_data(as_text=True)
-    for s in ('id="npol"', 'id="fpreset"', "K63-LACVT", 'id="kind"', "LA63"):
+    for s in ('id="npol"', 'id="voltage"', 'id="kpfile"', "LA63"):
         assert s in html
-    assert 'id="base_plate"' not in html
+    for s in ('id="base_plate"', 'id="fpreset"', "کیمیا", "کامی", 'id="gx"', 'id="gcase"'):
+        assert s not in html, s
+    assert html.count('id="pedestal_spacing"') == 1
+
+
+def test_auto_layout_two_equipment_needs_only_gap(client):
+    """بدون کی‌پلن: فقط «فاصله محور دو تجهیز»؛ ردیف‌ها خودکار و متقارن چیده می‌شوند."""
+    body = _preset_payload("LA+CVT-3-2.5")
+    body["layout"] = {"kind": "combined", "groups": [{}, {"equipment": {"tag": "CVT63"}}]}
+    h = {"X-CSRF-Token": client.csrf}
+    r = client.post("/api/calculate", json=body, headers=h)
+    assert r.status_code == 400 and "فاصله محور دو تجهیز" in r.get_json()["error"]
+    body["layout"]["gap"] = 1.5
+    d = client.post("/api/calculate", json=body, headers=h).get_json()
+    peds = sorted((round(x, 3), round(y, 3)) for x, y, _ in d["geometry"]["pedestals"])
+    assert peds == [(-1.5, -0.75), (-0.85, 0.75), (0.0, -0.75), (0.85, 0.75), (1.5, -0.75)]
+    assert d["checks"][0]["value"] == pytest.approx(3.74, abs=0.02)
+
+
+def test_keyplan_upload(client):
+    from pathlib import Path
+    path = Path(__file__).with_name("data") / "keyplan_kimia63.dxf"
+    h = {"X-CSRF-Token": client.csrf}
+    with open(path, "rb") as fh:
+        r = client.post("/api/keyplan", data={"file": (fh, "04-KEY_PLAN.dxf")}, headers=h,
+                        content_type="multipart/form-data")
+    d = r.get_json()
+    assert r.status_code == 200, d
+    by = {f["name"]: f for f in d["foundations"]}
+    assert set(by) == {"CB-2-3.2", "CT-3-1.7", "DS-DSE-2.5-1.8", "DS2-2.5-2.1",
+                       "LA+CVT-3-2.5", "LA-2.5-1.5", "PI-CVT-3-3"}
+    assert by["LA+CVT-3-2.5"]["describe"] == "LA63×2 + CVT63×3"
+    assert (by["LA+CVT-3-2.5"]["L"], by["LA+CVT-3-2.5"]["B"]) == (3.8, 2.5)
+    assert by["PI-CVT-3-3"]["describe"] == "PI63×2 + CVT63_1×1"
+    assert by["CB-2-3.2"]["b"] == 0.7 and by["DS-DSE-2.5-1.8"]["count"] == 6
+    r = client.post("/api/keyplan", data={"file": (open(__file__, "rb"), "x.txt")}, headers=h,
+                    content_type="multipart/form-data")
+    assert r.status_code == 400

@@ -18,10 +18,10 @@ import auth
 import codeprofiles as cp
 import settings as st
 from calc_service import (build_equipment, run_layout, to_dict, layout_from_spec,
-                          layout_problems, ALL_EQUIPMENT, FOUNDATION_PRESETS)
+                          layout_problems, ALL_EQUIPMENT, VOLTAGE_LEVELS, EQUIPMENT_TYPES)
 from config import ProjectConfig
 from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED, WHY
-from equipment import CATALOG, CATALOG_KIMIA63
+from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
@@ -40,6 +40,7 @@ def _secret_key():
 
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024        # کی‌پلن‌ها چند مگابایت‌اند
 app.secret_key = _secret_key()
 app.jinja_env.add_extension("jinja2.ext.do")
 
@@ -108,9 +109,10 @@ def calculate():
     return render_template("calculate.html",
                            catalog=[dict(r) for r in cat],
                            builtin={k: asdict(v) for k, v in ALL_EQUIPMENT.items()},
-                           builtin_groups=[("کامی‌آباد — ۲۳۰/۴۰۰", list(CATALOG)),
-                                           ("کیمیا — ۶۳", list(CATALOG_KIMIA63))],
-                           foundation_presets=FOUNDATION_PRESETS,
+                           voltages=VOLTAGE_LEVELS, types=EQUIPMENT_TYPES,
+                           # ترتیب فهرست تجهیز (tojson کلیدها را الفبایی می‌کند)
+                           voltage_order={v: list(l["types"].items())
+                                          for v, l in VOLTAGE_LEVELS.items()},
                            substations=[dict(r) for r in subs],
                            profiles=cp.listing(),
                            defaults=asdict(_office_config()),
@@ -261,6 +263,37 @@ def api_calculate():
     auth.record("اجرای محاسبه", "calculation", calc_id, {"tag": eq.tag})
     payload["id"] = calc_id
     return jsonify(payload)
+
+
+@app.post("/api/keyplan")
+@auth.requires("engineer")
+def api_keyplan():
+    """
+    خواندن کی‌پلن فونداسیون (DXF): انواع پی، ابعاد، ستون‌ها و تجهیز هر ستون.
+    فایل فقط خوانده و پاک می‌شود؛ چیدمان انتخاب‌شده با خود محاسبه در اسنپ‌شات می‌ماند.
+    """
+    f = request.files.get("file")
+    if not f or not f.filename.lower().endswith(".dxf"):
+        return jsonify({"error": "فایل کی‌پلن باید DXF باشد (در اتوکد: Save As ← DXF)."}), 400
+    tmp = OUT / f"keyplan_{secrets.token_hex(8)}.dxf"
+    f.save(tmp)
+    try:
+        from keyplan import read_foundations
+        voltage = request.form.get("voltage") or "63"
+        if voltage not in VOLTAGE_LEVELS:
+            return jsonify({"error": "سطح ولتاژ نامعتبر است."}), 400
+        found = read_foundations(str(tmp), ALL_EQUIPMENT, voltage)
+    except ImportError:
+        return jsonify({"error": "کتابخانه ezdxf نصب نیست: python -m pip install ezdxf"}), 500
+    except Exception as exc:
+        return jsonify({"error": f"کی‌پلن خوانده نشد: {exc}"}), 400
+    finally:
+        tmp.unlink(missing_ok=True)
+    if not found:
+        return jsonify({"error": "هیچ بلاک پی با نام تجهیز (مثل LA+CVT-3-2.5) در کی‌پلن "
+                                 "پیدا نشد."}), 400
+    auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
+    return jsonify({"file": f.filename, "foundations": [x.to_dict() for x in found]})
 
 
 # ================================================================= تنظیمات نقشه
@@ -442,7 +475,7 @@ def catalog():
         d["data"] = json.loads(d["data"])
         items.append(d)
     return render_template("catalog.html", items=items,
-                           builtin={k: asdict(v) for k, v in CATALOG.items()})
+                           builtin={k: asdict(v) for k, v in ALL_EQUIPMENT.items()})
 
 
 @app.post("/catalog/import-builtin")
@@ -450,7 +483,7 @@ def catalog():
 def catalog_import():
     uid = auth.current_user()["id"]
     added = 0
-    for tag, eq in CATALOG.items():
+    for tag, eq in ALL_EQUIPMENT.items():
         exists = db.query("SELECT id FROM equipment_catalog WHERE tag=? AND"
                           " IFNULL(manufacturer,'')='' AND IFNULL(model,'')=''",
                           (tag,), one=True)

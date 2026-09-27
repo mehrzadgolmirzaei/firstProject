@@ -84,7 +84,7 @@ class Anchorage:
     grout: float = 50.0            # ضخامت گروت زیر صفحه کف (mm)
     projection: float = 150.0      # بیرون‌زدگی میل مهار از روی بتن (mm)
     plate_thickness: float = 20.0  # ضخامت صفحه کف (mm) — برای ترسیم
-    hook: float = 4.0              # طول قلاب انتهایی بر حسب قطر (×d)
+    hook: float = 0.0              # قلاب انتهایی میل مهار (×d)؛ صفر = میل مهار صاف (رویه دفتر)
     rod_dia: float = 0.0           # قطر میلگرد بدنه (mm)؛ صفر = قطر رزوه + ۲ (M20 روی Ф22)
     rounding: float = 100.0        # گرد کردن طول مدفون به بالا (mm)
     threads_per_mm: float = 0.5    # n_t در A_se = π/4·(d − 0.9743/n_t)² (مطابق دفترچه ۶۳)

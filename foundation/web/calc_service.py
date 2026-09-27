@@ -15,8 +15,8 @@ if str(ROOT) not in sys.path:
 from config import ProjectConfig                      # noqa: E402
 from equipment import Equipment, CATALOG              # noqa: E402,F401
 from pipeline import run, run_layout                  # noqa: E402,F401
-from padlayout import PadLayout, row                  # noqa: E402
-from presets import ALL_EQUIPMENT, FOUNDATION_PRESETS  # noqa: E402,F401
+from padlayout import Group, PadLayout, row           # noqa: E402
+from equipment import ALL_EQUIPMENT, VOLTAGE_LEVELS, EQUIPMENT_TYPES  # noqa: E402,F401
 import model                                          # noqa: E402
 
 def build_equipment(data: dict) -> Equipment:
@@ -47,16 +47,19 @@ def _num(v, cast=float, default=None):
 
 def layout_from_spec(spec, eq1: Equipment):
     """
-    چیدمان پی از ورودی فرم یا اسنپ‌شات.
+    چیدمان پی از ورودی فرم یا اسنپ‌شات. مهندس مختصات تایپ نمی‌کند:
 
-    spec = {"kind": "single" | "combined",
-            "groups": [{"n", "spacing", "axis", "x", "y", "case"},          # گروه ۱ = eq1
-                       {"equipment": {...}, "n", "spacing", "axis", "x", "y", "case"}]}
+    ۱. positions داده شده ← از کی‌پلن (یا نمونه آماده که خودش از کی‌پلن است)
+    ۲. وگرنه قاعده ثابت: ستون‌های هر تجهیز در یک ردیف در امتداد L با فاصله
+       سازه‌اش؛ پی تک‌تجهیزه ردیف در مرکز؛ پی دوتجهیزه دو ردیف موازی به فاصله
+       «فاصله محور دو تجهیز» (gap، از کی‌پلن)، متقارن نسبت به مرکز پی.
 
-    single   : پی منفرد مربعی (پست ۲۳۰/۴۰۰)؛ فقط گروه ۱ ، ستون‌ها در مرکز.
-    combined : پی مشترک مستطیلی (پست ۶۳)؛ یک یا دو گروه با مختصات داده‌شده.
+    spec = {"kind": "single" | "combined", "source": "...",
+            "gap": فاصله محور دو تجهیز (m),
+            "groups": [{"n", "spacing", "positions"?},                   # گروه ۱ = eq1
+                       {"equipment": {...}, "n", "spacing", "positions"?}]}
 
-    خروجی: (PadLayout، spec کامل برای اسنپ‌شات — تجهیز گروه‌های بعدی کامل ذخیره می‌شود)
+    خروجی: (PadLayout، spec کامل برای اسنپ‌شات — مختصات نهایی ستون‌ها هم ذخیره می‌شود)
     """
     spec = spec or {}
     kind = spec.get("kind") or "single"
@@ -65,6 +68,9 @@ def layout_from_spec(spec, eq1: Equipment):
     raw = list(spec.get("groups") or [{}])
     if kind == "single":
         raw = raw[:1]
+    if len(raw) > 2:
+        raise ValueError("روی یک پی حداکثر دو تجهیز")
+    gap = _num(spec.get("gap"))
     groups, saved = [], []
     for i, g in enumerate(raw):
         g = g or {}
@@ -74,32 +80,36 @@ def layout_from_spec(spec, eq1: Equipment):
             data = dict(g.get("equipment") or {})
             tag = data.get("tag")
             if tag in ALL_EQUIPMENT:
-                base = {k: v for k, v in asdict(ALL_EQUIPMENT[tag]).items()}
+                base = asdict(ALL_EQUIPMENT[tag])
                 base.update({k: v for k, v in data.items() if v not in ("", None)})
                 data = base
             if not data.get("tag"):
-                raise ValueError("تجهیز گروه دوم انتخاب نشده")
+                raise ValueError("تجهیز دوم انتخاب نشده")
             eq = build_equipment(data)
+        pos = g.get("positions")
+        if pos:
+            positions = [(float(x), float(y)) for x, y in pos]
+            groups.append(Group(eq, positions))
+            saved.append({"positions": positions, **({"equipment": asdict(eq)} if i else {})})
+            continue
         n = _num(g.get("n"), int) or eq.n_pedestal
         if not 1 <= n <= 4:
-            raise ValueError("تعداد ستون هر گروه باید ۱ تا ۴ باشد")
+            raise ValueError("تعداد ستون هر تجهیز باید ۱ تا ۴ باشد")
         spacing = _num(g.get("spacing"))
         if spacing is None:
             spacing = eq.pedestal_spacing
-        axis = g.get("axis") or "x"
-        if axis not in ("x", "y"):
-            raise ValueError("راستای ردیف ستون‌ها باید x یا y باشد")
-        x = _num(g.get("x"), default=0.0) if kind == "combined" else 0.0
-        y = _num(g.get("y"), default=0.0) if kind == "combined" else 0.0
-        case = _num(g.get("case"), int) if kind == "combined" else None
-        if case is not None and not 1 <= case <= 5:
-            raise ValueError("حالت بار گروه باید ۱ تا ۵ باشد")
-        groups.append(row(eq, spacing=spacing or None, axis=axis, x=x, y=y, case=case, n=n))
-        item = {"n": n, "spacing": spacing, "axis": axis, "x": x, "y": y, "case": case}
-        if i:
-            item["equipment"] = asdict(eq)
-        saved.append(item)
-    return PadLayout(groups, square=(kind == "single")), {"kind": kind, "groups": saved}
+        y = 0.0
+        if len(raw) == 2:
+            if not gap:
+                raise ValueError("برای دو تجهیز روی یک پی، «فاصله محور دو تجهیز» را از کی‌پلن "
+                                 "وارد کنید، یا کی‌پلن را بارگذاری کنید")
+            y = gap / 2 if i == 0 else -gap / 2
+        grp = row(eq, spacing=spacing or None, y=y, n=n)
+        groups.append(grp)
+        saved.append({"n": n, "spacing": spacing, "positions": grp.positions,
+                      **({"equipment": asdict(eq)} if i else {})})
+    out = {"kind": kind, "source": str(spec.get("source") or ""), "gap": gap, "groups": saved}
+    return PadLayout(groups, square=(kind == "single")), out
 
 
 def layout_problems(layout: PadLayout, b: float, L: float = 0.0, B: float = 0.0) -> list:

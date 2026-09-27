@@ -563,13 +563,17 @@ class FoundationDrawing:
                      ((0, 0), (0.2, 0.9), (0.4, -0.3), (0.6, 0.9), (0.8, -0.3), (1, 0.5))],
                     LO.LY_CONCRETE)
 
-        # میل مهار: بدنه تا طول مدفون، قلاب انتهایی
+        # میل مهار: بدنه صاف تا طول مدفون (قلاب فقط اگر در تنظیمات داده شده باشد)
         hook = fm.anchor_hook * eq.anchor_dia * k
         self.line((-r, proj), (r, proj), LO.LY_DETAIL)
         self.line((-r, proj), (-r, -emb), LO.LY_DETAIL)
-        self.line((r, proj), (r, -emb + rod), LO.LY_DETAIL)
-        self.polyline([(-r, -emb), (hook, -emb), (hook, -emb + rod), (r, -emb + rod)],
-                      LO.LY_DETAIL)
+        if hook > 0:
+            self.line((r, proj), (r, -emb + rod), LO.LY_DETAIL)
+            self.polyline([(-r, -emb), (hook, -emb), (hook, -emb + rod), (r, -emb + rod)],
+                          LO.LY_DETAIL)
+        else:
+            self.line((r, proj), (r, -emb), LO.LY_DETAIL)
+            self.line((-r, -emb), (r, -emb), LO.LY_DETAIL)
         # رزوه (قرمز): بالای مهره‌ها تا سر میل مهار، و زیر مهره تراز تا زیر گروت
         for y_a, y_b in ((y, proj), (0, gr - nut_h)):
             t, step = y_a, u(0.45)

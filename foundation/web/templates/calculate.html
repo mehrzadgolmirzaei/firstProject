@@ -12,27 +12,27 @@
     <h2>ورودی</h2>
 
     <div class="f">
-      <label>نمونه آماده (دفترچه تأییدشده)</label>
-      <select id="fpreset">
-        <option value="">— بدون نمونه —</option>
-        {% for key, p in foundation_presets.items() %}
-        <option value="{{ key }}">{{ p.title }}</option>
+      <label>سطح ولتاژ پست</label>
+      <select id="voltage">
+        {% for v, lvl in voltages.items() %}
+        <option value="{{ v }}" {{ 'selected' if v == '230' }}>{{ lvl.title }}</option>
         {% endfor %}
       </select>
-      <small class="hint">همه فرم را با اعداد دفترچه پر می‌کند (تجهیزها، چیدمان ستون‌ها، ابعاد پی،
-        زلزله، خاک)؛ بعد هر عددی را خواستید عوض کنید.</small>
+      <small class="hint">نوع پی از همین تعیین می‌شود: پست ۲۳۰ و ۴۰۰ پی منفرد مربعی؛ پست ۶۳ به خاطر
+        کمبود فضا پی مشترک مستطیلی (یک سازه چندستونه، یا دو تجهیز روی یک پی).</small>
+    </div>
+
+    <div class="f">
+      <label>کی‌پلن فونداسیون (DXF) — اختیاری</label>
+      <input id="kpfile" type="file" accept=".dxf">
+      <small class="hint">اگر کی‌پلن را بدهید سامانه همه پی‌ها را می‌خواند: ابعاد پی، ستون‌ها، جای هر
+        ستون و این‌که کدام تجهیز روی کدام ستون است. نام بلاک هر پی مثل «LA+CVT-3-2.5» باشد.</small>
+      <select id="kpsel" style="display:none;margin-top:6px"></select>
     </div>
 
     <div class="f">
       <label>تجهیز</label>
-      <select id="preset">
-        <option value="">— انتخاب کنید —</option>
-        {% for label, tags in builtin_groups %}
-        <optgroup label="{{ label }}">
-          {% for tag in tags %}<option value="{{ tag }}">{{ tag }} — {{ builtin[tag].title }}</option>{% endfor %}
-        </optgroup>
-        {% endfor %}
-      </select>
+      <select id="preset"></select>
     </div>
 
     <div class="f">
@@ -74,15 +74,9 @@
     </fieldset>
 
     <fieldset>
-      <legend>نوع پی و چیدمان ستون‌ها</legend>
+      <legend>ستون‌ها و ابعاد پی</legend>
       <div class="row">
-        <div class="f"><label>نوع پی</label>
-          <select id="kind">
-            <option value="single">منفرد مربعی — پست ۲۳۰ و ۴۰۰</option>
-            <option value="combined">مشترک مستطیلی — پست ۶۳</option>
-          </select>
-          <small class="hint">پست ۶۳ به خاطر کمبود فضا: یک پی مستطیلی زیر یک سازه چندستونه،
-            یا دو تجهیز روی یک پی (مثل LA/CVT و PI/CVT).</small></div>
+        <input type="hidden" id="kind" value="single">
         <div class="f"><label>تعداد ستون (پدستال) این تجهیز</label>
           <input id="n_pedestal" type="number" step="1" value="1" min="1" max="4">
           <small class="hint">تعداد پایه سازه که هر کدام روی یک ستون بتنی می‌نشیند</small></div>
@@ -90,19 +84,6 @@
           <input id="pedestal_spacing" type="number" step="0.05" placeholder="برای بیش از یک ستون لازم است">
           <small class="hint">از نقشه سازه (مثلاً ۱٫۷۰ برای LA و CT پست ۶۳، ۱٫۵۰ برای CB).
             پی دست‌کم «این فاصله + عرض ستون + دو برابر حداقل بیرون‌زدگی» می‌شود.</small></div>
-      </div>
-      <div class="row combined-only">
-        <div class="f"><label>راستای ردیف ستون‌ها</label>
-          <select id="axis"><option value="x">در امتداد L (x)</option><option value="y">در امتداد B (y)</option></select>
-          <small class="hint">x در امتداد ضلع بلند L؛ بار جانبی در راستای B فرض می‌شود</small></div>
-        <div class="f"><label>مرکز ردیف x (m)</label><input id="gx" type="number" step="0.05" value="0">
-          <small class="hint">فاصله از مرکز پی در امتداد L</small></div>
-        <div class="f"><label>مرکز ردیف y (m)</label><input id="gy" type="number" step="0.05" value="0">
-          <small class="hint">فاصله از مرکز پی در امتداد B</small></div>
-        <div class="f"><label>حالت بار حاکم این تجهیز</label>
-          <select id="gcase"><option value="">طبق روش کنترل پایین</option>
-            <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
-          <small class="hint">برای وقتی دفترچه برای هر تجهیز حالت جدا برداشته</small></div>
       </div>
       <div class="row">
         <div class="f"><label><b>L</b> طول پی (m)</label><input id="L" type="number" step="0.05" placeholder="خالی = طراحی خودکار">
@@ -112,18 +93,17 @@
           <small class="hint">در راستای بار جانبی (M_r = W·B/2)</small></div>
       </div>
 
+      <div class="flash" id="kpBanner" style="display:none"></div>
+      <div class="lp-wrap"><svg id="layoutPreview" viewBox="0 0 100 60" role="img"
+        aria-label="پیش‌نمایش چیدمان ستون‌ها"></svg>
+        <small class="hint">پیش‌نمایش پلان پی: جای ستون‌ها همان است که در محاسبه و نقشه می‌رود.</small></div>
+
       <div class="combined-only">
         <label class="check-inline"><input type="checkbox" id="g2on"> تجهیز دوم روی همین پی</label>
         <div id="g2" style="display:none">
           <div class="row">
             <div class="f"><label>تجهیز دوم</label>
-              <select id="g2tag">
-                {% for label, tags in builtin_groups %}
-                <optgroup label="{{ label }}">
-                  {% for tag in tags %}<option value="{{ tag }}">{{ tag }} — {{ builtin[tag].title }}</option>{% endfor %}
-                </optgroup>
-                {% endfor %}
-              </select>
+              <select id="g2tag"></select>
               <small class="hint">بقیه مشخصات از کاتالوگ؛ اعداد زیر را از اوت‌لاین همین پروژه کنترل کنید</small></div>
             <div class="f"><label><b>npol</b></label><input id="g2_npol" type="number" step="1"></div>
             <div class="f"><label><b>He</b> (m)</label><input id="g2_He" type="number" step="0.001"></div>
@@ -139,15 +119,12 @@
             <div class="f"><label>فاصله میل مهارها (mm)</label><input id="g2_anchor_gauge" type="number" step="10"></div>
           </div>
           <div class="row">
-            <div class="f"><label>تعداد ستون</label><input id="g2_n" type="number" step="1" min="1" max="4"></div>
-            <div class="f"><label>فاصله محور ستون‌ها (m)</label><input id="g2_spacing" type="number" step="0.05"></div>
-            <div class="f"><label>راستای ردیف</label>
-              <select id="g2_axis"><option value="x">x</option><option value="y">y</option></select></div>
-            <div class="f"><label>مرکز x (m)</label><input id="g2_x" type="number" step="0.05" value="0"></div>
-            <div class="f"><label>مرکز y (m)</label><input id="g2_y" type="number" step="0.05" value="0"></div>
-            <div class="f"><label>حالت بار حاکم</label>
-              <select id="g2_case"><option value="">طبق روش کنترل</option>
-                <option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+            <div class="f"><label>فاصله محور دو تجهیز (m)</label>
+              <input id="g2_gap" type="number" step="0.05" placeholder="از کی‌پلن">
+              <small class="hint">فاصله محور ردیف تجهیز اول تا ردیف تجهیز دوم، از کی‌پلن (مثلاً ۱٫۵۰ بین
+                LA و CVT). سامانه دو ردیف را متقارن نسبت به مرکز پی می‌چیند.</small></div>
+            <div class="f"><label>تعداد ستون تجهیز دوم</label><input id="g2_n" type="number" step="1" min="1" max="4"></div>
+            <div class="f"><label>فاصله محور ستون‌های تجهیز دوم (m)</label><input id="g2_spacing" type="number" step="0.05"></div>
           </div>
           <p class="note" style="margin:0">نیروهای حاکم دو تجهیز با هم جمع می‌شوند (مثل دفترچه ۶۳)؛
             ستون و میل مهار هر تجهیز با نیروی خودش طراحی می‌شود.</p>
@@ -158,10 +135,7 @@
     <fieldset>
       <legend>اتصال به فونداسیون — از نقشه سازه نگهدارنده</legend>
       <div class="row">
-        <div class="f" id="spacingField"><label>فاصله محور تا محور ستون‌ها (m)</label>
-          <input id="pedestal_spacing" type="number" step="0.05" placeholder="برای دو ستون لازم است">
-          <small class="hint">فقط برای دو ستون. پی دست‌کم به اندازه «این فاصله + عرض ستون +
-            دو برابر حداقل بیرون‌زدگی» بزرگ می‌شود تا هر دو ستون کامل رویش بنشینند.</small></div>
+        
         <div class="f"><label>تعداد میل مهار در هر ستون</label><input id="anchor_n" type="number" step="1" value="4">
           <small class="hint">الگوی مربعی؛ نیمی از آن‌ها در هر ردیف کشش می‌گیرند</small></div>
         <div class="f"><label>قطر میل مهار (mm)</label><input id="anchor_dia" type="number" step="1" value="20">
@@ -370,7 +344,9 @@
 <script src="{{ url_for('static', filename='viewer3d.js') }}"></script>
 <script>
 const BUILTIN = {{ builtin|tojson }};
-const FPRESETS = {{ foundation_presets|tojson }};
+const VOLTAGES = {{ voltages|tojson }};
+const TYPES = {{ types|tojson }};
+const VORDER = {{ voltage_order|tojson }};
 const OPTIONS = {{ options|tojson }};
 const $ = id => document.getElementById(id);
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
@@ -428,40 +404,111 @@ function applyKind(){
 $("kind").addEventListener("change", applyKind);
 applyKind();
 
-// نمونه آماده: کل فرم با اعداد دفترچه
-$("fpreset").addEventListener("change", e => {
-  const p = FPRESETS[e.target.value]; if (!p) return;
-  const g1 = p.groups[0], site = p.site || {};
-  $("kind").value = "combined"; applyKind();
+// ---- چیدمان ثابت (از کی‌پلن یا نمونه آماده): مختصات ستون‌ها تایپ نمی‌شود
+let fixedLayout = null;      // {source, groups: [{tag, positions}]}
+const LAYOUT_INPUTS = ["kind","n_pedestal","pedestal_spacing","g2on","g2tag","g2_gap","g2_n","g2_spacing","L","B","bcol"];
+
+function setFixedLayout(src, p){
+  // p = {L, B, b, groups: [{tag, positions}]}
+  fixedLayout = {source: src, groups: p.groups};
+  const g1 = p.groups[0], g2 = p.groups[1];
+  $("kind").value = g2 ? "combined" : VOLTAGES[$("voltage").value].pad; applyKind();
   fillEquipment(g1.tag);
-  const eq = BUILTIN[g1.tag];
-  $("n_pedestal").value = g1.n || eq.n_pedestal;
-  $("pedestal_spacing").value = g1.spacing || eq.pedestal_spacing || "";
-  $("axis").value = g1.axis || "x"; $("gx").value = g1.x || 0; $("gy").value = g1.y || 0;
-  $("gcase").value = g1.case || "";
+  $("n_pedestal").value = g1.positions.length;
   $("L").value = p.L; $("B").value = p.B; $("bcol").value = p.b;
-  const g2 = p.groups[1];
   $("g2on").checked = !!g2; $("g2").style.display = g2 ? "block" : "none";
-  if (g2) {
-    fillGroup2(g2.tag);
-    if (g2.n) $("g2_n").value = g2.n;
-    if (g2.spacing) $("g2_spacing").value = g2.spacing;
-    $("g2_axis").value = g2.axis || "x"; $("g2_x").value = g2.x || 0; $("g2_y").value = g2.y || 0;
-    $("g2_case").value = g2.case || "";
-  }
-  const s = site.seismic || {};
-  if (s.edition) { $("edition").value = String(s.edition); $("edition").dispatchEvent(new Event("change")); }
-  if (s.a !== undefined) { $("a").value = s.a; $("b4").value = s.b; $("i4").value = s.i; $("r4").value = s.r; }
-  const so = site.soil || {};
-  if (so.q_base) $("q_base").value = so.q_base;
-  if (so.q_factor) $("q_factor").value = so.q_factor;
-  const fd = site.foundation || {};
-  if (fd.hp) $("hp").value = fd.hp;
-  if (fd.tf) $("tf").value = fd.tf;
-  const rb = site.rebar || {};
-  if (rb.col_dia) $("col_dia").value = rb.col_dia;
-  if (rb.pad_dia) $("pad_dia").value = rb.pad_dia;
-  $("msg").textContent = "فرم با اعداد دفترچه پر شد: " + p.title;
+  if (g2) { fillGroup2(g2.tag); $("g2_n").value = g2.positions.length; }
+  const n = p.groups.reduce((a, g) => a + g.positions.length, 0);
+  $("kpBanner").style.display = "block";
+  $("kpBanner").innerHTML = `چیدمان ستون‌ها از <b>${src}</b>: ` +
+    p.groups.map(g => `${g.tag} × ${g.positions.length}`).join(" + ") + ` — ${n} ستون، ` +
+    `پی ${fmt(p.L)}×${fmt(p.B)} · <a href="#" id="kpClear">چیدمان خودکار به جای این</a>`;
+  $("kpClear").addEventListener("click", ev => { ev.preventDefault(); clearFixedLayout(); });
+  drawPreview();
+}
+function clearFixedLayout(){
+  fixedLayout = null; $("kpBanner").style.display = "none"; drawPreview();
+}
+// هر تغییری در چیدمان، چیدمان ثابت را کنار می‌گذارد و قاعده خودکار حاکم می‌شود
+LAYOUT_INPUTS.forEach(id => $(id).addEventListener("input", () => {
+  if (fixedLayout && id !== "L" && id !== "B" && id !== "bcol") clearFixedLayout(); else drawPreview();
+}));
+
+// همان قاعده سرور (calc_service.layout_from_spec) برای پیش‌نمایش
+function currentGroups(){
+  if (fixedLayout) return fixedLayout.groups;
+  const two = $("kind").value === "combined" && $("g2on").checked;
+  const gap = num("g2_gap") || 0;
+  const rowOf = (tag, n, s, y) => ({tag: tag, positions: Array.from({length: n},
+    (_, i) => [(-(n - 1) / 2 + i) * (s || 0), y])});
+  const out = [rowOf($("preset").value || "EQ", num("n_pedestal") || 1, num("pedestal_spacing"), two ? gap / 2 : 0)];
+  if (two) out.push(rowOf($("g2tag").value, num("g2_n") || 1, num("g2_spacing"), -gap / 2));
+  return out;
+}
+function drawPreview(){
+  const svg = $("layoutPreview"), b = num("bcol") || 0.6;
+  const groups = currentGroups();
+  const pts = groups.flatMap(g => g.positions);
+  const fx = Math.max(...pts.map(p => Math.abs(p[0]))) * 2 + b + 0.2;
+  const fy = Math.max(...pts.map(p => Math.abs(p[1]))) * 2 + b + 0.2;
+  const L = num("L") || fx, B = num("B") || fy;
+  const W = Math.max(L, B) * 1.15, k = 100 / W, H = B * k + 14;
+  svg.setAttribute("viewBox", `0 0 100 ${H}`);
+  const X = x => 50 + x * k, Y = y => 7 + B * k / 2 - y * k;
+  const colors = ["#8a6d3b", "#3b6d8a"];
+  let h = `<rect x="${X(-L/2)}" y="${Y(B/2)}" width="${L*k}" height="${B*k}" class="lp-pad"/>`;
+  groups.forEach((g, gi) => g.positions.forEach(p => {
+    h += `<rect x="${X(p[0]-b/2)}" y="${Y(p[1]+b/2)}" width="${b*k}" height="${b*k}" ` +
+         `fill="${colors[gi]}" fill-opacity=".25" stroke="${colors[gi]}" stroke-width=".4"/>`;
+  }));
+  groups.forEach((g, gi) => {
+    const p = g.positions[0];
+    h += `<text x="${X(p[0])}" y="${Y(p[1])+1}" font-size="2.6" text-anchor="middle" ` +
+         `fill="${colors[gi]}">${g.tag}</text>`;
+  });
+  h += `<text x="${X(0)}" y="${H-1}" font-size="3" text-anchor="middle" class="lp-dim">L = ${fmt(L)}` +
+       ` · B = ${fmt(B)}${num("L") ? "" : " (حداقل؛ سامانه تعیین می‌کند)"}</text>`;
+  svg.innerHTML = h;
+}
+
+// ---- سطح ولتاژ: فهرست تجهیزها و نوع پی از همین
+function populateEquipment(){
+  const lvl = VOLTAGES[$("voltage").value];
+  const opts = VORDER[$("voltage").value]
+    .map(([t, key]) => `<option value="${key}">${TYPES[t] || t}</option>`).join("");
+  $("preset").innerHTML = `<option value="">— انتخاب کنید —</option>` + opts;
+  $("g2tag").innerHTML = opts;
+  $("kind").value = lvl.pad; applyKind();
+  $("g2on").checked = false; $("g2").style.display = "none";
+  $("kpsel").style.display = "none"; KP = [];
+  if (fixedLayout) clearFixedLayout();
+}
+$("voltage").addEventListener("change", () => { populateEquipment(); drawPreview(); });
+
+// کی‌پلن: خواندن همه پی‌ها، انتخاب یکی
+var KP = [];
+$("kpfile").addEventListener("change", async e => {
+  const file = e.target.files[0]; if (!file) return;
+  $("msg").textContent = "در حال خواندن کی‌پلن…";
+  const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
+  try {
+    const r = await fetch("/api/keyplan", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
+    const d = await r.json();
+    if (d.error) { $("msg").textContent = d.error; return; }
+    KP = d.foundations;
+    const sel = $("kpsel");
+    sel.innerHTML = `<option value="">— ${KP.length} نوع پی در ${d.file} —</option>` +
+      KP.map((f, i) => `<option value="${i}" ${f.problem ? "disabled" : ""}>${f.name} — ` +
+        (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)} · ${f.count} عدد`) +
+        `</option>`).join("");
+    sel.style.display = "block";
+    $("msg").textContent = "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.";
+  } catch (err) { $("msg").textContent = "کی‌پلن خوانده نشد: " + err; }
+});
+$("kpsel").addEventListener("change", e => {
+  const f = KP[e.target.value]; if (!f) return;
+  setFixedLayout(`کی‌پلن «${f.name}»`, f);
+  $("msg").textContent = `پی ${f.name} از کی‌پلن: ${f.describe}. اعداد تجهیز را با اوت‌لاین پروژه کنترل کنید.`;
 });
 
 $("preset").addEventListener("change", e => {
@@ -477,8 +524,7 @@ $("preset").addEventListener("change", e => {
   ["anchor_n","anchor_dia","anchor_gauge","op_moment"]
     .forEach(k => { if (eq[k] !== undefined && eq[k] !== null) $(k).value = eq[k]; });
   $("pedestal_spacing").value = eq.pedestal_spacing || "";
-  // تجهیزهای پست ۶۳ روی پی مشترک مستطیلی می‌نشینند
-  if (eq.npol > 1 && eq.pedestal_spacing) { $("kind").value = "combined"; applyKind(); }
+
   // فیلدهایی که باید از اوت‌لاین بیایند خالی و علامت‌گذاری می‌شوند
   document.querySelectorAll(".needs-outline").forEach(el => {
     el.classList.remove("needs-outline"); el.placeholder = "";
@@ -511,16 +557,17 @@ const num = id => $(id).value === "" ? null : parseFloat($(id).value);
 
 function layoutPayload(){
   const kind = $("kind").value;
-  const groups = [{n: num("n_pedestal"), spacing: num("pedestal_spacing"), axis: $("axis").value,
-                   x: num("gx"), y: num("gy"), case: $("gcase").value || null}];
+  const fixed = fixedLayout ? fixedLayout.groups : null;
+  const groups = [{n: num("n_pedestal"), spacing: num("pedestal_spacing"),
+                   positions: fixed ? fixed[0].positions : null}];
   if (kind === "combined" && $("g2on").checked) {
     const tag = $("g2tag").value, equipment = {tag: tag};
     G2_FIELDS.forEach(k => equipment[k] = num("g2_" + k));
     groups.push({equipment: equipment, n: num("g2_n"), spacing: num("g2_spacing"),
-                 axis: $("g2_axis").value, x: num("g2_x"), y: num("g2_y"),
-                 case: $("g2_case").value || null});
+                 positions: fixed && fixed[1] ? fixed[1].positions : null});
   }
-  return {kind: kind, groups: groups};
+  return {kind: kind, gap: num("g2_gap"), groups: groups,
+          source: fixedLayout ? fixedLayout.source : "قاعده خودکار"};
 }
 
 $("form").addEventListener("submit", async ev => {
@@ -574,6 +621,12 @@ $("form").addEventListener("submit", async ev => {
 });
 
 function fmt(v, d=2){ return Number(v).toFixed(d); }
+
+// انتخاب دستی تجهیز دیگر یعنی چیدمان ثابت دیگر معتبر نیست
+$("preset").addEventListener("input", () => { if (fixedLayout) clearFixedLayout(); });
+$("preset").addEventListener("change", () => drawPreview());
+populateEquipment();
+drawPreview();
 
 function render(d){
   const g = d.geometry;

@@ -116,9 +116,10 @@ class Foundation3D:
             for a in mine:
                 d = a.dia
                 self.rod((a.x, a.y, a.z_bottom), (a.x, a.y, a.z_top), d, "F-ANCHOR")
-                hx = 1 if a.x < p.x else -1                   # قلاب رو به داخل ستون
-                self.rod((a.x - hx * d / 2, a.y, a.z_bottom),
-                         (a.x + hx * fm.anchor_hook * d, a.y, a.z_bottom), d, "F-ANCHOR")
+                if fm.anchor_hook > 0:                        # قلاب رو به داخل ستون
+                    hx = 1 if a.x < p.x else -1
+                    self.rod((a.x - hx * d / 2, a.y, a.z_bottom),
+                             (a.x + hx * fm.anchor_hook * d, a.y, a.z_bottom), d, "F-ANCHOR")
                 zn = z + grout + plate_t
                 self.rod((a.x, a.y, zn), (a.x, a.y, zn + 4), 2.2 * d, "F-ANCHOR", sides=24)
                 for k in range(2):

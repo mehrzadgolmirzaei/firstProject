@@ -150,3 +150,43 @@ CATALOG_KIMIA63 = {
                       Hs=4.58, hs=2.29, As=2.20, Ws=620, Fc=320, Fc_sc=640, npol=3,
                       n_pedestal=2, pedestal_spacing=1.70, **_K63),
 }
+
+
+# ------------------------------------------------------------------
+# دسته‌بندی برای کاربر: سطح ولتاژ پست ← نوع تجهیز.
+# نام پروژه‌ها فقط در «source» هر تجهیز (برای Audit) می‌ماند.
+# ------------------------------------------------------------------
+ALL_EQUIPMENT = {**CATALOG, **CATALOG_KIMIA63}
+
+EQUIPMENT_TYPES = {                 # نوع ← نام فارسی
+    "LA": "برق‌گیر (LA)",
+    "CB": "کلید قدرت (CB)",
+    "CT": "ترانس جریان (CT)",
+    "CVT": "ترانس ولتاژ خازنی (CVT)",
+    "CVT1": "ترانس ولتاژ خازنی تک‌فاز (CVT)",
+    "PI": "مقره اتکایی (PI)",
+    "DSE": "سکسیونر با تیغه زمین (DS/DSE)",
+    "DS": "سکسیونر (DS)",
+    "DSROW": "سکسیونر ردیفی (DS)",
+    "DS2": "سکسیونر نوع ۲ (DS2)",
+}
+
+# سطح ولتاژ ← {نوع: کلید کاتالوگ}. پست ۶۳ پی مشترک مستطیلی دارد، ۲۳۰/۴۰۰ پی منفرد.
+VOLTAGE_LEVELS = {
+    "63": {"title": "پست ۶۳ کیلوولت", "pad": "combined",
+           "types": {"LA": "LA63", "CB": "CB63", "CT": "CT63", "CVT": "CVT63",
+                     "CVT1": "CVT63_1", "PI": "PI63", "DSE": "DSE63", "DS2": "DS2_63"}},
+    "230": {"title": "پست ۲۳۰ کیلوولت", "pad": "single",
+            "types": {t: t for t in ("LA", "CB", "CT", "CVT", "PI", "DSE", "DS", "DSROW")}},
+    "400": {"title": "پست ۴۰۰ کیلوولت", "pad": "single",
+            "types": {t: t for t in ("LA", "CB", "CT", "CVT", "PI", "DSE", "DS", "DSROW")}},
+}
+
+
+def equipment_type(key):
+    """کلید کاتالوگ ← نوع تجهیز (LA63 ← LA)."""
+    for lvl in VOLTAGE_LEVELS.values():
+        for t, k in lvl["types"].items():
+            if k == key:
+                return t
+    return key
