@@ -457,77 +457,92 @@ class FoundationDrawing:
         h.paths.add_polyline_path(pts, is_closed=True)
         h.set_pattern_fill(pattern, scale=scale)
 
+    def spline(self, pts, layer=LO.LY_CONCRETE):
+        pts = [self._p(p) for p in pts]
+        self._track(pts)
+        if not self._dry:
+            self.msp.add_spline(fit_points=[(x, y, 0) for x, y in pts],
+                                dxfattribs={"layer": layer})
+
+    def nut(self, cx, y, w, h, layer=LO.LY_DETAIL):
+        """مهره شش‌گوش از نمای کنار: مستطیل با دو خط وجه."""
+        self.rect(cx - w / 2, y, w, h, layer)
+        for f in (-0.22, 0.22):
+            self.line((cx + f * w, y), (cx + f * w, y + h), layer)
+
     def _detail_anchor(self):
         """
-        دیتیل یک میل مهار، مطابق دیتیل استاندارد دفتر (08-CT): بتن ستون، گروت
-        هاشورخورده با پخ، صفحه کف، واشر و دو مهره، رزوه، قلاب انتهایی؛ و اندازه‌های
-        گروت، بیرون‌زدگی و طول مدفون. طول مدفون همان مقدار محاسبه‌شده است.
+        دیتیل میل مهار، مطابق دیتیل استاندارد دفتر (نقشه 08-CT):
+        میلگرد بدنه (Ф22 برای M20) تا طول مدفون محاسبه‌شده، گروت ۵۰ هاشورخورده با
+        پخ ۴۵ درجه و خط شکست موجی، مهره تراز زیر صفحه داخل گروت، صفحه کف، واشر و
+        دو مهره، رزوه از سر میل مهار تا زیر گروت. اندازه‌ها: گروت و بالای گروت روی
+        خط داخلی، بیرون‌زدگی کل و طول مدفون روی خط بیرونی.
         """
         eq, fm, u = self.eq, self.fm, self.u
+        an = self.cfg.anchorage
         k = self.s / self.cfg.drawing.detail_scale
-        d = eq.anchor_dia * k
+        d = eq.anchor_dia * k                           # قطر رزوه
+        rod = (an.rod_dia or eq.anchor_dia + 2) * k     # قطر میلگرد بدنه
+        r = rod / 2
         emb, gr = fm.anchor_embed * k, fm.grout * k
         pt, proj = fm.plate_t * k, fm.anchor_projection * k
-        hook = fm.anchor_hook * d
-        W = max(u(16), hook + u(6))                  # نیم‌عرض بخش نمایش‌داده‌شده از ستون
-        pr = W * 0.55                                # لبه صفحه کف
-        bottom = -emb - u(6)
-
-        # بتن ستون با خط شکست پایین
-        z = u(1.5)
-        self.polyline([(-W, bottom), (-W, 0), (W, 0), (W, bottom)], LO.LY_CONCRETE)
-        self.polyline([(-W, bottom), (-W * 0.3, bottom), (-W * 0.2, bottom + z),
-                       (-W * 0.1, bottom - z), (0, bottom), (W, bottom)], LO.LY_CONCRETE)
+        left, right = -100 * k, 100 * k                 # محدوده نمایش گروت
+        plate_r = 50 * k
+        nut_w, nut_h = 1.7 * d, 0.8 * d
 
         # گروت با پخ ۴۵ درجه و هاشور بتنی
-        grout = [(-W, 0), (pr + gr, 0), (pr, gr), (-W, gr)]
+        grout = [(left, 0), (right + gr, 0), (right, gr), (left, gr)]
         self.polyline(grout, LO.LY_DETAIL, close=True)
-        self.hatch_pattern(grout, "AR-CONC", scale=k * 0.4)
-
+        self.hatch_pattern(grout, "AR-CONC", scale=k * 0.25)
+        # مهره تراز زیر صفحه (داخل گروت)
+        self.nut(0, gr - nut_h, nut_w, nut_h)
         # صفحه کف، واشر، دو مهره
-        self.rect(-W, gr, W + pr, pt, LO.LY_DETAIL)
+        self.rect(left, gr, plate_r - left, pt, LO.LY_DETAIL)
         y = gr + pt
         washer = 4 * k
-        self.rect(-1.2 * d, y, 2.4 * d, washer, LO.LY_DETAIL)
+        self.rect(-1.25 * d, y, 2.5 * d, washer, LO.LY_DETAIL)
         y += washer
         for _ in range(2):
-            self.rect(-0.85 * d, y, 1.7 * d, 0.8 * d, LO.LY_DETAIL)
-            y += 0.8 * d + k
+            self.nut(0, y, nut_w, nut_h)
+            y += nut_h
+        # خط شکست موجی سمت چپ
+        wv = u(1.2)
+        y0, y1 = -u(2.5), gr + pt + u(2.5)
+        self.spline([(left + wv * dx, y0 + (y1 - y0) * t) for t, dx in
+                     ((0, 0), (0.2, 0.9), (0.4, -0.3), (0.6, 0.9), (0.8, -0.3), (1, 0.5))],
+                    LO.LY_CONCRETE)
 
-        # میل مهار با قلاب انتهایی
-        self.line((-d / 2, proj), (-d / 2, -emb), LO.LY_DETAIL)
-        self.line((d / 2, proj), (d / 2, -emb + d), LO.LY_DETAIL)
-        self.line((-d / 2, proj), (d / 2, proj), LO.LY_DETAIL)
-        self.polyline([(-d / 2, -emb), (hook, -emb), (hook, -emb + d), (d / 2, -emb + d)],
+        # میل مهار: بدنه تا طول مدفون، قلاب انتهایی
+        hook = fm.anchor_hook * eq.anchor_dia * k
+        self.line((-r, proj), (r, proj), LO.LY_DETAIL)
+        self.line((-r, proj), (-r, -emb), LO.LY_DETAIL)
+        self.line((r, proj), (r, -emb + rod), LO.LY_DETAIL)
+        self.polyline([(-r, -emb), (hook, -emb), (hook, -emb + rod), (r, -emb + rod)],
                       LO.LY_DETAIL)
-        # رزوه: از روی صفحه تا سر میل مهار
-        t = gr + pt
-        step = u(0.6)
-        while t + step <= proj:
-            self.line((-d / 2, t), (d / 2, t + step * 0.6), LO.LY_CONCRETE)
-            t += step
+        # رزوه (قرمز): بالای مهره‌ها تا سر میل مهار، و زیر مهره تراز تا زیر گروت
+        for y_a, y_b in ((y, proj), (0, gr - nut_h)):
+            t, step = y_a, u(0.45)
+            while t + step * 0.6 <= y_b:
+                self.line((-r, t), (r, t + step * 0.6), LO.LY_CONCRETE)
+                t += step
 
-        # اندازه‌ها: داخلی گروت و بالای گروت، بیرونی بیرون‌زدگی کل و طول مدفون
-        # هر اندازه کوچک روی خط خودش تا متن‌ها روی هم نیفتند
+        # اندازه‌ها
         f = 1 / k
-        x1 = pr + gr + u(5)
-        x2, x3 = x1 + u(7), x1 + u(14)
-        self.dim_v((pr, 0), (pr, gr), x1, factor=f)
-        self.dim_v((d / 2, gr), (d / 2, proj), x2, factor=f)
-        self.dim_v((d / 2, 0), (d / 2, proj), x3, factor=f)
-        self.dim_v((W, -emb), (W, 0), x3, factor=f)
+        x1 = right + gr + u(4)
+        x2 = x1 + u(9)
+        self.dim_v((right + gr, 0), (right + gr, gr), x1, factor=f)
+        self.dim_v((r, gr), (r, proj), x1, factor=f)
+        self.dim_v((r, 0), (r, proj), x2, factor=f)
+        self.dim_v((r, -emb), (r, 0), x2, factor=f)
 
-        # برچسب‌ها
-        total = fm.anchor_embed + fm.anchor_projection + fm.anchor_hook * eq.anchor_dia
-        self.leader((0, proj - u(0.5)), (-d - u(4), proj + u(6)), f"M{eq.anchor_dia:.0f}", -u(4))
-        self.leader((-W * 0.55, gr / 2), (-W - u(3), gr / 2), "GROUT", -u(4))
-        self.leader((pr * 0.7, gr + pt / 2), (-W - u(3), gr + pt + u(4)),
-                    f"BASE PLATE t={fm.plate_t:.0f}", -u(4))
-        self.leader((-d / 2, -emb * 0.45), (-W - u(3), -emb * 0.45 - u(4)),
-                    f"{eq.anchor_n}M{eq.anchor_dia:.0f}  L={total:.0f}", -u(4))
-        self.view_title((-W, proj + u(12)), 'DET."1"',
-                        f"Sc.1:{self.cfg.drawing.detail_scale:.0f}")
-        self.text((-W, bottom - u(9)), "ANCHOR BOLT", LO.H_BIG)
+        # برچسب‌ها مثل دیتیل دفتر
+        self.leader((-r, proj - u(1)), (-r - u(6), proj + u(6)), f"M{eq.anchor_dia:.0f}", -u(6))
+        self.leader((left + u(3), gr * 0.4), (left - u(4), gr * 0.4 - u(2)), "GROUT", -u(5))
+        self.leader((r, -emb * 0.3), (r + u(10), -emb * 0.3), f"%%C{rod / k:.0f}", u(4))
+
+        self.text((left, -emb - u(8)), "ANCHOR BOLT", LO.H_BIG)
+        self.text((left, -emb - u(8) - u(3.2)), f"Sc.1:{self.cfg.drawing.detail_scale:.0f}",
+                  LO.H_TINY)
 
     # ================================================== چیدمان
     def _measure(self, fn):

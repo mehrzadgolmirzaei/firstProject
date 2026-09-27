@@ -60,7 +60,8 @@
     "projection": 150.0,
     "plate_thickness": 20.0,
     "hook": 4.0,
-    "rounding": 50.0
+    "rounding": 50.0,
+    "rod_dia": 0.0
   },
   "design": {
     "governing": "notebook",

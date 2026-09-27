@@ -81,6 +81,7 @@ class Anchorage:
     projection: float = 150.0      # بیرون‌زدگی میل مهار از روی بتن (mm)
     plate_thickness: float = 20.0  # ضخامت صفحه کف (mm) — برای ترسیم
     hook: float = 4.0              # طول قلاب انتهایی بر حسب قطر (×d)
+    rod_dia: float = 0.0           # قطر میلگرد بدنه (mm)؛ صفر = قطر رزوه + ۲ (M20 روی Ф22)
     rounding: float = 50.0         # گرد کردن طول مدفون به بالا (mm)
 
 
