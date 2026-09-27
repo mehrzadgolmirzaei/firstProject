@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.6.2"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.7.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -169,13 +169,23 @@ def config_from_form(form) -> ProjectConfig:
                         ("soil", ("q_base", "q_factor")),
                         ("wind", ("v_normal", "v_high")),
                         ("foundation", ("hp", "b", "tf", "min_projection", "L", "B")),
-                        ("rebar", ("pad_dia", "col_dia", "tie_dia", "tie_spacing"))):
+                        ("rebar", ("pad_dia", "col_dia", "tie_dia", "tie_spacing")),
+                        ("steel", ("leg_width", "k_chord", "fy", "connection_factor", "panel"))):
         target = getattr(cfg, group)
         for key in keys:
             cur = getattr(target, key)
             val = _number(form, f"{group}.{key}", type(cur))
             if val is not None:
                 setattr(target, key, val)
+
+    for key in ("enabled", "feed_foundation"):
+        val = form.get(f"steel.{key}")
+        if val is not None:
+            setattr(cfg.steel, key, val in (True, 1, "1", "true", "on"))
+    if not 0.2 <= cfg.steel.leg_width <= 1.0:
+        raise InputError("ضلع پایه مشبک باید بین ۰٫۲ و ۱ متر باشد")
+    if cfg.steel.k_chord not in (1.0, 2.0):
+        raise InputError("ضریب طول مؤثر نبشی اصلی باید ۱ یا ۲ باشد")
 
     s = cfg.seismic
     s.edition = int(_choice(form, "seismic.edition", ("4", "5"), str(s.edition)))
@@ -397,13 +407,16 @@ def api_drawing(cid):
         return jsonify({"error": f"نقشه ساخته نشد: {exc}"}), 500
 
     n2, n3 = Path(out["2d"]).name, Path(out["3d"]).name
+    sap = [Path(x).name for x in out.get("sap", [])]
     db.execute("UPDATE calculations SET dxf_path=?, dxf3d_path=? WHERE id=?", (n2, n3, cid))
     auth.record("تولید نقشه", "calculation", cid, {"2d": n2, "3d": n3})
     return jsonify({"files": [
         {"kind": "2d", "name": n2, "url": url_for("download", name=n2),
          "label": f"نقشه دوبعدی — ساخت (۱:{out['scale']:.0f})"},
         {"kind": "3d", "name": n3, "url": url_for("download", name=n3),
-         "label": "مدل سه‌بعدی — ارائه"}],
+         "label": "مدل سه‌بعدی — ارائه"}] + [
+        {"kind": "sap", "name": n, "url": url_for("download", name=n),
+         "label": "مدل SAP سازه (اختیاری — برای مشاور)"} for n in sap],
         "warnings": out["warnings"]})
 
 
@@ -411,7 +424,7 @@ def api_drawing(cid):
 @auth.login_required
 def download(name):
     target = (OUT / name).resolve()
-    if not str(target).startswith(str(OUT.resolve())) or not target.exists():
+    if OUT.resolve() not in target.parents or not target.is_file():
         abort(404)
     return send_file(target, as_attachment=True)
 

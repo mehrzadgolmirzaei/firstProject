@@ -261,6 +261,30 @@
     </fieldset>
 
     <fieldset>
+      <legend>سازه فولادی نگهدارنده — تحلیل و طراحی در خود برنامه</legend>
+      <label class="check-inline"><input type="checkbox" id="steel_enabled" checked>
+        سازه را بساز، تحلیل کن و مقاطع را طراحی کن (AISC-ASD89)</label>
+      <label class="check-inline"><input type="checkbox" id="steel_feed" checked>
+        وزن و سطح بادگیر سازه برای پی از همین سازه (به جای Ws و As دستی)</label>
+      <div class="row">
+        <div class="f"><label>ضلع پایه مشبک (m)</label><input id="leg_width" type="number" step="0.05" value="{{ defaults.steel.leg_width }}">
+          <small class="hint">فاصله محور چهار نبشی اصلی هر پایه؛ مدل‌های دفتر ۰٫۴۰ (سکسیونر ۰٫۳۰)</small></div>
+        <div class="f"><label>ضریب طول مؤثر نبشی اصلی K</label>
+          <select id="k_chord"><option value="2" {{ 'selected' if defaults.steel.k_chord == 2 }}>۲ — رویه مدل‌های SAP دفتر</option>
+            <option value="1" {{ 'selected' if defaults.steel.k_chord == 1 }}>۱ — مهار در هر گره پانل</option></select>
+          <small class="hint">نبشی اصلی بین دو گره پانل که مهاربند دارد؛ آیین‌نامه K=1 را مجاز می‌داند، دفتر ۲ گرفته</small></div>
+        <div class="f"><label>Fy فولاد (kg/cm²)</label><input id="steel_fy" type="number" step="50" value="{{ defaults.steel.fy }}">
+          <small class="hint">St37 = ۲۳۵۰ (مدل‌های دفتر)</small></div>
+        <div class="f"><label>ضریب وزن اتصالات</label><input id="conn_factor" type="number" step="0.05" value="{{ defaults.steel.connection_factor }}">
+          <small class="hint">ورق اتصال، پیچ و صفحه کف نسبت به وزن اعضا</small></div>
+      </div>
+      <p class="note" style="margin:0">سازه با الگوی سازه‌های دفتر ساخته می‌شود (پایه مشبک چهارنبشی، مهاربند،
+        تیر ناودانی سر سازه)، با همان پنج حالت بار پی به‌علاوه زلزله عمود و بار تعمیر تحلیل می‌شود
+        و برای هر گروه اعضا سبک‌ترین نبشی/ناودانی که همه کنترل‌ها را پاس کند انتخاب می‌شود.
+        سازه کلید قدرت را سازنده می‌دهد و طراحی نمی‌شود.</p>
+    </fieldset>
+
+    <fieldset>
       <legend>روش کنترل — انتخاب مهندس</legend>
       <div class="f">
         <label>حالت بار حاکم</label>
@@ -300,9 +324,12 @@
         <div class="legend" id="legend" style="display:none">
           <i style="background:#D4D0C8"></i>بتن<br>
           <i style="background:#7E5440"></i>آرماتور<br>
-          <i style="background:#B0B6BC"></i>میل مهار
+          <i style="background:#B0B6BC"></i>میل مهار<br>
+          <i style="background:#8A959E"></i>سازه فولادی
+          <div class="heat-scale"><span>۰</span><b></b><span>۱٫۲</span><br><small>نسبت تنش اعضا</small></div>
         </div>
         <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
+        <button class="btn quiet heat-btn" type="button" id="heatBtn" style="display:none">رنگ بر اساس نسبت تنش</button>
         <div class="readouts" id="readouts"></div>
       </div>
     </div>
@@ -326,6 +353,11 @@
     <div class="sheet" id="checksBox" style="display:none">
       <h2>کنترل‌های طراحی</h2>
       <div id="checks"></div>
+    </div>
+
+    <div class="sheet" id="steelBox" style="display:none">
+      <h2>سازه فولادی نگهدارنده</h2>
+      <div id="steelOut"></div>
     </div>
 
     <div class="sheet" id="designBox" style="display:none">
@@ -603,6 +635,9 @@ $("form").addEventListener("submit", async ev => {
     "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf"),
     "foundation.L": num("L"), "foundation.B": num("B"),
     "rebar.pad_dia": num("pad_dia"), "rebar.col_dia": num("col_dia"),
+    "steel.enabled": $("steel_enabled").checked, "steel.feed_foundation": $("steel_feed").checked,
+    "steel.leg_width": num("leg_width"), "steel.k_chord": num("k_chord"),
+    "steel.fy": num("steel_fy"), "steel.connection_factor": num("conn_factor"),
     "design.governing": $("governing").value, "design.bearing": $("bearing").value
   };
   try {
@@ -701,6 +736,51 @@ function render(d){
      <div class="kv"><span>وزن آرماتور</span><span>${fmt(q.rebar,1)} kg</span></div>`;
 
   viewer.build(d.model);
+  renderSteel(d.structures || []);
+}
+
+let heat = false;
+$("heatBtn").addEventListener("click", () => {
+  heat = !heat;
+  viewer.setHeat(heat);
+  $("heatBtn").textContent = heat ? "رنگ واقعی فولاد" : "رنگ بر اساس نسبت تنش";
+  $("legend").classList.toggle("heat", heat);
+});
+
+function renderSteel(list){
+  $("steelBox").style.display = list.length ? "block" : "none";
+  $("heatBtn").style.display = list.length ? "inline-block" : "none";
+  $("steelOut").innerHTML = list.map(st => {
+    const head = `<div class="readout" style="margin-bottom:6px"><span class="big">${st.tag}</span>
+      <span class="unit">${st.stands > 1 ? st.stands + " سازه تک‌پایه" : st.legs + " پایه"} · ${st.phases} فاز ·
+        ارتفاع ${fmt(st.height)} m · ${st.members} عضو</span>
+      <span class="verdict ${st.ok ? "ok" : "ng"}">نسبت تنش حداکثر ${fmt(st.max_ratio, 2)}</span></div>`;
+    const rows = st.groups.map(g => `<tr><td>${g.title}</td><td class="num">${g.section}</td>
+      <td class="num">${g.count}</td><td class="num">${fmt(g.length, 1)}</td>
+      <td class="num"><b class="${g.ratio <= 1 ? "" : "ng"}">${fmt(g.ratio, 3)}</b></td>
+      <td>${g.combo} · ${g.equation}</td></tr>`).join("");
+    const table = `<table class="compare"><thead><tr><th>گروه اعضا</th><th>مقطع</th><th>تعداد</th>
+      <th>طول کل m</th><th>نسبت تنش</th><th>ترکیب حاکم</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const steps = st.groups.map(g => `<details><summary>${g.title} — ${g.section} (عضو ${g.member})</summary>
+      <div class="steps">${g.steps.map(s => `<div class="step"><span class="l">${s[0]}</span>
+        <p class="f">${s[1]}</p><p class="v">${s[2]}</p></div>`).join("")}
+      ${g.notes.map(n => `<p class="note" style="color:var(--fail)">${n}</p>`).join("")}</div></details>`).join("");
+    const legs = `<table class="compare"><thead><tr><th>پایه</th><th>فشار کل پایه kg</th>
+      <th>برش kg</th><th>لنگر kg·m</th><th>فشار یک نبشی kg</th><th>کشش یک نبشی (میل مهار) kg</th></tr></thead><tbody>` +
+      st.legs_reactions.map(l => `<tr><td class="num">${l.leg}</td>
+        <td class="num" title="${l.compression_combo}">${fmt(l.compression, 0)}</td>
+        <td class="num" title="${l.shear_combo}">${fmt(l.shear, 0)}</td>
+        <td class="num" title="${l.moment_combo}">${fmt(l.moment, 0)}</td>
+        <td class="num">${fmt(l.chord_comp, 0)}</td>
+        <td class="num" title="${l.chord_tension_combo}">${fmt(l.chord_tension, 0)}</td></tr>`).join("") +
+      "</tbody></table><p class='note'>نشانگر را روی هر عدد نگه دارید تا ترکیب بار حاکمش دیده شود.</p>";
+    const wt = `<div class="kv"><span>وزن اعضا / با اتصالات</span><span>${fmt(st.weight, 0)} / ${fmt(st.weight_design, 0)} kg</span></div>
+      <div class="kv"><span>سطح بادگیر (وجه رو به باد)</span><span>${fmt(st.wind_area, 2)} m²</span></div>
+      <div class="kv"><span>${st.fed ? "به پی رفت" : "در محاسبه پی (دستی)"}</span><span>Ws = ${fmt(st.Ws_used, 0)} kg ، As = ${fmt(st.As_used, 2)} m²</span></div>`;
+    const warn = st.warnings.map(w => `<p class="note" style="color:var(--fail)">${w}</p>`).join("");
+    return head + table + `<h3 style="margin:10px 0 4px">عکس‌العمل پای هر پایه (برای ستون و میل مهار)</h3>` +
+      legs + wt + `<h3 style="margin:10px 0 4px">کنترل حاکم هر گروه — مرحله به مرحله</h3>` + steps + warn;
+  }).join("<hr>");
 }
 </script>
 {% endblock %}

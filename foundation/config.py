@@ -105,6 +105,28 @@ class Foundation:
 
 
 @dataclass
+class SteelStructure:
+    """
+    سازه فولادی نگهدارنده — ساخته، تحلیل و طراحی‌شده در خود برنامه (structural/).
+    الگوی هندسه و ضرایب مطابق مدل‌های SAP دفتر؛ هر عدد قابل تغییر است.
+    """
+    enabled: bool = True
+    feed_foundation: bool = False  # وزن و سطح بادگیر سازه برای پی از سازه طراحی‌شده (نه عدد دستی)
+    leg_width: float = 0.40        # ضلع مربع نبشی‌های هر پایه (m)
+    phase_pitch: float = 1.50      # فاصله فازها روی تیر سر (m)
+    panel: float = 0.50            # ارتفاع هدف پانل (m)
+    bracing: str = "zigzag"        # zigzag | x
+    k_chord: float = 2.0           # ضریب طول مؤثر نبشی اصلی (رویه دفتر در مدل‌های SAP: ۲)
+    fy: float = 2350.0             # تنش تسلیم (kg/cm²) — St37، مثل مدل‌های دفتر
+    ratio_limit: float = 1.0       # حد نسبت تنش در انتخاب مقطع
+    connection_factor: float = 1.15   # وزن ورق اتصال، پیچ و صفحه کف نسبت به وزن اعضا
+    live_load: float = 100.0       # بار نفر هنگام نصب/تعمیر روی تیر سر (kg)
+    min_chord: str = "L50X5"
+    min_brace: str = "L40X4"
+    min_beam: str = "UNP100"
+
+
+@dataclass
 class DesignOptions:
     """
     انتخاب‌های مهندس (فهرست گزینه‌ها و پیشنهاد سامانه در engine.py).
@@ -165,6 +187,7 @@ class ProjectConfig:
     foundation: Foundation = field(default_factory=Foundation)
     anchorage: Anchorage = field(default_factory=Anchorage)
     design: DesignOptions = field(default_factory=DesignOptions)
+    steel: SteelStructure = field(default_factory=SteelStructure)
     title_block: TitleBlock = field(default_factory=TitleBlock)
     drawing: DrawingSetup = field(default_factory=DrawingSetup)
 
@@ -185,7 +208,7 @@ class ProjectConfig:
     def _from_dict(cls, raw: dict):
         sub = {"materials": Materials, "soil": SoilData, "seismic": SeismicData,
                "wind": Wind, "rebar": Rebar, "foundation": Foundation, "design": DesignOptions,
-               "anchorage": Anchorage,
+               "anchorage": Anchorage, "steel": SteelStructure,
                "title_block": TitleBlock, "drawing": DrawingSetup}
         kwargs = {}
         for key, value in raw.items():

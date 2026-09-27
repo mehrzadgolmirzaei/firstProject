@@ -186,6 +186,48 @@
   {% endfor %}
 </section>
 
+{% if r.structures %}
+<section>
+  <h2>سازه فولادی نگهدارنده — AISC-ASD89</h2>
+  {% for st in r.structures %}
+  <div class="chk">
+    <div class="top"><b>{{ st.tag }} — {{ st.legs }} پایه مشبک {{ '%.2f'|format(st.leg_width) }}×{{ '%.2f'|format(st.leg_width) }} m،
+      ارتفاع {{ '%.2f'|format(st.height) }} m{% if st.stands > 1 %}، {{ st.stands }} سازه{% endif %}</b>
+      <span class="{{ 'ok' if st.ok else 'ng' }}">نسبت تنش حداکثر {{ '%.3f'|format(st.max_ratio) }}</span></div>
+    <table>
+      <thead><tr><th>گروه اعضا</th><th>مقطع</th><th>تعداد</th><th>نسبت تنش</th><th>ترکیب / رابطه حاکم</th></tr></thead>
+      <tbody>
+      {% for g in st.groups %}
+      <tr><td>{{ g.title }}</td><td>{{ g.section }}</td><td>{{ g.count }}</td>
+        <td>{{ '%.3f'|format(g.ratio) }}</td><td>{{ g.combo }} — {{ g.equation }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">Fy = {{ st.fy|int }} kg/cm² ، K نبشی اصلی = {{ st.k_chord|int }} ، وزن اعضا {{ st.weight|round|int }} kg
+      (با اتصالات {{ st.weight_design|round|int }} kg) ، سطح بادگیر {{ '%.2f'|format(st.wind_area) }} m²</p>
+    <table>
+      <thead><tr><th>پایه</th><th>فشار کل (kg)</th><th>برش (kg)</th><th>لنگر (kg·m)</th>
+        <th>فشار یک نبشی (kg)</th><th>کشش یک نبشی (kg)</th></tr></thead>
+      <tbody>
+      {% for l in st.legs_reactions %}
+      <tr><td>{{ l.leg }}</td><td>{{ l.compression|round|int }}</td><td>{{ l.shear|round|int }}</td>
+        <td>{{ l.moment|round|int }}</td><td>{{ l.chord_comp|round|int }}</td>
+        <td>{{ l.chord_tension|round|int }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% for g in st.groups %}
+    <div class="steps"><b style="font-size:11px">{{ g.title }} — {{ g.section }}</b>
+      {% for s in g.steps %}
+      <div class="st"><span class="l">{{ s[0] }}</span><p class="f">{{ s[1] }}</p><p class="v">{{ s[2] }}</p></div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 <section>
   <h2>لیست آرماتور و متره</h2>
   <table>

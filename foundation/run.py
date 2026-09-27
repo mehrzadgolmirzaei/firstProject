@@ -177,6 +177,10 @@ def solve(layout, name, cfg, a):
         print(f"   {des[key].title:24} {des[key].note}")
     print(f"   بتن {qty['concrete']:.2f} m3 | مگر {qty['lean']:.3f} m3 | "
           f"آرماتور {qty['rebar']:.0f} kg")
+    for gi, sd in getattr(res, "structures", []) or []:
+        secs = "، ".join(f"{g['title']} {g['section']} ({g['ratio']:.2f})" for g in sd.group_summary())
+        print(f"   سازه {res.layout.groups[gi].eq.tag}: {secs} | وزن اعضا {sd.weight * sd.stands:.0f} kg"
+              f" | نسبت تنش حداکثر {sd.max_ratio:.2f}")
     import model
     for c in model.clashes(model.build(res, getattr(res, "layout", eq), des, cfg)):
         print(f"   ⚠ تداخل: {c}")

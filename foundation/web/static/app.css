@@ -209,3 +209,10 @@ small.case{color:var(--ink-2);font-weight:400;font-size:11px}
 #layoutPreview .lp-dim{fill:var(--ink-2,#666)}
 #layoutPreview{direction:ltr}
 .check-inline input{width:auto;margin:0}
+.viewer .heat-btn{position:absolute;inset-block-start:10px;inset-inline-end:12px;z-index:2;font-size:12px;padding:4px 10px}
+.legend.heat i{filter:grayscale(1)}
+b.ng{color:var(--fail)}
+.legend .heat-scale{display:none;margin-top:6px;font-size:11px;line-height:1.4}
+.legend.heat .heat-scale{display:block}
+.legend .heat-scale b{display:inline-block;width:90px;height:8px;vertical-align:middle;margin:0 4px;
+  background:linear-gradient(to left,#2E7D50,#D6AA28 46%,#D65A28 69%,#AA1E1E);border-radius:2px}

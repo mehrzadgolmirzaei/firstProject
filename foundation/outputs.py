@@ -26,5 +26,14 @@ def make_outputs(res, eq, soil, qty, bbs, seis, des, cfg, out_dir, stem, simple=
     p2 = dwg.save(os.path.join(out_dir, f"{stem}_2D.dxf"))
     fm = model.build(res, getattr(res, "layout", eq), des, cfg)
     p3 = model3d.export(fm, eq, os.path.join(out_dir, f"{stem}_3D.dxf"))
-    return {"2d": p2, "3d": p3, "scale": dwg.s,
+    # مدل SAP سازه (اختیاری، برای مشاوری که فایل SAP بخواهد؛ برنامه به آن نیاز ندارد)
+    from structural.s2k import write_model
+    sap = []
+    for gi, sd in getattr(res, "structures", []) or []:
+        tag = res.layout.groups[gi].eq.tag
+        for m in sd.model.members:
+            m.section.fy = cfg.steel.fy * 1e4
+        sap.append(write_model(sd.model, os.path.join(out_dir, f"{stem}_{tag}_SAP.s2k"),
+                               f"{tag} support structure"))
+    return {"2d": p2, "3d": p3, "sap": sap, "scale": dwg.s,
             "warnings": [*dwg.outside, *(f"{a} / {b}" for a, b in dwg.overlaps)]}

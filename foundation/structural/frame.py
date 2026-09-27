@@ -32,6 +32,8 @@ class Member:
     group: str = ""                          # chord | brace | beam | ...
     k_major: float = 1.0                     # ضریب طول مؤثر (برای طراحی)
     k_minor: float = 1.0
+    l_major: float = 1.0                     # ضریب طول مهارنشده نسبت به طول عضو
+    l_minor: float = 1.0
 
 
 @dataclass
@@ -108,76 +110,55 @@ def element_stiffness(sec, L, E, G):
     return k
 
 
-_GX, _GW = np.polynomial.legendre.leggauss(6)
-
-
-def _gauss(f, a, b):
-    if b <= a:
-        return 0.0
-    h = (b - a) / 2
-    return h * sum(w * f(a + h * (1 + x)) for x, w in zip(_GX, _GW))
-
-
-def _q(segs, k, s):
-    """شدت بار محلی در امتداد k در فاصله s."""
-    v = 0.0
+def _mom(segs, k, p, x0, x1):
+    """∫ q_k(s)·s^p ds روی [x0, x1] — دقیق برای بار خطی تکه‌ای."""
+    tot = 0.0
     for a, b, wa, wb in segs:
-        if a - 1e-12 <= s <= b + 1e-12 and b > a:
-            v += wa[k] + (wb[k] - wa[k]) * (s - a) / (b - a)
-    return v
+        lo, hi = max(a, x0), min(b, x1)
+        if hi <= lo or b <= a:
+            continue
+        beta = (wb[k] - wa[k]) / (b - a)
+        alpha = wa[k] - beta * a
+        tot += (alpha * (hi ** (p + 1) - lo ** (p + 1)) / (p + 1)
+                + beta * (hi ** (p + 2) - lo ** (p + 2)) / (p + 2))
+    return tot
 
 
 def _int_q(segs, k, x0, x1, arm=None):
     """∫ q_k(s)·(s − arm) ds روی [x0, x1] (arm=None یعنی بدون بازو)."""
-    tot = 0.0
-    for a, b, _, _ in segs:
-        lo, hi = max(a, x0), min(b, x1)
-        if hi > lo:
-            tot += _gauss(lambda s: _q([(a, b, *_ab(segs, a, b))], k, s) *
-                          (1.0 if arm is None else (s - arm)), lo, hi)
-    return tot
-
-
-def _ab(segs, a, b):
-    for sa, sb, wa, wb in segs:
-        if sa == a and sb == b:
-            return wa, wb
-    raise KeyError
+    if arm is None:
+        return _mom(segs, k, 0, x0, x1)
+    return _mom(segs, k, 1, x0, x1) - arm * _mom(segs, k, 0, x0, x1)
 
 
 def fixed_end(segs, L, sec=None, E=STEEL["E"], G=STEEL["G"]):
     """
     نیروهای انتهای گیردار عضو (نیروی گره‌ها بر عضو) زیر بار خطی تکه‌ای محلی
-    segs = [(xa, xb, wa(3), wb(3))]. از سازگاری کنسول تیموشنکو: دقیق با تغییرشکل برشی.
+    segs = [(xa, xb, wa(3), wb(3))]. از سازگاری کنسول تیموشنکو، با انتگرال بسته:
+        ∫v dx = ∫q·s ، ∫m dx = ∫q·s²/2 ، ∫m·(L−x) dx = ∫q·(L·s²/2 − s³/6)
     """
     r = np.zeros(12)
     if not segs:
         return r
-    brk = sorted({0.0, L} | {min(max(v, 0.0), L) for a, b, _, _ in segs for v in (a, b)})
-    # محوری
-    q1 = _int_q(segs, 0, 0, L)
-    fj = -_int_q(segs, 0, 0, L, arm=0.0) / L
+    q1 = _mom(segs, 0, 0, 0, L)
+    fj = -_mom(segs, 0, 1, 0, L) / L
     r[6], r[0] = fj, -(fj + q1)
+    if sec is None:
+        raise ValueError("fixed_end به مقطع نیاز دارد")
 
     def plane(k, EI, GAs):
-        tot = _int_q(segs, k, 0, L)
-        if abs(tot) < 1e-15 and not any(abs(wa[k]) + abs(wb[k]) for *_, wa, wb in segs):
+        m0, m1, m2, m3 = (_mom(segs, k, p, 0, L) for p in range(4))
+        if not (m0 or m1 or m2 or m3):
             return 0.0, 0.0, 0.0, 0.0
-        m = lambda x: _int_q(segs, k, x, L, arm=x)         # لنگر ناشی از بار بعد از x
-        v = lambda x: _int_q(segs, k, x, L)
-        dq = sum(_gauss(lambda x: m(x) * (L - x), a, b) for a, b in zip(brk, brk[1:])) / EI
-        if GAs:
-            dq += sum(_gauss(v, a, b) for a, b in zip(brk, brk[1:])) / GAs
-        tq = sum(_gauss(m, a, b) for a, b in zip(brk, brk[1:])) / EI
+        dq = (L * m2 / 2 - m3 / 6) / EI + (m1 / GAs if GAs else 0.0)
+        tq = m2 / 2 / EI
         fl = np.array([[L ** 3 / (3 * EI) + (L / GAs if GAs else 0), L * L / (2 * EI)],
                        [L * L / (2 * EI), L / EI]])
         FJ, MJ = np.linalg.solve(fl, [-dq, -tq])
-        FI = -(FJ + tot)
-        MI = -(MJ + FJ * L + _int_q(segs, k, 0, L, arm=0.0))
+        FI = -(FJ + m0)
+        MI = -(MJ + FJ * L + m1)
         return FI, MI, FJ, MJ
 
-    if sec is None:
-        raise ValueError("fixed_end به مقطع نیاز دارد")
     FI, MI, FJ, MJ = plane(1, E * sec.I33, G * sec.AS2)
     r[1], r[5], r[7], r[11] = FI, MI, FJ, MJ
     FI, MI, FJ, MJ = plane(2, E * sec.I22, G * sec.AS3)
@@ -334,8 +315,8 @@ def analyse(model, stations=3):
     if free.any():
         Kff = K[np.ix_(free, free)]
         try:
-            np.linalg.cholesky(Kff)
-            U[free] = np.linalg.solve(Kff, F[free])
+            C = np.linalg.cholesky(Kff)                 # مثبت معین ← پایدار
+            U[free] = np.linalg.solve(C.T, np.linalg.solve(C, F[free]))
         except np.linalg.LinAlgError:
             U[free], warnings = _solve_with_mechanisms(Kff, F[free], np.where(free)[0], names)
 

@@ -18,7 +18,58 @@
     plate:  0x969EA6,
     grout:  0xC6BEAC,
     ground: 0x2A333B,
+    chord:  0x8A959E,   // سازه فولادی گالوانیزه
+    brace:  0xA9B3BA,
+    strut:  0x9AA4AC,
+    beam:   0x6E7B86,
   };
+
+  /** رنگ نسبت تنش: سبز ← زرد ← نارنجی ← قرمز (همان structural/placement.ratio_color) */
+  function ratioColor(r) {
+    const t = Math.max(0, Math.min(1.2, r)) / 1.2;
+    const stops = [[0, [46, 125, 80]], [0.55, [214, 170, 40]], [0.83, [214, 90, 40]], [1, [170, 30, 30]]];
+    for (let i = 0; i + 1 < stops.length; i++) {
+      const [t0, c0] = stops[i], [t1, c1] = stops[i + 1];
+      if (t <= t1) {
+        const k = (t - t0) / (t1 - t0);
+        return new THREE.Color(...c0.map((v, j) => (v + (c1[j] - v) * k) / 255));
+      }
+    }
+    return new THREE.Color(170 / 255, 30 / 255, 30 / 255);
+  }
+
+  /** اعضای سازه با مقطع واقعی — یک هندسه با رنگ هر رأس (گروه یا نسبت تنش) */
+  function steelMesh(members, k, heat) {
+    const pos = [], col = [];
+    const P3 = (v) => [v[0] * k, v[2] * k, -v[1] * k];
+    const at = (o, e2, e3, u, w) => [o[0] + u * e2[0] + w * e3[0],
+      o[1] + u * e2[1] + w * e3[1], o[2] + u * e2[2] + w * e3[2]];
+    members.forEach((mb) => {
+      const c = heat ? ratioColor(mb.ratio) : new THREE.Color(C[mb.group] || C.brace);
+      const push = (...pts) => pts.forEach((p) => { pos.push(...p); col.push(c.r, c.g, c.b); });
+      mb.profile.forEach((poly) => {
+        const a = poly.map(([u, w]) => P3(at(mb.p, mb.e2, mb.e3, u, w)));
+        const b = poly.map(([u, w]) => P3(at(mb.q, mb.e2, mb.e3, u, w)));
+        const n = poly.length;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          push(a[i], a[j], b[j], a[i], b[j], b[i]);
+        }
+        THREE.ShapeUtils.triangulateShape(poly.map(([u, w]) => new THREE.Vector2(u, w)), [])
+          .forEach(([i, j, l]) => { push(a[i], a[j], a[l]); push(b[i], b[l], b[j]); });
+      });
+    });
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+    g.computeVertexNormals();
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5,
+      metalness: heat ? 0.05 : 0.35, side: THREE.DoubleSide, flatShading: true });
+    mat.userData.opacity = 1;
+    const mesh = new THREE.Mesh(g, mat);
+    mesh.userData.steel = true;
+    return mesh;
+  }
 
   function Viewer(container) {
     this.el = container;
@@ -205,12 +256,34 @@
         a.dia * k, C.anchor));
     });
 
-    this.group.position.y = -top / 2;
-    this.dist = Math.max(4.5, Math.max(L, B) * 2.6);
+    // سازه فولادی طراحی‌شده در برنامه
+    this.steelData = m.steel || [];
+    this.k = k;
+    this._steel();
+    let height = top;
+    this.steelData.forEach((s) => { height = Math.max(height, s.p[2] * k, s.q[2] * k); });
+
+    this.group.position.y = -height / 2;
+    this.dist = Math.max(4.5, Math.max(L, B) * 2.6, height * 2.1);
     this.build0 = 0;                 // شروع انیمیشن ساخت
     this.autoRotate = true;
     const empty = this.el.querySelector(".empty");
     if (empty) empty.style.display = "none";
+  };
+
+  Viewer.prototype._steel = function () {
+    this.group.children.filter((o) => o.userData.steel).forEach((o) => {
+      this.group.remove(o); o.geometry.dispose(); o.material.dispose();
+    });
+    if (this.steelData && this.steelData.length) {
+      this.group.add(steelMesh(this.steelData, this.k, !!this.heat));
+    }
+  };
+
+  /** نمایش سازه با رنگ نسبت تنش هر عضو، یا رنگ واقعی فولاد */
+  Viewer.prototype.setHeat = function (on) {
+    this.heat = on;
+    if (this.ready) this._steel();
   };
 
   global.FoundationViewer = Viewer;

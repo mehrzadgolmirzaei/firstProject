@@ -74,10 +74,13 @@ def test_calculate_and_draw(client, app):
     r = client.post(f"/api/drawing/{d['id']}", headers={"X-CSRF-Token": client.csrf})
     assert r.status_code == 200, r.get_json()
     files = {f["kind"]: f for f in r.get_json()["files"]}
-    assert set(files) == {"2d", "3d"}
-    for f in files.values():
+    assert set(files) == {"2d", "3d", "sap"}          # sap: مدل سازه برای مشاور (اختیاری)
+    for kind, f in files.items():
         body = client.get(f["url"]).data
-        assert body.startswith(b"  0\r\nSECTION") or b"SECTION" in body[:40]
+        if kind == "sap":
+            assert b'TABLE:  "JOINT COORDINATES"' in body
+        else:
+            assert body.startswith(b"  0\r\nSECTION") or b"SECTION" in body[:40]
     assert r.get_json()["warnings"] == []
     assert client.get(f"/calculation/{d['id']}/print").status_code == 200
 

@@ -62,11 +62,53 @@ def run(equipment: Equipment, cfg: ProjectConfig):
     return run_layout(PadLayout.single(equipment), cfg)
 
 
+from dataclasses import asdict
+
+_STRUCTURE_CACHE = {}               # همان تجهیز و همان ساختگاه ← همان طرح سازه
+MANUFACTURER_STRUCTURE = {"CB"}     # سازه را سازنده تجهیز می‌دهد؛ برنامه طراحی نمی‌کند
+
+
+def design_structures(layout, cfg, wind, seis):
+    """
+    سازه فولادی هر تجهیز پی: ساخت، تحلیل و طراحی در خود برنامه (structural/).
+    اگر cfg.steel.feed_foundation روشن باشد، وزن و سطح بادگیر سازه که به پی می‌رود از
+    همین سازه است (وزن اعضا × ضریب اتصالات، و سطح وجه رو به باد).
+    خروجی: (چیدمان با تجهیزهای به‌روزشده، [(شماره گروه، طرح سازه)])
+    """
+    import copy
+    from equipment import equipment_type
+    from padlayout import Group, PadLayout
+    from structural.steel_design import design_structure
+    st = cfg.steel
+    if not st.enabled:
+        return layout, []
+    designs, groups = [], []
+    for gi, g in enumerate(layout.groups):
+        eq = g.eq
+        if equipment_type(eq.tag) in MANUFACTURER_STRUCTURE or not eq.Hs:
+            groups.append(g)
+            continue
+        key = (repr(sorted(asdict(eq).items())), repr(asdict(st)), wind.v_normal, wind.v_high,
+               wind.sc_ratio, round(seis.ch, 9), round(seis.cv, 9))
+        d = _STRUCTURE_CACHE.get(key)
+        if d is None:
+            d = _STRUCTURE_CACHE[key] = design_structure(eq, st, wind, seis.ch, seis.cv)
+        designs.append((gi, d))
+        if st.feed_foundation:
+            eq = copy.copy(eq)
+            eq.Ws = round(d.weight * st.connection_factor * d.stands, 1)
+            eq.As = round(d.wind_area * d.stands, 3)
+        groups.append(Group(eq, g.positions, g.case, g.n_legacy))
+    return PadLayout(groups, square=layout.square), designs
+
+
 def run_layout(layout, cfg: ProjectConfig):
     """یک پی با یک یا چند گروه تجهیز (padlayout.PadLayout)."""
     equipment = layout.main
     soil, wind = from_config(cfg)
     seis = seismic_coefficients(equipment, cfg)
+    layout, structures = design_structures(layout, cfg, wind, seis)
+    equipment = layout.main
     f, opt = cfg.foundation, cfg.design
 
     def search(governing, bearing):
@@ -81,6 +123,7 @@ def run_layout(layout, cfg: ProjectConfig):
         res.comparison = compare(search, opt)
     if res is None:
         return None, seis, None, None, None
+    res.structures = structures
     des = design_all(res, layout, soil, cfg.rebar, cfg.anchorage)
     qty = quantities(res, equipment, soil)
     bbs = bar_schedule(model.build(res, layout, des, cfg))

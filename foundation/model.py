@@ -68,6 +68,7 @@ class FoundationModel:
     anchor_projection: float = 150.0                    # بیرون‌زدگی از روی بتن (mm)
     anchor_hook: float = 0.0                            # قلاب انتهایی (×d)؛ صفر = صاف
     base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
+    steel: list = field(default_factory=list)           # structural.placement.Placed
 
     @property
     def top(self):
@@ -212,6 +213,13 @@ def build(res, layout, des, cfg) -> FoundationModel:
             for sy in (-1, 1):
                 fm.anchors.append(Anchor(p.x + sx * gge / 2, p.y + sy * gge / 2, eq.anchor_dia,
                                          fm.top - emb, fm.top + an.projection))
+
+    # --- سازه فولادی طراحی‌شده در برنامه، روی صفحه کف ستون‌های همان تجهیز
+    from structural.placement import place
+    base_z = fm.top + an.grout + an.plate_thickness
+    for gi, sd in getattr(res, "structures", []) or []:
+        peds = [(p.x, p.y) for p, o in zip(fm.pedestals, owner) if o == gi]
+        fm.steel += place(sd, peds, base_z)
     return fm
 
 
@@ -256,6 +264,14 @@ def clashes(fm: FoundationModel) -> list:
 
 def to_dict(fm: FoundationModel) -> dict:
     """نسخه JSON مدل برای نمای سه‌بعدی مرورگر؛ همان مختصات فایل‌های اتوکد."""
+    steel = fm.steel
+    fm.steel = []
     d = asdict(fm)
+    fm.steel = steel
     d["top"] = fm.top
+    d["steel"] = [{"p": [round(v, 1) for v in m.p], "q": [round(v, 1) for v in m.q],
+                   "e2": [round(v, 5) for v in m.e2], "e3": [round(v, 5) for v in m.e3],
+                   "profile": [[[round(u, 2), round(w, 2)] for u, w in poly] for poly in m.profile],
+                   "group": m.group, "section": m.section, "ratio": round(m.ratio, 3),
+                   "member": m.member} for m in steel]
     return d

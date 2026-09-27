@@ -135,6 +135,52 @@ def layout_problems(layout: PadLayout, b: float, L: float = 0.0, B: float = 0.0)
     return errs
 
 
+def structures_dict(res, cfg):
+    """سازه‌های فولادی طراحی‌شده برای نمایش و ذخیره."""
+    from structural.loads import COMBO_TITLES
+    out = []
+    for gi, d in getattr(res, "structures", []) or []:
+        eq = res.layout.groups[gi].eq
+        groups = []
+        for g in d.group_summary():
+            ck = g["check"]
+            groups.append({"group": g["group"], "title": g["title"], "section": g["section"],
+                           "count": g["count"] * d.stands, "length": round(g["length"] * d.stands, 2),
+                           "ratio": round(g["ratio"], 3), "member": g["member"],
+                           "combo": COMBO_TITLES.get(ck.combo, ck.combo), "equation": ck.equation,
+                           "notes": ck.notes, "steps": [list(x) for x in ck.steps()]})
+        legs = []
+        extremes = d.chord_extremes()
+        for i in range(len(d.model.leg_centres)):
+            rows = [(c, r[i]) for c, r in d.leg_reactions.items()]
+            comp = max(rows, key=lambda x: x[1][2])
+            upl = min(rows, key=lambda x: x[1][2])
+            shr = max(rows, key=lambda x: (x[1][0] ** 2 + x[1][1] ** 2) ** 0.5)
+            legs.append({"leg": i + 1,
+                         "compression": round(comp[1][2], 1), "compression_combo": COMBO_TITLES[comp[0]],
+                         "uplift": round(upl[1][2], 1), "uplift_combo": COMBO_TITLES[upl[0]],
+                         "shear": round((shr[1][0] ** 2 + shr[1][1] ** 2) ** 0.5, 1),
+                         "shear_combo": COMBO_TITLES[shr[0]],
+                         "chord_comp": round(extremes[i][0][0], 1),
+                         "chord_tension": round(max(0.0, -extremes[i][1][0]), 1),
+                         "chord_tension_combo": COMBO_TITLES[extremes[i][1][1]],
+                         "moment": round(extremes[i][2][0], 1),
+                         "moment_combo": COMBO_TITLES[extremes[i][2][1]]})
+        st = cfg.steel
+        out.append({"tag": eq.tag, "stands": d.stands, "legs": d.spec.legs,
+                    "phases": d.phases_per_stand, "height": d.spec.height,
+                    "leg_width": d.spec.leg_width, "panels": round(d.spec.height / d.spec.panel),
+                    "members": len(d.model.members) * d.stands,
+                    "weight": round(d.weight * d.stands, 1),
+                    "weight_design": round(d.weight * d.stands * st.connection_factor, 1),
+                    "wind_area": round(d.wind_area * d.stands, 3),
+                    "fed": st.feed_foundation, "Ws_used": eq.Ws, "As_used": eq.As,
+                    "max_ratio": round(d.max_ratio, 3), "ok": d.ok, "k_chord": st.k_chord,
+                    "fy": st.fy, "iterations": len(d.history), "groups": groups, "legs_reactions": legs,
+                    "warnings": d.warnings})
+    return out
+
+
 def to_dict(res, seis, des, qty, bbs, eq, cfg):
     """خروجی قابل ذخیره در دیتابیس و قابل مصرف در رابط کاربری."""
     g = res.geometry
@@ -178,10 +224,12 @@ def to_dict(res, seis, des, qty, bbs, eq, cfg):
                     "tension": x["anchor"].tension}
                    for i, (x, (_, u)) in enumerate(zip(des.get("groups", []), res.group_forces))],
         "bbs": bbs,
+        "structures": structures_dict(res, cfg),
         "model": model.to_dict(fm),
         "clashes": clashes,
         "options": {"governing": str(cfg.design.governing), "bearing": cfg.design.bearing},
         "comparison": getattr(res, "comparison", []),
         "quantities": qty,
-        "ok": res.ok and all(d.ok for k, d in des.items() if k != "groups") and not clashes,
+        "ok": (res.ok and all(d.ok for k, d in des.items() if k != "groups") and not clashes
+               and all(d.ok for _, d in getattr(res, "structures", []) or [])),
     }
