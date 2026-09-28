@@ -24,11 +24,13 @@
     </div>
 
     <div class="f">
-      <label>کی‌پلن فونداسیون (DXF) — اختیاری</label>
-      <input id="kpfile" type="file" accept=".dxf">
-      <small class="hint">اگر کی‌پلن را بدهید سامانه همه پی‌ها را می‌خواند: ابعاد پی، ستون‌ها، جای هر
-        ستون و این‌که کدام تجهیز روی کدام ستون است. نام بلاک هر پی مثل «LA+CVT-3-2.5» باشد.</small>
+      <label>نقشه جانمایی یا کی‌پلن فونداسیون (DXF یا ZIP) — اختیاری</label>
+      <input id="kpfile" type="file" accept=".dxf,.zip">
+      <small class="hint"><b>نقشه جانمایی (Layout):</b> سامانه جای تجهیزها و فضای موجود را می‌خواند و همه
+        پی‌ها را متناسب با فضا طراحی می‌کند (پیش از بارگذاری، مشخصات ساختگاه را وارد کنید). پوشه نقشه‌ها را
+        می‌توان به‌صورت ZIP داد. <b>کی‌پلن:</b> ابعاد و ستون‌های پی‌های موجود خوانده می‌شود.</small>
       <select id="kpsel" style="display:none;margin-top:6px"></select>
+      <div id="lytBox" class="lyt-box" style="display:none"></div>
     </div>
 
     <div class="f">
@@ -486,31 +488,68 @@ function populateEquipment(){
 }
 $("voltage").addEventListener("change", () => { populateEquipment(); drawPreview(); });
 
-// کی‌پلن: خواندن همه پی‌ها، انتخاب یکی
-var KP = [];
+// نقشه جانمایی یا کی‌پلن: همه پی‌ها، انتخاب یکی
+var KP = [], KP_KIND = "";
 $("kpfile").addEventListener("change", async e => {
   const file = e.target.files[0]; if (!file) return;
-  $("msg").textContent = "در حال خواندن کی‌پلن…";
+  $("msg").textContent = "در حال خواندن نقشه… (نقشه جانمایی سه‌بعدی ممکن است کمی طول بکشد)";
+  $("lytBox").style.display = "none";
   const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
+  fd.append("form", JSON.stringify(formPayload()));
   try {
     const r = await fetch("/api/keyplan", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
     const d = await r.json();
-    if (d.error) { $("msg").textContent = d.error; return; }
-    KP = d.foundations;
+    if (d.error) { $("msg").textContent = d.error; e.target.value = ""; return; }
+    KP = d.foundations; KP_KIND = d.kind;
     const sel = $("kpsel");
-    sel.innerHTML = `<option value="">— ${KP.length} نوع پی در ${d.file} —</option>` +
+    const what = d.kind === "layout" ? "تیپ پی طراحی‌شده از نقشه جانمایی" : "نوع پی در";
+    sel.innerHTML = `<option value="">— ${KP.length} ${what} ${d.file} —</option>` +
       KP.map((f, i) => `<option value="${i}" ${f.problem ? "disabled" : ""}>${f.name} — ` +
-        (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)} · ${f.count} عدد`) +
-        `</option>`).join("");
+        (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)}` +
+          (f.tf ? `×${fmt(f.tf)}` : "") + ` · ${f.count} عدد`) + `</option>`).join("");
     sel.style.display = "block";
-    $("msg").textContent = "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.";
-  } catch (err) { $("msg").textContent = "کی‌پلن خوانده نشد: " + err; }
+    if (d.kind === "layout") showLayout(d);
+    $("msg").textContent = d.kind === "layout"
+      ? "نقشه جانمایی خوانده و همه پی‌ها متناسب با فضا طراحی شد؛ پی مورد نظر را انتخاب کنید."
+      : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.";
+  } catch (err) { $("msg").textContent = "نقشه خوانده نشد: " + err; }
 });
 $("kpsel").addEventListener("change", e => {
   const f = KP[e.target.value]; if (!f) return;
-  setFixedLayout(`کی‌پلن «${f.name}»`, f);
-  $("msg").textContent = `پی ${f.name} از کی‌پلن: ${f.describe}. اعداد تجهیز را با اوت‌لاین پروژه کنترل کنید.`;
+  const src = KP_KIND === "layout" ? `نقشه جانمایی «${f.name}»` : `کی‌پلن «${f.name}»`;
+  setFixedLayout(src, f);
+  if (f.tf) $("tf").value = f.tf;
+  highlightPad(f.name);
+  $("msg").textContent = `پی ${f.name}: ${f.describe}. اعداد تجهیز را با اوت‌لاین پروژه کنترل کنید.`;
 });
+
+// پلان پی‌های طراحی‌شده روی نقشه جانمایی
+function showLayout(d){
+  const P = d.plan, all = P.stations.map(s => [s.x0, s.x1, s.y0, s.y1])
+    .concat(P.pads.map(p => [p.cx - p.dx / 2, p.cx + p.dx / 2, p.cy - p.dy / 2, p.cy + p.dy / 2]));
+  const x0 = Math.min(...all.map(a => a[0])) - 1, x1 = Math.max(...all.map(a => a[1])) + 1;
+  const y0 = Math.min(...all.map(a => a[2])) - 1, y1 = Math.max(...all.map(a => a[3])) + 1;
+  const Y = y => (y0 + y1 - y);
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const st = P.stations.map(s => `<rect class="${s.design ? "eq" : "ob"}" x="${s.x0}" y="${Y(s.y1)}"
+      width="${s.x1 - s.x0}" height="${s.y1 - s.y0}"><title>${esc(s.label)}</title></rect>`).join("");
+  const pads = P.pads.map(p => `<g class="pad" data-type="${esc(p.type)}"><rect x="${p.cx - p.dx / 2}"
+      y="${Y(p.cy + p.dy / 2)}" width="${p.dx}" height="${p.dy}"><title>${esc(p.type)}</title></rect>
+      <text x="${p.cx}" y="${Y(p.cy) + 0.15}">${esc(p.label)}</text></g>`).join("");
+  const notes = (d.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+  $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
+    <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
+    ${notes ? `<ul class="note">${notes}</ul>` : ""}
+    <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>`;
+  $("lytBox").style.display = "block";
+  $("lytBox").querySelectorAll("g.pad").forEach(g => g.addEventListener("click", () => {
+    const i = KP.findIndex(f => f.name === g.dataset.type);
+    if (i >= 0) { $("kpsel").value = i; $("kpsel").dispatchEvent(new Event("change")); }
+  }));
+}
+function highlightPad(name){
+  document.querySelectorAll("#lytBox g.pad").forEach(g => g.classList.toggle("on", g.dataset.type === name));
+}
 
 $("preset").addEventListener("change", e => {
   const eq = BUILTIN[e.target.value];
@@ -571,12 +610,10 @@ function layoutPayload(){
           source: fixedLayout ? fixedLayout.source : "قاعده خودکار"};
 }
 
-$("form").addEventListener("submit", async ev => {
-  ev.preventDefault();
-  $("go").disabled = true; $("msg").textContent = "در حال محاسبه…";
+function formPayload(){
   const tag = $("preset").value || "EQ";
   const eq = BUILTIN[tag] || {};
-  const payload = {
+  return {
     substation_id: $("substation").value || null,
     equipment: {
       tag: tag, title: eq.title || tag,
@@ -609,6 +646,12 @@ $("form").addEventListener("submit", async ev => {
     "steel.fy": num("steel_fy"), "steel.connection_factor": num("conn_factor"),
     "design.governing": $("governing").value, "design.bearing": $("bearing").value
   };
+}
+
+$("form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("go").disabled = true; $("msg").textContent = "در حال محاسبه…";
+  const payload = formPayload();
   try {
     const r = await fetch("/api/calculate", {
       method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},

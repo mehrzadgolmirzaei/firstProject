@@ -34,7 +34,9 @@ class Station:
     label: str
     pos: float                         # موقعیت روی محور ردیف (m)
     keys: list                         # کلیدهای کاتالوگ؛ خالی = مانع
-    width: float = 0.0                 # پهنای اشغالی مانع (m)
+    width: float = 0.0                 # پهنای اشغالی مانع در امتداد ردیف (m)
+    y: float = 0.0                     # موقعیت عرضی (عمود بر ردیف، m) — از نقشه جانمایی
+    depth: float = 0.0                 # عمق اشغالی مانع عمود بر ردیف؛ صفر = تمام عرض ردیف
 
 
 @dataclass
@@ -48,6 +50,11 @@ class Unit:
     @property
     def axis(self):
         return sum(s.pos for s in self.stations) / len(self.stations)
+
+    @property
+    def cy(self):
+        """موقعیت عرضی محور پی (عمود بر ردیف)."""
+        return sum(s.y for s in self.stations) / len(self.stations)
 
     @property
     def centre(self):
@@ -159,6 +166,16 @@ def _gap_ok(a_pos, a_B, b_pos, b_B, gap):
     return abs(b_pos - a_pos) - a_B / 2 - b_B / 2 >= gap - 1e-9
 
 
+def _clear(u, o, ob, gap):
+    """
+    پی واحد u با گزینه o از مانع ob فاصله آزاد دارد: در امتداد ردیف، یا — اگر مانع عمق
+    محدود دارد (نقشه جانمایی) — در عرض ردیف.
+    """
+    if _gap_ok(u.centre, o[0], ob.pos, ob.width, gap):
+        return True
+    return ob.depth > 0 and abs(ob.y - u.cy) - o[1] / 2 - ob.depth / 2 >= gap - 1e-9
+
+
 def _dp(units, obstacles, gap):
     """
     انتخاب B هر واحد: کمینه جمع حجم با شرط فاصله آزاد بین پی‌های مجاور و مانع‌ها.
@@ -171,7 +188,7 @@ def _dp(units, obstacles, gap):
     for u in units:
         opts = []
         for o in u.options:
-            if all(_gap_ok(u.centre, o[0], ob.pos, ob.width, gap) for ob in obstacles):
+            if all(_clear(u, o, ob, gap) for ob in obstacles):
                 opts.append(o)
         allowed.append(opts)
     for i, opts in enumerate(allowed):
@@ -203,9 +220,12 @@ def _dp(units, obstacles, gap):
 
 
 def design_bay(text, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_span=1.6):
-    """کل ردیف؛ خروجی دیکشنری آماده نمایش (واحدها، ادغام‌ها، هشدارها)."""
+    """
+    کل ردیف؛ خروجی دیکشنری آماده نمایش (واحدها، ادغام‌ها، هشدارها).
+    text: زنجیره متنی، یا فهرست Station که از نقشه جانمایی خوانده شده (layoutplan).
+    """
     from pipeline import seismic_coefficients
-    stations = parse(text, voltage)
+    stations = parse(text, voltage) if isinstance(text, str) else list(text)
     soil, wind = from_config(cfg)
     obstacles = [s for s in stations if not s.keys]
     units = [Unit([s]) for s in stations if s.keys]

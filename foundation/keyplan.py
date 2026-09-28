@@ -129,11 +129,12 @@ def _assign(peds, keys, catalog, types):
     return None
 
 
-def read_foundations(path, catalog, voltage="63"):
+def read_foundations(path, catalog, voltage="63", doc=None):
     """همه انواع پی کی‌پلن، با تعداد تکرار هر کدام؛ تجهیزها از کاتالوگ سطح ولتاژ پست."""
     types = VOLTAGE_LEVELS[voltage]["types"]
-    import ezdxf
-    doc = ezdxf.readfile(path)
+    if doc is None:
+        import ezdxf
+        doc = ezdxf.readfile(path)
     counts = defaultdict(int)
     for ins in doc.modelspace().query("INSERT"):
         counts[ins.dxf.name] += 1

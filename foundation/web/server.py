@@ -5,7 +5,7 @@
     python server.py
 سپس در مرورگر: http://127.0.0.1:5000
 """
-import json, os, secrets, sys
+import json, os, re, secrets, sys
 from pathlib import Path
 from dataclasses import asdict
 from flask import (Flask, render_template, request, redirect, url_for, session,
@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.9.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.10.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -42,7 +42,7 @@ def _secret_key():
 
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024        # کی‌پلن‌ها چند مگابایت‌اند
+app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024       # نقشه جانمایی سه‌بعدی ده‌ها مگابایت است
 app.secret_key = _secret_key()
 app.jinja_env.add_extension("jinja2.ext.do")
 
@@ -187,6 +187,9 @@ def config_from_form(form) -> ProjectConfig:
         raise InputError("ضلع پایه مشبک باید بین ۰٫۲ و ۱ متر باشد")
     if cfg.steel.k_chord not in (1.0, 2.0):
         raise InputError("ضریب طول مؤثر نبشی اصلی باید ۱ یا ۲ باشد")
+    fd = cfg.foundation
+    if not (fd.b > 0 and fd.hp > 0 and fd.tf > 0):
+        raise InputError("ضلع ستون b، ارتفاع ستون hp و ضخامت پی tf باید بزرگ‌تر از صفر باشند")
 
     s = cfg.seismic
     s.edition = int(_choice(form, "seismic.edition", ("4", "5"), str(s.edition)))
@@ -284,35 +287,108 @@ def _store(form, eq, cfg, layout_spec, payload):
     return calc_id
 
 
+def _dxf_candidates(f, folder):
+    """
+    فایل بارگذاری‌شده ← فهرست DXFها: خود فایل، یا DXFهای داخل ZIP (پوشه نقشه‌ها)؛
+    اول نام‌هایی که پلان/جانمایی‌اند، بعد بزرگ‌ترها.
+    """
+    import zipfile
+    name = f.filename.lower()
+    if name.endswith(".dxf"):
+        path = folder / "drawing.dxf"
+        f.save(path)
+        return [path]
+    if not name.endswith(".zip"):
+        raise InputError("فایل باید DXF باشد، یا ZIP پوشه نقشه‌ها (در اتوکد: Save As ← DXF).")
+    zpath = folder / "drawings.zip"
+    f.save(zpath)
+    out = []
+    with zipfile.ZipFile(zpath) as z:
+        members = [m for m in z.infolist() if m.filename.lower().endswith(".dxf") and not m.is_dir()]
+        if sum(m.file_size for m in members) > 600 * 1024 * 1024:
+            raise InputError("حجم نقشه‌های داخل ZIP بیش از حد است.")
+        hint = lambda n: 0 if re.search(r"plan|layout|lyt|general", n, re.I) else 1
+        members.sort(key=lambda m: (hint(Path(m.filename).name), -m.file_size))
+        for i, m in enumerate(members):
+            target = folder / f"{i:02d}.dxf"
+            with z.open(m) as src, open(target, "wb") as dst:
+                dst.write(src.read())
+            out.append((target, Path(m.filename).name))
+    if not out:
+        raise InputError("در فایل ZIP هیچ نقشه DXF نیست (DWG را در اتوکد به DXF ذخیره کنید).")
+    return out
+
+
 @app.post("/api/keyplan")
 @auth.requires("engineer")
 def api_keyplan():
     """
-    خواندن کی‌پلن فونداسیون (DXF): انواع پی، ابعاد، ستون‌ها و تجهیز هر ستون.
-    فایل فقط خوانده و پاک می‌شود؛ چیدمان انتخاب‌شده با خود محاسبه در اسنپ‌شات می‌ماند.
+    کی‌پلن فونداسیون یا نقشه جانمایی (DXF یا ZIP پوشه نقشه‌ها).
+      کی‌پلن  ← انواع پی، ابعاد، ستون‌ها و تجهیز هر ستون (keyplan.py)
+      جانمایی ← جای تجهیزها و فضای موجود؛ همه پی‌ها با مشخصات ساختگاه فرم طراحی می‌شوند
+                 (layoutplan.py) و کی‌پلن DXF ساخته می‌شود.
+    فایل‌ها فقط خوانده و پاک می‌شوند.
     """
+    import shutil
+    import ezdxf
+    from keyplan import read_foundations
+    import layoutplan as LP
     f = request.files.get("file")
-    if not f or not f.filename.lower().endswith(".dxf"):
-        return jsonify({"error": "فایل کی‌پلن باید DXF باشد (در اتوکد: Save As ← DXF)."}), 400
-    tmp = OUT / f"keyplan_{secrets.token_hex(8)}.dxf"
-    f.save(tmp)
+    voltage = request.form.get("voltage") or "63"
+    if not f or not f.filename:
+        return jsonify({"error": "فایلی انتخاب نشده است."}), 400
+    if voltage not in VOLTAGE_LEVELS:
+        return jsonify({"error": "سطح ولتاژ نامعتبر است."}), 400
+    folder = OUT / f"upload_{secrets.token_hex(8)}"
+    folder.mkdir()
     try:
-        from keyplan import read_foundations
-        voltage = request.form.get("voltage") or "63"
-        if voltage not in VOLTAGE_LEVELS:
-            return jsonify({"error": "سطح ولتاژ نامعتبر است."}), 400
-        found = read_foundations(str(tmp), ALL_EQUIPMENT, voltage)
-    except ImportError:
-        return jsonify({"error": "کتابخانه ezdxf نصب نیست: python -m pip install ezdxf"}), 500
-    except Exception as exc:
-        return jsonify({"error": f"کی‌پلن خوانده نشد: {exc}"}), 400
+        cands = _dxf_candidates(f, folder)
+        cands = [c if isinstance(c, tuple) else (c, f.filename) for c in cands]
+        docs = []
+        for path, label in cands:
+            try:
+                doc = ezdxf.readfile(str(path))
+            except Exception:
+                continue
+            found = read_foundations(None, ALL_EQUIPMENT, voltage, doc=doc)
+            if any(x.ok for x in found):
+                auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
+                return jsonify({"kind": "keyplan", "file": label,
+                                "foundations": [x.to_dict() for x in found]})
+            items = LP.read_items(None, doc=doc)
+            stations, _, _ = LP.site_stations(items, voltage)
+            n = sum(1 for s in stations if s.key)
+            if n:
+                docs.append((n, label, items))
+            if n >= 3:
+                break
+        if not docs:
+            return jsonify({"error": "نه بلاک پی کی‌پلن (مثل LA+CVT-3-2.5) پیدا شد، نه تجهیز در "
+                                     "نقشه جانمایی (بلاک‌هایی با نام LA، CT، CB، DS، CVT، PI)."}), 400
+        _, label, items = max(docs, key=lambda d: d[0])
+        try:
+            form = json.loads(request.form.get("form") or "{}")
+        except ValueError:
+            form = {}
+        if not form.get("soil.q_base") or not (form.get("seismic.a") or form.get("seismic.ss")):
+            raise InputError("این فایل نقشه جانمایی است. برای طراحی پی‌ها ابتدا مشخصات ساختگاه "
+                             "(زلزله، خاک و باد) را در فرم وارد کنید و سپس دوباره بارگذاری کنید.")
+        cfg = config_from_form(form)
+        result = LP.design_layout(None, cfg, voltage, items=items)
+        dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
+        LP.plan_dxf(result, str(OUT / dxf))
+    except InputError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except ValueError as exc:
+        return jsonify({"error": f"نقشه خوانده نشد: {exc}"}), 400
     finally:
-        tmp.unlink(missing_ok=True)
-    if not found:
-        return jsonify({"error": "هیچ بلاک پی با نام تجهیز (مثل LA+CVT-3-2.5) در کی‌پلن "
-                                 "پیدا نشد."}), 400
-    auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
-    return jsonify({"file": f.filename, "foundations": [x.to_dict() for x in found]})
+        shutil.rmtree(folder, ignore_errors=True)
+    auth.record("طراحی از نقشه جانمایی", "layout", None,
+                {"file": f.filename, "types": len(result["foundations"])})
+    return jsonify({"kind": "layout", "file": label, "foundations": result["foundations"],
+                    "plan": result["plan"], "notes": result["notes"], "unknown": result["unknown"],
+                    "rows": [{"axis": r["axis"], "units": r["units"]} for r in result["rows"]],
+                    "dxf": url_for("download", name=dxf)})
 
 
 # ================================================================= تنظیمات نقشه
