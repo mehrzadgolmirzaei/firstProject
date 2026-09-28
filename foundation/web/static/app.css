@@ -250,3 +250,16 @@ b.ng{color:var(--fail)}
 .guide-mode .f input:focus,.guide-mode .f select:focus{outline:2px solid var(--steel);outline-offset:1px}
 .guide-toggle{float:inline-end;font-size:12px;padding:4px 10px}
 .guide-toggle.on{background:var(--steel);color:#fff}
+/* پلان ردیف */
+.bay-plan{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--sheet)}
+#plan{width:100%;min-width:720px;display:block;direction:ltr}
+#plan .bp-bg{fill:none}
+#plan .bp-axis{stroke:var(--ink-2);stroke-width:.6;stroke-dasharray:8 3 2 3;opacity:.6}
+#plan .bp-lbl{font-size:9px;text-anchor:middle;dominant-baseline:hanging;fill:var(--ink)}
+#plan .bp-dim{stroke:var(--steel);stroke-width:.6}
+#plan .bp-dt{font-size:8px;text-anchor:middle;fill:var(--steel)}
+#plan .bp-pad{fill:rgba(62,107,138,.10);stroke:var(--steel);stroke-width:1.2}
+#plan .bp-pad.ng{fill:rgba(163,43,40,.12);stroke:var(--fail)}
+#plan .bp-ped{fill:rgba(22,32,43,.25);stroke:var(--ink);stroke-width:.6}
+#plan .bp-pl{font-size:8px;text-anchor:middle;fill:var(--ink-2)}
+#plan .bp-obs{fill:url(#none);fill:rgba(92,107,119,.12);stroke:var(--ink-2);stroke-dasharray:3 2}

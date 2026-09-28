@@ -144,13 +144,21 @@ def write_model(model, path, title="", decimal="/"):
     مدل برنامه ← فایل متنی SAP2000 (Kgf, m, C) برای مشاوری که فایل SAP بخواهد.
     decimal: جداکننده اعشار؛ «/» همان تنظیم ویندوز فارسی سیستم‌های دفتر است (فایل‌های نمونه).
     """
+    import datetime
     sep = decimal
     L = []
-    t = lambda name: L.append(f'\nTABLE:  "{name}"')
-    L.append("File exported by the foundation design system (structural/s2k.py)")
+
+    def t(name):
+        # مثل فایل‌های خود SAP: هر جدول با سطر «سه فاصله» بسته و جدول بعد بی‌فاصله شروع می‌شود
+        if L and L[-1].startswith("TABLE:") is False and len(L) > 2:
+            L.append("   ")
+        L.append(f'TABLE:  "{name}"')
+    now = datetime.datetime.now()
+    L.append(f"File {Path(path).name} was saved on {now.month}/{now.day}/{now:%y} at {now:%H:%M:%S}")
+    L.append("")
     t("PROGRAM CONTROL")
-    L.append(_row(sep, ProgramName="SAP2000", Version="14.2.2", CurrUnits="Kgf, m, C",
-                  SteelCode="AISC-ASD89", ConcCode="ACI 318-05/IBC2003"))
+    L.append("   ProgramName=SAP2000   Version=14.2.2   ProgLevel=Advanced   CurrUnits=\"Kgf, m, C\"   "
+             "SteelCode=AISC-ASD89   ConcCode=\"ACI 318-05/IBC2003\"   RegenHinge=Yes")
     t("MATERIAL PROPERTIES 01 - GENERAL")
     L.append(_row(sep, Material="STEEL", Type="Steel", SymType="Isotropic", TempDepend=False,
                   Color="Yellow"))
@@ -246,6 +254,7 @@ def write_model(model, path, title="", decimal="/"):
     if title:
         t("PROJECT INFORMATION")
         L.append(_row(sep, Item="Project Name", Data=title))
-    L.append("\nEND TABLE DATA\n")
-    Path(path).write_bytes("\r\n".join(L).encode("latin-1", "replace"))
+    L.append("   ")
+    L.append("END TABLE DATA")
+    Path(path).write_bytes(("\r\n".join(L) + "\r\n").encode("latin-1", "replace"))
     return path

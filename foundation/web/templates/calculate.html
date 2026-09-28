@@ -194,57 +194,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
-      <legend>زلزله — استاندارد ۲۸۰۰</legend>
-      <div class="f">
-        <label>ویرایش</label>
-        <select id="edition">
-          <option value="5" selected>ویرایش ۵</option>
-          <option value="4">ویرایش ۴ (بازتولید محاسبات قدیمی)</option>
-        </select>
-      </div>
-      <div id="ed5">
-        <div class="row">
-          <div class="f"><label><b>SS</b> شتاب ۰٫۲ ثانیه</label><input id="ss" type="number" step="0.01" value="0.90"></div>
-          <div class="f"><label><b>S1</b> شتاب ۱ ثانیه</label><input id="s1" type="number" step="0.01" value="0.35"></div>
-        </div>
-        <div class="row">
-          <div class="f"><label>نوع زمین</label>
-            <select id="soil_class"><option>I</option><option>II</option>
-              <option selected>III</option><option>IV</option><option>V</option></select></div>
-          <div class="f"><label>روش</label>
-            <select id="method"><option value="rigid" selected>صلب — رابطه ۵-۴</option>
-              <option value="static">استاتیکی — رابطه ۳-۱</option></select></div>
-          <div class="f"><label>سختی جانبی استراکچر (kg/cm)</label>
-            <input id="k_lateral" type="number" step="10" placeholder="نامشخص"></div>
-          <div class="f"><label><b>Ie</b> ضریب اهمیت</label><input id="ie" type="number" step="0.1" value="1.4"></div>
-          <div class="f"><label><b>Ru</b> ضریب رفتار</label><input id="ru" type="number" step="0.1" value="2"></div>
-        </div>
-        <p class="note" style="margin:0">اگر سختی جانبی را وارد کنید، سیستم زمان تناوب را حساب
-          می‌کند و طبق بند ۵-۵-۱ خودش تعیین می‌کند صلب است یا غیرصلب. بدون آن، انتخاب روش
-          تصمیم شماست و همان‌طور که انتخاب کرده‌اید در گزارش ثبت می‌شود.</p>
-      </div>
-      <div id="ed4" style="display:none">
-        <div class="row">
-          <div class="f"><label><b>A</b></label><input id="a" type="number" step="0.01" value="0.30"></div>
-          <div class="f"><label><b>B</b></label><input id="b4" type="number" step="0.01" value="2.75"></div>
-          <div class="f"><label><b>I</b></label><input id="i4" type="number" step="0.1" value="1.4"></div>
-          <div class="f"><label><b>R</b></label><input id="r4" type="number" step="0.1" value="2"></div>
-        </div>
-      </div>
-    </fieldset>
-
-    <fieldset>
-      <legend>خاک و مصالح</legend>
-      <div class="row">
-        <div class="f"><label>q پایه (kg/cm²)</label><input id="q_base" type="number" step="0.01" value="2.83"></div>
-        <div class="f"><label>ضریب بار موقت</label><input id="q_factor" type="number" step="0.01" value="1.33"></div>
-        <div class="f"><label>f'c (kg/cm²)</label><input id="fc" type="number" step="10" value="250"></div>
-        <div class="f"><label>fy (kg/cm²)</label><input id="fy" type="number" step="100" value="4000"></div>
-        <div class="f"><label>پوشش بتن (mm)</label><input id="cover" type="number" step="5" value="75"></div>
-        <div class="f"><label>بتن مگر (mm)</label><input id="lean" type="number" step="10" value="100"></div>
-      </div>
-    </fieldset>
+    {% include "_site_fields.html" %}
 
     <fieldset>
       <legend>ستون بتنی و ضخامت پی</legend>

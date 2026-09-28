@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}طراحی ردیف تجهیزات{% endblock %}
+{% block body %}
+<header class="page">
+  <div><h1>طراحی ردیف تجهیزات</h1>
+    <p>ابعاد همه فونداسیون‌های یک ردیف متناسب با فضای موجود بین تجهیزات</p></div>
+</header>
+
+<div class="cols">
+  <form class="sheet" id="form" autocomplete="off">
+    <h2>ردیف تجهیزات</h2>
+    <div class="f">
+      <label>زنجیره تجهیزات و فاصله محورها</label>
+      <textarea id="chain" rows="4" dir="ltr" style="font-family:ui-monospace,monospace"
+        placeholder="GM[1.2] 1700 PR/TR[4.0] 3500 LA 2000 CT 2000 CB 2500 DS 2000 PI 1500 PI+CVT1 1500 PI 2000 DS 2500 CB 2000 CT 2500 DS/E 2500 LT/GA+CVT 1500 LA 2000 ROAD"></textarea>
+      <small class="hint">همان زنجیره اندازه برش طولی نقشه جانمایی: نام تجهیز، فاصله محور تا محور
+        (میلی‌متر)، نام تجهیز بعدی و … . «+» یعنی دو تجهیز روی یک محور (مثلاً PI+CVT1 برای ترانس
+        ولتاژ تک‌فاز کنار مقره). تجهیزهایی که طراحی نمی‌شوند (GM، PR/TR، LT/GA، ROAD) مانع
+        به حساب می‌آیند؛ پهنای اشغالی مانع با [پهنا به متر] داده می‌شود، مثلاً PR/TR[4.0].</small>
+    </div>
+    <div class="row">
+      <div class="f"><label>سطح ولتاژ پست</label>
+        <select id="voltage">{% for v, lvl in voltages.items() %}
+          <option value="{{ v }}" {{ 'selected' if v == '63' }}>{{ lvl.title }}</option>{% endfor %}</select></div>
+      <div class="f"><label>پست و ساختگاه</label>
+        <select id="substation"><option value="">— ورود دستی —</option>
+          {% for s in substations %}
+          <option value="{{ s.id }}" data-ss="{{ s.ss or '' }}" data-s1="{{ s.s1 or '' }}"
+            data-soil="{{ s.soil_class or 'III' }}" data-qb="{{ s.q_base or '' }}"
+            data-qf="{{ s.q_factor or '' }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
+        </select><small class="hint">داده لرزه‌ای و خاک پست ثبت‌شده در فرم قرار می‌گیرد</small></div>
+      <div class="f"><label>حداقل فاصله آزاد بین دو پی (m)</label>
+        <input id="gap" type="number" step="0.05" value="0.20">
+        <small class="hint">فاصله لبه به لبه پی‌های مجاور؛ برای کانال کابل یا اجرا</small></div>
+      <div class="f"><label>حداکثر فاصله برای ادغام اختیاری (m)</label>
+        <input id="merge_span" type="number" step="0.1" value="1.6">
+        <small class="hint">تجهیزهای نزدیک‌تر از این، اگر پی مشترک بتن کمتری بخواهد، روی یک پی قرار
+          می‌گیرند (مثل LA و CVT). اگر فضا کافی نباشد، ادغام بدون توجه به این عدد انجام می‌شود.</small></div>
+      <div class="f"><label>حداکثر طول پی عمود بر ردیف (m)</label>
+        <input id="L_max" type="number" step="0.1" value="6.0">
+        <small class="hint">محدودیت فضا در امتداد فازها (فاصله ردیف‌های مجاور)</small></div>
+    </div>
+
+    {% include "_site_fields.html" %}
+
+    <fieldset>
+      <legend>ستون بتنی و سازه</legend>
+      <div class="row">
+        <div class="f"><label><b>hp</b> ارتفاع ستون (m)</label><input id="hp" type="number" step="0.05" value="1"></div>
+        <div class="f"><label><b>b</b> ضلع ستون (m)</label><input id="bcol" type="number" step="0.05" value="0.6"></div>
+        <div class="f"><label><b>tf</b> ضخامت اولیه پی (m)</label><input id="tf" type="number" step="0.05" value="0.4"></div>
+        <div class="f"><label>قطر آرماتور پی / ستون (mm)</label>
+          <div style="display:flex;gap:6px"><input id="pad_dia" type="number" value="14"><input id="col_dia" type="number" value="14"></div></div>
+      </div>
+      <label class="check-inline"><input type="checkbox" id="steel_enabled" checked>
+        تحلیل و طراحی سازه فولادی هر تجهیز</label>
+      <label class="check-inline"><input type="checkbox" id="steel_feed" checked>
+        استفاده از وزن و سطح بادگیر سازه طراحی‌شده در محاسبه فونداسیون</label>
+    </fieldset>
+
+    <button class="btn wide" type="submit" id="go">طراحی ردیف</button>
+    <p class="note" id="msg"></p>
+  </form>
+
+  <div>
+    <div class="sheet" id="planBox" style="display:none">
+      <h2>پلان فونداسیون‌های ردیف</h2>
+      <div class="bay-plan"><svg id="plan"></svg></div>
+      <p class="note" id="planNote"></p>
+      <div class="actions" id="planActions"></div>
+    </div>
+    <div class="sheet" id="tableBox" style="display:none">
+      <h2>فونداسیون‌ها</h2>
+      <table class="compare" id="units"></table>
+      <div id="merges"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const $ = id => document.getElementById(id);
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const num = id => $(id).value === "" ? null : parseFloat($(id).value);
+const fmt = (v, d = 2) => Number(v).toFixed(d);
+$("edition").addEventListener("change", e => {
+  const five = e.target.value === "5";
+  $("ed5").style.display = five ? "block" : "none";
+  $("ed4").style.display = five ? "none" : "block";
+});
+$("substation").addEventListener("change", e => {
+  const o = e.target.selectedOptions[0]; if (!o || !o.dataset.ss) return;
+  $("ss").value = o.dataset.ss; $("s1").value = o.dataset.s1; $("soil_class").value = o.dataset.soil;
+  if (o.dataset.qb) $("q_base").value = o.dataset.qb;
+  if (o.dataset.qf) $("q_factor").value = o.dataset.qf;
+});
+
+$("form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("go").disabled = true; $("msg").textContent = "در حال طراحی ردیف…";
+  const payload = {
+    chain: $("chain").value || $("chain").placeholder, voltage: $("voltage").value,
+    gap: num("gap"), merge_span: num("merge_span"), L_max: num("L_max"),
+    "seismic.edition": $("edition").value, "seismic.ss": num("ss"), "seismic.s1": num("s1"),
+    "seismic.soil_class": $("soil_class").value, "seismic.method": $("method").value,
+    "seismic.ie": num("ie"), "seismic.ru": num("ru"), "seismic.k_lateral": num("k_lateral"),
+    "seismic.a": num("a"), "seismic.b": num("b4"), "seismic.i": num("i4"), "seismic.r": num("r4"),
+    "soil.q_base": num("q_base"), "soil.q_factor": num("q_factor"),
+    "materials.fc": num("fc"), "materials.fy": num("fy"),
+    "materials.cover": num("cover"), "materials.lean": num("lean"),
+    "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf"),
+    "rebar.pad_dia": num("pad_dia"), "rebar.col_dia": num("col_dia"),
+    "steel.enabled": $("steel_enabled").checked, "steel.feed_foundation": $("steel_feed").checked,
+    substation_id: $("substation").value || null
+  };
+  try {
+    const r = await fetch("/api/bay", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(payload)});
+    const d = await r.json();
+    if (d.error) { $("msg").textContent = d.error; }
+    else { render(d); $("msg").textContent = `${d.units.length} فونداسیون طراحی و ثبت شد.`; }
+  } catch (e) { $("msg").textContent = "ارتباط با سرور برقرار نشد: " + e; }
+  $("go").disabled = false;
+});
+
+function render(d){
+  $("planBox").style.display = "block"; $("tableBox").style.display = "block";
+  const st = d.stations, us = d.units;
+  const x0 = st[0].pos - 1.5, x1 = st[st.length - 1].pos + 1.5;
+  const H = Math.max(...us.map(u => u.L)) + 3;
+  const W = x1 - x0, k = 1000 / W, h = H * k;
+  const X = x => (x - x0) * k, Y = y => h / 2 - y * k;
+  let s = `<rect x="0" y="0" width="1000" height="${h}" class="bp-bg"/>`;
+  st.forEach(t => {
+    s += `<line x1="${X(t.pos)}" y1="8" x2="${X(t.pos)}" y2="${h - 8}" class="bp-axis"/>` +
+         `<text x="${X(t.pos)}" y="7" class="bp-lbl">${t.label}</text>`;
+    if (!t.equipment && t.width) s += `<rect x="${X(t.pos - t.width / 2)}" y="${Y(H / 2 - 1.4)}" width="${t.width * k}" height="${(H - 2.8) * k}" class="bp-obs"/>`;
+  });
+  for (let i = 0; i + 1 < st.length; i++) {
+    const a = X(st[i].pos), b = X(st[i + 1].pos), y = h - 14;
+    s += `<line x1="${a}" y1="${y}" x2="${b}" y2="${y}" class="bp-dim"/>` +
+         `<text x="${(a + b) / 2}" y="${y - 3}" class="bp-dt">${Math.round((st[i + 1].pos - st[i].pos) * 1000)}</text>`;
+  }
+  us.forEach(u => {
+    s += `<rect x="${X(u.centre - u.B / 2)}" y="${Y(u.L / 2)}" width="${u.B * k}" height="${u.L * k}" class="bp-pad ${u.ok ? "" : "ng"}"><title>${u.label}: ${fmt(u.L, 1)}×${fmt(u.B, 1)}×${fmt(u.tf, 1)}</title></rect>`;
+    const b = d.b;
+    u.pedestals.forEach(([px, py]) => {
+      s += `<rect x="${X(u.centre + py - b / 2)}" y="${Y(px + b / 2)}" width="${b * k}" height="${b * k}" class="bp-ped"/>`;
+    });
+    s += `<text x="${X(u.centre)}" y="${Y(u.L / 2) - 4}" class="bp-pl">${fmt(u.L, 1)}×${fmt(u.B, 1)}</text>`;
+  });
+  $("plan").setAttribute("viewBox", `0 0 1000 ${h}`);
+  $("plan").innerHTML = s;
+  $("planNote").textContent = `حجم کل بتن پی‌ها ${fmt(d.volume)} m³ · حداقل فاصله آزاد بین پی‌ها ${fmt(d.gap)} m · ابعاد به متر (طول عمود بر ردیف × عرض در امتداد ردیف)`;
+  $("planActions").innerHTML = d.plan ? `<a class="btn quiet" href="${d.plan.url}" download="${d.plan.name}">کی‌پلن ردیف (DXF)</a>` : "";
+  $("units").innerHTML = `<thead><tr><th>فونداسیون</th><th>موقعیت m</th><th>L×B×tf m</th><th>حجم m³</th>
+      <th>FS واژگونی</th><th>تنش خاک</th><th>سازه</th><th>وضعیت</th><th></th></tr></thead><tbody>` +
+    us.map(u => `<tr><td>${u.label}</td><td class="num">${fmt(u.centre)}</td>
+      <td class="num">${fmt(u.L, 1)}×${fmt(u.B, 1)}×${fmt(u.tf, 1)}</td><td class="num">${fmt(u.volume)}</td>
+      <td class="num">${fmt(u.fs)}</td><td class="num">${fmt(u.q)}</td>
+      <td>${u.steel.map(x => `${x.tag}: ${x.chord} (${fmt(x.ratio)})`).join("، ") || "—"}</td>
+      <td><span class="tag ${u.ok ? "ok" : "ng"}">${u.ok ? "قبول" : "بازبینی"}</span></td>
+      <td><a href="/calculation/${u.id}">گزارش</a> · <a href="/calculation/${u.id}/print" target="_blank">چاپ</a></td></tr>`).join("") +
+    "</tbody>";
+  $("merges").innerHTML = d.merges.length ? `<h3 style="margin:10px 0 4px">پی‌های مشترک</h3>` +
+    d.merges.map(m => `<p class="note">${m[0]} و ${m[1]} (فاصله ${fmt(m[2])} m): ${m[3]}</p>`).join("") : "";
+}
+</script>
+{% endblock %}

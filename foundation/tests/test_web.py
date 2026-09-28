@@ -312,3 +312,18 @@ def test_guide_covers_every_form_field(client):
     page = client.get("/guide").get_data(as_text=True)
     assert "نوع زمین" in page and "Vs30" in page
     assert 'id="guideToggle"' in html
+
+
+def test_bay_page_designs_and_stores_each_pad(client):
+    body = {"chain": "LA 2000 CT 2000 CB 2500 DS", "voltage": "63", "seismic.edition": "4",
+            "seismic.a": 0.25, "seismic.b": 2.5, "seismic.i": 1.4, "seismic.r": 2,
+            "soil.q_base": 1.72, "soil.q_factor": 1.33, "foundation.b": 0.6,
+            "rebar.col_dia": 14, "rebar.pad_dia": 14, "steel.enabled": False}
+    h = {"X-CSRF-Token": client.csrf}
+    d = client.post("/api/bay", json=body, headers=h).get_json()
+    assert [u["label"] for u in d["units"]] == ["LA", "CT", "CB", "DS"]
+    assert all(u["ok"] for u in d["units"])
+    assert client.get(f"/calculation/{d['units'][1]['id']}").status_code == 200
+    assert client.get(d["plan"]["url"]).status_code == 200
+    r = client.post("/api/bay", json=dict(body, chain="LA 2000 1500"), headers=h)
+    assert r.status_code == 400 and r.get_json()["error"]

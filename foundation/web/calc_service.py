@@ -68,8 +68,8 @@ def layout_from_spec(spec, eq1: Equipment):
     raw = list(spec.get("groups") or [{}])
     if kind == "single":
         raw = raw[:1]
-    if len(raw) > 2:
-        raise ValueError("روی یک پی حداکثر دو تجهیز")
+    if len(raw) > 6:
+        raise ValueError("روی یک پی حداکثر شش تجهیز")
     gap = _num(spec.get("gap"))
     groups, saved = [], []
     for i, g in enumerate(raw):

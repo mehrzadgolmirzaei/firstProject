@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.7.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.8.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -263,6 +263,12 @@ def api_calculate():
         return jsonify({"error": "تا حد جست‌وجو ابعادی پیدا نشد که همه کنترل‌ها را پاس کند."}), 200
 
     payload = to_dict(res, seis, des, qty, bbs, eq, cfg)
+    payload["id"] = _store(form, eq, cfg, layout_spec, payload)
+    return jsonify(payload)
+
+
+def _store(form, eq, cfg, layout_spec, payload):
+    """ثبت محاسبه با اسنپ‌شات کامل ورودی (نقشه و گزارش فقط از همین ساخته می‌شوند)."""
     calc_id = db.execute(
         "INSERT INTO calculations (project_id, substation_id, equipment_tag,"
         " code_profile_id, inputs, results, status, run_by, run_at)"
@@ -275,8 +281,7 @@ def api_calculate():
          "ok" if payload["ok"] else "ng",
          auth.current_user()["id"], db.now()))
     auth.record("اجرای محاسبه", "calculation", calc_id, {"tag": eq.tag})
-    payload["id"] = calc_id
-    return jsonify(payload)
+    return calc_id
 
 
 @app.post("/api/keyplan")
@@ -466,6 +471,75 @@ def calculation_print(cid):
     data["results"] = json.loads(data["results"])
     data["inputs"] = json.loads(data["inputs"])
     return render_template("print.html", calc=data, conf=st.load(), options=design_options())
+
+
+# ================================================================= ردیف تجهیزات
+@app.route("/bay")
+@auth.login_required
+def bay_page():
+    subs = db.query("SELECT s.*, p.name AS project FROM substations s"
+                    " LEFT JOIN projects p ON p.id=s.project_id ORDER BY s.code")
+    return render_template("bay.html", defaults=asdict(_office_config()),
+                           substations=[dict(r) for r in subs], voltages=VOLTAGE_LEVELS,
+                           guide=__import__("guide").by_id())
+
+
+@app.post("/api/bay")
+@auth.requires("engineer")
+def api_bay():
+    """
+    طراحی همه فونداسیون‌های یک ردیف با محدودیت فضا (bay.py)؛ هر پی به‌صورت یک محاسبه
+    کامل ثبت می‌شود (گزارش و نقشه جدا) و کی‌پلن ردیف به DXF ساخته می‌شود.
+    """
+    import bay as B
+    form = request.get_json(silent=True)
+    if not isinstance(form, dict):
+        return jsonify({"error": "درخواست باید JSON باشد."}), 400
+    try:
+        cfg = config_from_form(form)
+        voltage = form.get("voltage") or "63"
+        if voltage not in VOLTAGE_LEVELS:
+            raise InputError("سطح ولتاژ نامعتبر است")
+        gap = _number(form, "gap") or 0.20
+        span = _number(form, "merge_span")
+        span = 1.6 if span is None else span
+        L_hi = _number(form, "L_max") or 6.0
+        if not (0 <= gap <= 2 and 0 <= span <= 5 and 1 <= L_hi <= 12):
+            raise InputError("فاصله آزاد، حد ادغام یا حداکثر طول پی خارج از محدوده است")
+        result = B.design_bay(form.get("chain") or "", cfg, voltage, gap, L_hi=L_hi,
+                              merge_span=span)
+        B.verify(result, cfg)
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    units = []
+    for u in result["units"]:
+        Bw, L, tf, vol = u.choice
+        res, seis, des, qty, bbs = u.out
+        eq = u.layout.main
+        payload = to_dict(res, seis, des, qty, bbs, eq, u.cfg)
+        cid = _store(form, eq, u.cfg, B.unit_spec(u), payload)
+        units.append({"label": u.label, "centre": round(u.centre, 3), "L": L, "B": Bw, "tf": tf,
+                      "volume": round(vol, 3), "ok": payload["ok"], "id": cid,
+                      "pedestals": [[round(px, 3), round(py, 3)] for g in u.layout.groups
+                                    for px, py in g.positions],
+                      "stations": [s.label for s in u.stations],
+                      "fs": round(res.checks[0].value, 2), "q": round(res.checks[1].value, 2),
+                      "steel": [{"tag": res.layout.groups[gi].eq.tag, "chord": d.sections["chord"],
+                                 "ratio": round(float(d.max_ratio), 2)}
+                                for gi, d in res.structures]})
+    name = f"bay_{secrets.token_hex(4)}.dxf"
+    try:
+        B.plan_dxf(result, str(OUT / name))
+        plan = {"name": name, "url": url_for("download", name=name)}
+    except ImportError:
+        plan = None
+    auth.record("طراحی ردیف تجهیزات", "bay", None, {"units": len(units)})
+    return jsonify({"units": units, "b": cfg.foundation.b, "gap": result["gap"],
+                    "stations": [{"label": s.label, "pos": round(s.pos, 3), "width": s.width,
+                                  "equipment": bool(s.keys)} for s in result["stations"]],
+                    "merges": [list(m) for m in result["merges"]], "plan": plan,
+                    "volume": round(sum(u["volume"] for u in units), 2)})
 
 
 # ================================================================= راهنما

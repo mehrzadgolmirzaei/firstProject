@@ -130,3 +130,17 @@ def test_foundation_uses_structure_when_fed():
     assert eq.Ws == pytest.approx(d.weight * cfg.steel.connection_factor, abs=0.1)
     assert eq.As == pytest.approx(d.wind_area, abs=1e-3)
     assert eq.Ws < ALL_EQUIPMENT["LA63"].Ws
+
+
+def test_sap_export_format_matches_office_files(tmp_path):
+    """SAP 14.2.2 فقط CR+LF می‌خواند؛ PROGRAM CONTROL باید اولین جدول و Version=14.2.2 باشد."""
+    d, *_ = _design("CVT63_1")
+    path = write_model(d.model, tmp_path / "c.s2k")
+    b = Path(path).read_bytes()
+    assert b.replace(b"\r\n", b"").count(b"\n") == 0 and b.replace(b"\r\n", b"").count(b"\r") == 0
+    lines = b.decode("latin-1").split("\r\n")
+    assert lines[0].startswith("File ") and lines[1] == ""
+    assert lines[2] == 'TABLE:  "PROGRAM CONTROL"' and "Version=14.2.2" in lines[3]
+    assert lines[-2] == "END TABLE DATA"
+    office = (Path(__file__).parent / "data" / "sap" / "LA.s2k").read_bytes().decode("latin-1")
+    assert office.split("\r\n")[2] == lines[2]          # همان سرآیند جدول فایل‌های دفتر
