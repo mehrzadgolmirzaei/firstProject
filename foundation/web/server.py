@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.8.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.8.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -344,6 +344,8 @@ def drawing_settings():
                                 "tie_dia", "tie_spacing", "standee_dia")},
         }
         st.save(data, auth.current_user()["id"])
+        for old in OUT.glob("sheet_*.svg"):          # جدول عنوان و یادداشت‌ها روی شیت اثر دارند
+            old.unlink(missing_ok=True)
         auth.record("ویرایش تنظیمات نقشه", "settings")
         flash("تنظیمات نقشه ذخیره شد. از این پس روی نقشه‌های تازه اعمال می‌شود.", "ok")
         return redirect(url_for("drawing_settings"))
@@ -366,18 +368,16 @@ def _same_result(stored, fresh):
     return True
 
 
-@app.post("/api/drawing/<int:cid>")
-@auth.requires("engineer")
-def api_drawing(cid):
+def _rebuild(cid):
     """
-    تولید DXF از اسنپ‌شات یک محاسبه ذخیره‌شده.
-    فقط تنظیمات ظاهری (جدول عنوان، مقیاس، یادداشت‌ها) از تنظیمات فعلی می‌آید؛
-    هر چه روی عدد اثر دارد از خود اسنپ‌شات است، و اگر بازتولید با نتیجه
-    ذخیره‌شده نخواند، نقشه ساخته نمی‌شود.
+    بازتولید یک محاسبه ثبت‌شده از اسنپ‌شات (برای نقشه و پیش‌نمایش نقشه در صفحه).
+    فقط تنظیمات ظاهری (جدول عنوان، مقیاس، یادداشت‌ها) از تنظیمات فعلی می‌آید؛ اگر
+    بازتولید با نتیجه ذخیره‌شده نخواند، خطا برمی‌گردد.
+    خروجی: ((res, seis, des, qty, bbs, eq, cfg)، None) یا (None، پاسخ خطا)
     """
     row = db.query("SELECT * FROM calculations WHERE id=?", (cid,), one=True)
     if not row:
-        return jsonify({"error": "چنین محاسبه‌ای ثبت نشده."}), 404
+        return None, (jsonify({"error": "چنین محاسبه‌ای ثبت نشده."}), 404)
 
     saved = json.loads(row["inputs"])
     cfg = ProjectConfig._from_dict(saved["config"])
@@ -399,8 +399,50 @@ def api_drawing(cid):
     res, seis, des, qty, bbs = run_layout(layout, cfg)
     if res is None or not _same_result(json.loads(row["results"]),
                                        to_dict(res, seis, des, qty, bbs, eq, cfg)):
-        return jsonify({"error": "بازتولید محاسبه از اسنپ‌شات با نتیجه ذخیره‌شده نخواند؛ "
-                                 "نقشه ساخته نشد. محاسبه را دوباره اجرا کنید."}), 409
+        return None, (jsonify({"error": "بازتولید محاسبه از اسنپ‌شات با نتیجه ذخیره‌شده نخواند؛ "
+                                        "نقشه ساخته نشد. محاسبه را دوباره اجرا کنید."}), 409)
+    return (res, seis, des, qty, bbs, eq, cfg), None
+
+
+@app.get("/api/sheet/<int:cid>.svg")
+@auth.login_required
+def api_sheet(cid):
+    """
+    پیش‌نمایش نقشه ساخت در صفحه: همان شیت دوبعدی اتوکد (همان کد و همان اسنپ‌شات)
+    به SVG — آنچه در صفحه دیده می‌شود دقیقاً همان است که در فایل DXF می‌رود.
+    """
+    cache = OUT / f"sheet_{cid}.svg"
+    if cache.is_file():
+        return send_file(cache, mimetype="image/svg+xml", max_age=0)
+    built, err = _rebuild(cid)
+    if err:
+        return err
+    res, seis, des, qty, bbs, eq, cfg = built
+    try:
+        from sheet_preview import sheet_svg
+        cache.write_text(sheet_svg(res, eq, from_config(cfg)[0], qty, bbs, seis, des, cfg),
+                         encoding="utf-8")
+    except ImportError:
+        return jsonify({"error": "کتابخانه ezdxf نصب نیست"}), 500
+    except Exception as exc:
+        app.logger.exception("sheet preview failed")
+        return jsonify({"error": f"پیش‌نمایش نقشه ساخته نشد: {exc}"}), 500
+    return send_file(cache, mimetype="image/svg+xml", max_age=0)
+
+
+@app.post("/api/drawing/<int:cid>")
+@auth.requires("engineer")
+def api_drawing(cid):
+    """
+    تولید DXF از اسنپ‌شات یک محاسبه ذخیره‌شده.
+    فقط تنظیمات ظاهری (جدول عنوان، مقیاس، یادداشت‌ها) از تنظیمات فعلی می‌آید؛
+    هر چه روی عدد اثر دارد از خود اسنپ‌شات است، و اگر بازتولید با نتیجه
+    ذخیره‌شده نخواند، نقشه ساخته نمی‌شود.
+    """
+    built, err = _rebuild(cid)
+    if err:
+        return err
+    res, seis, des, qty, bbs, eq, cfg = built
 
     try:
         from outputs import make_outputs

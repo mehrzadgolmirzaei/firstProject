@@ -327,3 +327,12 @@ def test_bay_page_designs_and_stores_each_pad(client):
     assert client.get(d["plan"]["url"]).status_code == 200
     r = client.post("/api/bay", json=dict(body, chain="LA 2000 1500"), headers=h)
     assert r.status_code == 400 and r.get_json()["error"]
+
+
+def test_sheet_preview_is_the_autocad_sheet(client):
+    d = _calc(client, "LA").get_json()
+    r = client.get(f"/api/sheet/{d['id']}.svg")
+    assert r.status_code == 200 and r.mimetype == "image/svg+xml"
+    body = r.get_data(as_text=True)
+    assert body.lstrip().startswith("<?xml") or "<svg" in body[:200]
+    assert client.get("/api/sheet/999999.svg").status_code == 404

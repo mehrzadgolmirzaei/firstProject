@@ -270,7 +270,20 @@
 
   <!-- خروجی -->
   <div>
-    <div class="sheet" style="padding:0;border:0">
+    <div class="view-tabs" id="viewTabs" style="display:none">
+      <button type="button" class="on" data-view="viewer">مدل سه‌بعدی</button>
+      <button type="button" data-view="sheetView">نقشه ساخت</button>
+    </div>
+    <div class="sheet-view" id="sheetView" style="display:none">
+      <div class="sheet-stage" id="sheetStage"><img id="sheetImg" alt="نقشه ساخت" draggable="false"></div>
+      <div class="sheet-tools">
+        <button type="button" class="btn quiet" id="zIn">+</button>
+        <button type="button" class="btn quiet" id="zOut">−</button>
+        <button type="button" class="btn quiet" id="zFit">کل شیت</button>
+        <span class="note" id="sheetMsg">همان شیتی که در فایل اتوکد ساخته می‌شود · برای جابه‌جایی بکشید، برای بزرگ‌نمایی اسکرول کنید</span>
+      </div>
+    </div>
+    <div class="sheet" style="padding:0;border:0" id="viewerWrap">
       <div class="viewer" id="viewer">
         <div class="empty">مدل سه‌بعدی فونداسیون پس از محاسبه در این بخش نمایش داده می‌شود</div>
         <div class="legend" id="legend" style="display:none">
@@ -723,7 +736,49 @@ function render(d){
 
   viewer.build(d.model);
   renderSteel(d.structures || []);
+  $("viewTabs").style.display = "flex";
+  sheetFor = d.id; sheetLoaded = null;
+  if (currentView === "sheetView") loadSheet();
 }
+
+// ---- نمای «نقشه ساخت»: همان شیت دوبعدی اتوکد (SVG از همان کد و همان اسنپ‌شات)
+let sheetFor = null, sheetLoaded = null, currentView = "viewer";
+const Z = {s: 1, x: 0, y: 0};
+function applyZ(){ $("sheetImg").style.transform = `translate(${Z.x}px, ${Z.y}px) scale(${Z.s})`; }
+function fit(){ Z.s = 1; Z.x = 0; Z.y = 0; applyZ(); }
+function loadSheet(){
+  if (!sheetFor || sheetLoaded === sheetFor) return;
+  $("sheetMsg").textContent = "در حال تهیه نقشه…";
+  const img = $("sheetImg");
+  img.onload = () => { sheetLoaded = sheetFor; fit();
+    $("sheetMsg").textContent = "همان شیتی که در فایل اتوکد ساخته می‌شود · برای جابه‌جایی بکشید، برای بزرگ‌نمایی اسکرول کنید"; };
+  img.onerror = () => { $("sheetMsg").textContent = "پیش‌نمایش نقشه ساخته نشد."; };
+  img.src = `/api/sheet/${sheetFor}.svg?t=${Date.now()}`;
+}
+document.querySelectorAll("#viewTabs button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("#viewTabs button").forEach(x => x.classList.toggle("on", x === b));
+  currentView = b.dataset.view;
+  $("viewerWrap").style.display = currentView === "viewer" ? "" : "none";
+  $("sheetView").style.display = currentView === "sheetView" ? "" : "none";
+  if (currentView === "sheetView") loadSheet();
+}));
+function zoomAt(f, cx, cy){
+  const r = $("sheetStage").getBoundingClientRect();
+  const px = cx - r.left - Z.x, py = cy - r.top - Z.y;
+  const s2 = Math.min(12, Math.max(1, Z.s * f));
+  Z.x -= px * (s2 / Z.s - 1); Z.y -= py * (s2 / Z.s - 1); Z.s = s2;
+  if (Z.s === 1) { Z.x = 0; Z.y = 0; }
+  applyZ();
+}
+$("sheetStage").addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX, e.clientY); }, {passive: false});
+let drag = null;
+$("sheetStage").addEventListener("pointerdown", e => { drag = {x: e.clientX - Z.x, y: e.clientY - Z.y}; $("sheetStage").setPointerCapture(e.pointerId); });
+$("sheetStage").addEventListener("pointermove", e => { if (!drag) return; Z.x = e.clientX - drag.x; Z.y = e.clientY - drag.y; applyZ(); });
+$("sheetStage").addEventListener("pointerup", () => { drag = null; });
+const mid = () => { const r = $("sheetStage").getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+$("zIn").addEventListener("click", () => zoomAt(1.5, ...mid()));
+$("zOut").addEventListener("click", () => zoomAt(1 / 1.5, ...mid()));
+$("zFit").addEventListener("click", fit);
 
 let heat = false;
 $("heatBtn").addEventListener("click", () => {

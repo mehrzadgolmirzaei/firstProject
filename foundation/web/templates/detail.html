@@ -80,4 +80,11 @@
   {% endfor %}
   </div>
 </div>
+
+<div class="sheet">
+  <h2>نقشه ساخت</h2>
+  <div class="sheet-stage" style="cursor:default"><img src="{{ url_for('api_sheet', cid=calc.id) }}"
+    alt="نقشه ساخت" loading="lazy"></div>
+  <p class="note">همان شیتی که در فایل اتوکد ساخته می‌شود.</p>
+</div>
 {% endblock %}
