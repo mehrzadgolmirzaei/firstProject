@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.10.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.10.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -356,16 +356,17 @@ def api_keyplan():
                 return jsonify({"kind": "keyplan", "file": label,
                                 "foundations": [x.to_dict() for x in found]})
             items = LP.read_items(None, doc=doc)
-            stations, _, _ = LP.site_stations(items, voltage)
+            v = LP.detect_voltage(items) or voltage
+            stations, _, _ = LP.site_stations(items, v)
             n = sum(1 for s in stations if s.key)
             if n:
-                docs.append((n, label, items))
+                docs.append((n, label, items, v))
             if n >= 3:
                 break
         if not docs:
             return jsonify({"error": "نه بلاک پی کی‌پلن (مثل LA+CVT-3-2.5) پیدا شد، نه تجهیز در "
                                      "نقشه جانمایی (بلاک‌هایی با نام LA، CT، CB، DS، CVT، PI)."}), 400
-        _, label, items = max(docs, key=lambda d: d[0])
+        _, label, items, voltage_found = max(docs, key=lambda d: d[0])
         try:
             form = json.loads(request.form.get("form") or "{}")
         except ValueError:
@@ -374,18 +375,23 @@ def api_keyplan():
             raise InputError("این فایل نقشه جانمایی است. برای طراحی پی‌ها ابتدا مشخصات ساختگاه "
                              "(زلزله، خاک و باد) را در فرم وارد کنید و سپس دوباره بارگذاری کنید.")
         cfg = config_from_form(form)
-        result = LP.design_layout(None, cfg, voltage, items=items)
+        result = LP.design_layout(None, cfg, voltage_found, items=items)
         dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
         LP.plan_dxf(result, str(OUT / dxf))
     except InputError as exc:
         return jsonify({"error": str(exc)}), 400
     except ValueError as exc:
         return jsonify({"error": f"نقشه خوانده نشد: {exc}"}), 400
+    except Exception as exc:                      # هر خطای دیگر: پیام روشن، نه صفحه خطا
+        app.logger.exception("layout/keyplan")
+        return jsonify({"error": f"نقشه خوانده نشد ({type(exc).__name__}: {exc})"}), 500
     finally:
         shutil.rmtree(folder, ignore_errors=True)
     auth.record("طراحی از نقشه جانمایی", "layout", None,
                 {"file": f.filename, "types": len(result["foundations"])})
-    return jsonify({"kind": "layout", "file": label, "foundations": result["foundations"],
+    return jsonify({"kind": "layout", "file": label, "voltage": voltage_found,
+                    "voltage_changed": voltage_found != voltage,
+                    "foundations": result["foundations"],
                     "plan": result["plan"], "notes": result["notes"], "unknown": result["unknown"],
                     "rows": [{"axis": r["axis"], "units": r["units"]} for r in result["rows"]],
                     "dxf": url_for("download", name=dxf)})

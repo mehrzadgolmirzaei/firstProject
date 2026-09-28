@@ -123,6 +123,9 @@ def _layout(unit):
                 g.positions = [(px + shift, py) for px, py in g.positions]
             groups.append(g)
         taken[st.label] = y
+    for g in groups:
+        if g.positions is None:
+            raise ValueError(f"فاصله ستون‌های «{g.eq.tag}» در کاتالوگ این سطح ولتاژ نیامده است")
     pts = [p for g in groups for p in g.positions]
     mx = (max(p[0] for p in pts) + min(p[0] for p in pts)) / 2
     my = (max(p[1] for p in pts) + min(p[1] for p in pts)) / 2

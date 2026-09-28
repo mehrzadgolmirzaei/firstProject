@@ -29,6 +29,7 @@
       <small class="hint"><b>نقشه جانمایی (Layout):</b> سامانه جای تجهیزها و فضای موجود را می‌خواند و همه
         پی‌ها را متناسب با فضا طراحی می‌کند (پیش از بارگذاری، مشخصات ساختگاه را وارد کنید). پوشه نقشه‌ها را
         می‌توان به‌صورت ZIP داد. <b>کی‌پلن:</b> ابعاد و ستون‌های پی‌های موجود خوانده می‌شود.</small>
+      <div id="kpMsg" class="kp-msg" style="display:none"></div>
       <select id="kpsel" style="display:none;margin-top:6px"></select>
       <div id="lytBox" class="lyt-box" style="display:none"></div>
     </div>
@@ -490,30 +491,47 @@ $("voltage").addEventListener("change", () => { populateEquipment(); drawPreview
 
 // نقشه جانمایی یا کی‌پلن: همه پی‌ها، انتخاب یکی
 var KP = [], KP_KIND = "";
-$("kpfile").addEventListener("change", async e => {
+function kpStatus(text, kind){
+  const m = $("kpMsg"); m.textContent = text; m.className = "kp-msg " + (kind || "");
+  m.style.display = text ? "block" : "none"; $("msg").textContent = text;
+}
+var LAST_FILE = null;
+$("kpfile").addEventListener("change", e => {
   const file = e.target.files[0]; if (!file) return;
-  $("msg").textContent = "در حال خواندن نقشه… (نقشه جانمایی سه‌بعدی ممکن است کمی طول بکشد)";
-  $("lytBox").style.display = "none";
+  e.target.value = "";                 // انتخاب دوباره همان فایل هم دوباره خوانده شود
+  uploadDrawing(file);
+});
+async function uploadDrawing(file){
+  LAST_FILE = file;
+  kpStatus("در حال خواندن نقشه… (نقشه جانمایی سه‌بعدی ممکن است کمی طول بکشد)", "busy");
+  $("lytBox").style.display = "none"; $("kpsel").style.display = "none";
   const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
   fd.append("form", JSON.stringify(formPayload()));
+  let d;
   try {
     const r = await fetch("/api/keyplan", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
-    const d = await r.json();
-    if (d.error) { $("msg").textContent = d.error; e.target.value = ""; return; }
-    KP = d.foundations; KP_KIND = d.kind;
-    const sel = $("kpsel");
-    const what = d.kind === "layout" ? "تیپ پی طراحی‌شده از نقشه جانمایی" : "نوع پی در";
-    sel.innerHTML = `<option value="">— ${KP.length} ${what} ${d.file} —</option>` +
-      KP.map((f, i) => `<option value="${i}" ${f.problem ? "disabled" : ""}>${f.name} — ` +
-        (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)}` +
-          (f.tf ? `×${fmt(f.tf)}` : "") + ` · ${f.count} عدد`) + `</option>`).join("");
-    sel.style.display = "block";
-    if (d.kind === "layout") showLayout(d);
-    $("msg").textContent = d.kind === "layout"
-      ? "نقشه جانمایی خوانده و همه پی‌ها متناسب با فضا طراحی شد؛ پی مورد نظر را انتخاب کنید."
-      : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.";
-  } catch (err) { $("msg").textContent = "نقشه خوانده نشد: " + err; }
-});
+    try { d = await r.json(); }
+    catch (_) { d = {error: r.status === 413 ? "حجم فایل بیش از حد مجاز است." : "خطای سرور (" + r.status + ")."}; }
+  } catch (err) { d = {error: "ارتباط با سرور برقرار نشد: " + err}; }
+  if (d.error) { kpStatus(`${file.name}: ${d.error}`, "ng"); return; }
+  let note = "";
+  if (d.kind === "layout" && d.voltage_changed) {
+    $("voltage").value = d.voltage; populateEquipment(); drawPreview();
+    note = ` سطح ولتاژ از روی نقشه ${d.voltage} کیلوولت تشخیص داده شد و در فرم تنظیم شد.`;
+  }
+  KP = d.foundations; KP_KIND = d.kind;
+  const sel = $("kpsel");
+  const what = d.kind === "layout" ? "تیپ پی طراحی‌شده از نقشه جانمایی" : "نوع پی در";
+  sel.innerHTML = `<option value="">— ${KP.length} ${what} ${d.file} —</option>` +
+    KP.map((f, i) => `<option value="${i}" ${f.problem ? "disabled" : ""}>${f.name} — ` +
+      (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)}` +
+        (f.tf ? `×${fmt(f.tf)}` : "") + ` · ${f.count} عدد`) + `</option>`).join("");
+  sel.style.display = "block";
+  if (d.kind === "layout") showLayout(d);
+  kpStatus((d.kind === "layout"
+    ? `نقشه جانمایی خوانده شد و ${KP.length} تیپ پی متناسب با فضا طراحی شد؛ پی مورد نظر را از فهرست یا روی پلان انتخاب کنید.`
+    : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.") + note + ` (${file.name})`, "ok");
+}
 $("kpsel").addEventListener("change", e => {
   const f = KP[e.target.value]; if (!f) return;
   const src = KP_KIND === "layout" ? `نقشه جانمایی «${f.name}»` : `کی‌پلن «${f.name}»`;
@@ -540,7 +558,9 @@ function showLayout(d){
   $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
-    <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>`;
+    <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>
+    <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>`;
+  $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
   $("lytBox").style.display = "block";
   $("lytBox").querySelectorAll("g.pad").forEach(g => g.addEventListener("click", () => {
     const i = KP.findIndex(f => f.name === g.dataset.type);

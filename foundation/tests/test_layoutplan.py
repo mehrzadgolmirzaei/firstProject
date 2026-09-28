@@ -132,6 +132,23 @@ def test_web_layout_upload(layout_file, app):
                    headers=h, content_type="multipart/form-data")
     d = r.get_json()
     assert r.status_code == 200 and d["kind"] == "layout", d
+    assert d["voltage"] == "63" and not d["voltage_changed"]
     assert {f["name"].split("-")[0] for f in d["foundations"]} == {"LA", "CT", "CB", "DSE"}
     assert all(f["b"] > 0 and f["tf"] > 0 for f in d["foundations"])
     assert c.get(d["dxf"]).status_code == 200
+
+
+def test_voltage_from_layout_names(layout_file, app):
+    """نقشه پست ۶۳ با سطح ولتاژ اشتباه (۲۳۰) در فرم: ولتاژ از نام بلاک‌ها (CT63) تشخیص داده می‌شود."""
+    assert LP.detect_voltage(LP.read_items(layout_file)) == "63"
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    form = {"seismic.edition": "4", "seismic.a": 0.25, "seismic.b": 2.5, "seismic.i": 1.4,
+            "seismic.r": 2, "soil.q_base": 1.72}
+    with open(layout_file, "rb") as fh:
+        r = c.post("/api/keyplan", data={"file": (fh, "layout.dxf"), "voltage": "230",
+                                         "form": json.dumps(form)},
+                   headers=h, content_type="multipart/form-data")
+    d = r.get_json()
+    assert r.status_code == 200 and d["voltage"] == "63" and d["voltage_changed"], d
+    assert all(g["tag"].endswith("63") for f in d["foundations"] for g in f["groups"])

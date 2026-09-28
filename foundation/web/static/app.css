@@ -287,3 +287,9 @@ b.ng{color:var(--fail)}
 .lyt-box .note{margin:6px 0}
 .lyt-box ul.note{padding-inline-start:18px}
 .lyt-box .btn{display:inline-block;margin-top:4px;text-decoration:none}
+.kp-msg{margin-top:6px;padding:7px 10px;font-size:13px;border-inline-start:3px solid var(--rule-soft);background:#F4F2EE}
+.kp-msg.busy{border-color:#8A959E}
+.kp-msg.ok{border-color:var(--pass);background:#EAF2ED}
+.kp-msg.ng{border-color:var(--fail);background:#F7EAE9}
+.btn.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--rule-soft);margin-inline-start:6px}
+.btn.ghost:hover{background:#EEE9E1}

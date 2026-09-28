@@ -149,6 +149,18 @@ def read_items(path, doc=None):
     return items
 
 
+def detect_voltage(items):
+    """
+    سطح ولتاژ از نام بلاک‌ها (CT63، SI 63، xref-63 …): عدد مستقل ۶۳/۲۳۰/۴۰۰؛ اگر نبود None.
+    """
+    votes = Counter()
+    for it in items:
+        for part in it.name.split("$0$"):
+            for v in re.findall(r"(?<!\d)(63|230|400)(?!\d)", part):
+                votes[v] += 1
+    return votes.most_common(1)[0][0] if votes else None
+
+
 # ------------------------------------------------------------------ نوع تجهیز
 def name_tokens(name):
     """«6Bay - Tr 1$0$Ds-e 2250» ← نام خود بلاک (بعد از پیشوند xref) ← نوع‌ها."""
