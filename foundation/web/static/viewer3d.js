@@ -22,7 +22,45 @@
     brace:  0xA9B3BA,
     strut:  0x9AA4AC,
     beam:   0x6E7B86,
+    porcelain: 0x7A543E,  // مقره چینی
+    tank:   0xA8B0B6,
+    metal:  0xBEC4C8,
+    terminal: 0xC49650,
   };
+
+  /** تجهیز روی سازه: استوانه و منشور (structural/equipment3d) */
+  function equipmentGroup(prims, k) {
+    const g = new THREE.Group();
+    const mats = {};
+    const mat = (name) => mats[name] || (mats[name] = new THREE.MeshStandardMaterial({
+      color: C[name] || C.metal, roughness: name === "porcelain" ? 0.35 : 0.5,
+      metalness: name === "porcelain" ? 0.05 : 0.4 }));
+    const P3 = (v) => new THREE.Vector3(v[0] * k, v[2] * k, -v[1] * k);
+    prims.forEach((pr) => {
+      const a = P3(pr.p), b = P3(pr.q);
+      const dir = new THREE.Vector3().subVectors(b, a);
+      const len = Math.max(dir.length(), 1e-4);
+      if (pr.t === "cyl") {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(pr.r * k, pr.r * k, len, 20), mat(pr.g));
+        m.position.copy(a).add(b).multiplyScalar(0.5);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        g.add(m);
+      } else {
+        const [[u0, v0], , [u1, v1]] = pr.profile[0];
+        const e2 = P3([pr.e2[0], pr.e2[1], pr.e2[2]].map((x) => x / k)).normalize();
+        const e3 = P3([pr.e3[0], pr.e3[1], pr.e3[2]].map((x) => x / k)).normalize();
+        const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat(pr.g));
+        const e1 = dir.clone().normalize();
+        box.matrixAutoUpdate = false;
+        const centre = a.clone().add(b).multiplyScalar(0.5);
+        box.matrix.makeBasis(e1.multiplyScalar(len), e2.multiplyScalar((u1 - u0) * k),
+                             e3.multiplyScalar((v1 - v0) * k)).setPosition(centre);
+        g.add(box);
+      }
+    });
+    g.userData.steel = true;
+    return g;
+  }
 
   /** رنگ نسبت تنش: سبز ← زرد ← نارنجی ← قرمز (همان structural/placement.ratio_color) */
   function ratioColor(r) {
@@ -258,10 +296,12 @@
 
     // سازه فولادی طراحی‌شده در برنامه
     this.steelData = m.steel || [];
+    this.equipmentData = m.equipment || [];
     this.k = k;
     this._steel();
     let height = top;
     this.steelData.forEach((s) => { height = Math.max(height, s.p[2] * k, s.q[2] * k); });
+    this.equipmentData.forEach((s) => { height = Math.max(height, s.p[2] * k, s.q[2] * k); });
 
     this.group.position.y = -height / 2;
     this.dist = Math.max(4.5, Math.max(L, B) * 2.6, height * 2.1);
@@ -277,6 +317,9 @@
     });
     if (this.steelData && this.steelData.length) {
       this.group.add(steelMesh(this.steelData, this.k, !!this.heat));
+    }
+    if (this.equipmentData && this.equipmentData.length) {
+      this.group.add(equipmentGroup(this.equipmentData, this.k));
     }
   };
 

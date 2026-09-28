@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.8.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.9.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -512,7 +512,9 @@ def calculation_print(cid):
     data = dict(row)
     data["results"] = json.loads(data["results"])
     data["inputs"] = json.loads(data["inputs"])
-    return render_template("print.html", calc=data, conf=st.load(), options=design_options())
+    from structural import validation
+    return render_template("print.html", calc=data, conf=st.load(), options=design_options(),
+                           validation=validation.run() if data["results"].get("structures") else None)
 
 
 # ================================================================= ردیف تجهیزات
@@ -590,6 +592,15 @@ def api_bay():
 def guide_page():
     from guide import GUIDE
     return render_template("guide.html", guide=GUIDE)
+
+
+# ================================================================= روش تحلیل سازه
+@app.route("/method")
+@auth.login_required
+def method_page():
+    from structural import validation
+    from structural.loads import COMBO_TITLES
+    return render_template("method.html", v=validation.run(), combos=COMBO_TITLES)
 
 
 # ================================================================= آیین‌نامه

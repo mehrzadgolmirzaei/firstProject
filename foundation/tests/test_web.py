@@ -314,6 +314,14 @@ def test_guide_covers_every_form_field(client):
     assert 'id="guideToggle"' in html
 
 
+def test_method_page_runs_live_validation(client):
+    """صفحه روش تحلیل سازه: شرح جایگزینی SAP و صحت‌سنجی زنده، همه برقرار."""
+    page = client.get("/method").get_data(as_text=True)
+    assert "روش سختی مستقیم" in page and "AISC-ASD89" in page
+    assert "همه آزمون‌های صحت‌سنجی برقرار است" in page and "✗" not in page
+    assert page.count("✓") >= 7 + 2 * 7
+
+
 def test_bay_page_designs_and_stores_each_pad(client):
     body = {"chain": "LA 2000 CT 2000 CB 2500 DS", "voltage": "63", "seismic.edition": "4",
             "seismic.a": 0.25, "seismic.b": 2.5, "seismic.i": 1.4, "seismic.r": 2,

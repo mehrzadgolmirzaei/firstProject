@@ -69,6 +69,7 @@ class FoundationModel:
     anchor_hook: float = 0.0                            # قلاب انتهایی (×d)؛ صفر = صاف
     base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
     steel: list = field(default_factory=list)           # structural.placement.Placed
+    equipment: list = field(default_factory=list)       # structural.equipment3d اولیه‌ها
 
     @property
     def top(self):
@@ -217,9 +218,19 @@ def build(res, layout, des, cfg) -> FoundationModel:
     # --- سازه فولادی طراحی‌شده در برنامه، روی صفحه کف ستون‌های همان تجهیز
     from structural.placement import place
     base_z = fm.top + an.grout + an.plate_thickness
+    from structural.equipment3d import for_design, for_stand
+    designed = set()
     for gi, sd in getattr(res, "structures", []) or []:
         peds = [(p.x, p.y) for p, o in zip(fm.pedestals, owner) if o == gi]
         fm.steel += place(sd, peds, base_z)
+        fm.equipment += for_design(layout.groups[gi].eq, sd, peds, base_z)
+        designed.add(gi)
+    # سازه سازنده یا طراحی سازه خاموش: شکل ساده استراکچر و تجهیز روی آن
+    pitch = cfg.steel.phase_pitch if getattr(cfg, "steel", None) else 1.5
+    for gi, g in enumerate(layout.groups):
+        if gi not in designed:
+            peds = [(p.x, p.y) for p, o in zip(fm.pedestals, owner) if o == gi]
+            fm.equipment += for_stand(g.eq, peds, base_z, pitch)
     return fm
 
 
@@ -264,10 +275,11 @@ def clashes(fm: FoundationModel) -> list:
 
 def to_dict(fm: FoundationModel) -> dict:
     """نسخه JSON مدل برای نمای سه‌بعدی مرورگر؛ همان مختصات فایل‌های اتوکد."""
-    steel = fm.steel
-    fm.steel = []
+    steel, equipment = fm.steel, fm.equipment
+    fm.steel, fm.equipment = [], []
     d = asdict(fm)
-    fm.steel = steel
+    fm.steel, fm.equipment = steel, equipment
+    d["equipment"] = equipment
     d["top"] = fm.top
     d["steel"] = [{"p": [round(v, 1) for v in m.p], "q": [round(v, 1) for v in m.q],
                    "e2": [round(v, 5) for v in m.e2], "e3": [round(v, 5) for v in m.e3],

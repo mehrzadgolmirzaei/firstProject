@@ -35,6 +35,10 @@ LAYERS = {
     "S-BRACE": ((176, 184, 190), 0.0),      # مهاربند
     "S-STRUT": ((166, 174, 180), 0.0),      # افقی سر پایه
     "S-BEAM": ((132, 142, 150), 0.0),       # تیر سر سازه
+    "E-PORCELAIN": ((122, 84, 62), 0.0),    # مقره (چینی قهوه‌ای)
+    "E-TANK": ((168, 176, 182), 0.0),       # مخزن و محفظه تجهیز
+    "E-METAL": ((190, 196, 200), 0.0),      # صفحه پایه، کلاهک، حلقه
+    "E-TERMINAL": ((196, 150, 80), 0.0),    # ترمینال هادی (مسی)
 }
 SIDES = 16          # تعداد وجه منشور جایگزین مقطع دایره‌ای میلگرد
 
@@ -97,6 +101,7 @@ class Foundation3D:
             self.bar(bar)
         self._anchorage()
         self._steel()
+        self._equipment()
         self._view()
         return self
 
@@ -157,11 +162,37 @@ class Foundation3D:
                     mesh.faces.append(f[::-1] if flip else f)
                 self._solid(mesh, layer)
 
+    def _equipment(self):
+        """تجهیز روی سازه: استوانه‌ها و منشورهای structural/equipment3d."""
+        from ezdxf.math import Vec3
+        from ezdxf.render import MeshBuilder
+        for pr in self.fm.equipment:
+            layer = "E-" + pr["g"].upper()
+            if pr["t"] == "cyl":
+                self.rod(pr["p"], pr["q"], 2 * pr["r"], layer, sides=20)
+                continue
+            p, q, e2, e3 = pr["p"], pr["q"], pr["e2"], pr["e3"]
+            poly = pr["profile"][0]
+            a = [tuple(p[k] + u * e2[k] + v * e3[k] for k in range(3)) for u, v in poly]
+            b = [tuple(q[k] + u * e2[k] + v * e3[k] for k in range(3)) for u, v in poly]
+            e1 = [q[k] - p[k] for k in range(3)]
+            n3 = [e2[1] * e3[2] - e2[2] * e3[1], e2[2] * e3[0] - e2[0] * e3[2], e2[0] * e3[1] - e2[1] * e3[0]]
+            flip = sum(x * y for x, y in zip(e1, n3)) < 0
+            mesh = MeshBuilder()
+            mesh.vertices = [Vec3(v) for v in a + b]
+            bottom, top = [3, 2, 1, 0], [4, 5, 6, 7]
+            if flip:
+                bottom, top = bottom[::-1], top[::-1]
+            mesh.faces = [bottom, top] + [
+                ([i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i])[::-1 if flip else 1] for i in range(4)]
+            self._solid(mesh, layer)
+
     def _view(self):
         """نمای ایزومتریک با سایه‌زنی، تا فایل از همان اول سه‌بعدی باز شود."""
         fm = self.fm
         vp = self.doc.viewports.get("*Active")[0]
-        ztop = max([fm.top] + [max(m.p[2], m.q[2]) for m in fm.steel])
+        ztop = max([fm.top] + [max(m.p[2], m.q[2]) for m in fm.steel]
+                   + [max(e["p"][2], e["q"][2]) for e in fm.equipment])
         vp.dxf.target = (0, 0, ztop / 2)
         vp.dxf.direction = (1, -1.2, 0.9)
         vp.dxf.center = (0, 0)

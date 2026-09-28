@@ -189,6 +189,12 @@
 {% if r.structures %}
 <section>
   <h2>سازه فولادی نگهدارنده — AISC-ASD89</h2>
+  <p class="note">روش: هندسه سازه از داده تجهیز تولید و با همان پنج حالت بار فونداسیون بارگذاری شده است.
+    تحلیل به روش سختی مستقیم قاب فضایی (المان تیر تیموشنکو، آزادسازی انتها با تراکم استاتیکی، نیروهای گیرداری
+    دقیق بار گسترده) و کنترل اعضا طبق AISC-ASD89 انجام شده و سبک‌ترین مقاطع قابل قبول به‌طور خودکار انتخاب شده‌اند.
+    {% if validation %}صحت‌سنجی حل‌کننده: {{ validation.closed|length }} مسئله با پاسخ بسته
+    {% if validation.equilibrium %}و حل {{ validation.equilibrium|length }} مدل نمونه SAP2000 (خواص مقاطع و تعادل)
+    {% endif %}— {{ 'همه با خطای نسبی کمتر از ۱۰⁻⁶' if validation.ok else 'آزمون ناموفق وجود دارد' }}.{% endif %}</p>
   {% for st in r.structures %}
   <div class="chk">
     <div class="top"><b>{{ st.tag }} — {{ st.legs }} پایه مشبک {{ '%.2f'|format(st.leg_width) }}×{{ '%.2f'|format(st.leg_width) }} m،

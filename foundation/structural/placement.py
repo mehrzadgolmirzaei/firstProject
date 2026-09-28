@@ -56,37 +56,39 @@ def profile(sec, heel_on_axis=False):
     return [_ccw([(x, y + g) for x, y in ch]), _ccw([(x, -y - g) for x, y in ch])]
 
 
-def place(design, pedestals, base_z):
-    """
-    design: StructureDesign ؛ pedestals: [(x, y)] مرکز ستون‌های همین تجهیز (mm)
-    base_z: تراز زیر پای سازه (mm). خروجی: [Placed]
-    """
-    model, spec = design.model, design.spec
+def _frames(design, pedestals, base_z):
+    """تبدیل مختصات سازه (m) به مختصات پی (mm) برای هر نسخه سازه: [(T، R، زاویه)]."""
+    model = design.model
     peds = sorted(pedestals)
-    if design.stands > 1:
-        targets = [[p] for p in peds]
-    else:
-        targets = [peds]
+    targets = [[p] for p in peds] if design.stands > 1 else [peds]
     lc = [(c * 1000, 0.0) for c in model.leg_centres]
     out = []
     for tgt in targets:
         if len(tgt) != len(lc):
             continue
-        if len(tgt) > 1:
-            a_p = math.atan2(tgt[-1][1] - tgt[0][1], tgt[-1][0] - tgt[0][0])
-        else:
-            a_p = 0.0
+        a_p = math.atan2(tgt[-1][1] - tgt[0][1], tgt[-1][0] - tgt[0][0]) if len(tgt) > 1 else 0.0
         c, s = math.cos(a_p), math.sin(a_p)
         tx = sum(x for x, _ in tgt) / len(tgt)
         ty = sum(y for _, y in tgt) / len(tgt)
 
-        def T(pt):
+        def T(pt, c=c, s=s, tx=tx, ty=ty):
             x, y, z = pt[0] * 1000, pt[1] * 1000, pt[2] * 1000
             return (tx + c * x - s * y, ty + s * x + c * y, base_z + z)
 
-        def R(v):
+        def R(v, c=c, s=s):
             return (c * v[0] - s * v[1], s * v[0] + c * v[1], v[2])
+        out.append((T, R, a_p))
+    return out
 
+
+def place(design, pedestals, base_z):
+    """
+    design: StructureDesign ؛ pedestals: [(x, y)] مرکز ستون‌های همین تجهیز (mm)
+    base_z: تراز زیر پای سازه (mm). خروجی: [Placed]
+    """
+    model = design.model
+    out = []
+    for T, R, _ in _frames(design, pedestals, base_z):
         for m in model.members:
             a, b = model.nodes[m.i], model.nodes[m.j]
             ax, _ = local_axes(a, b, m.angle)
@@ -101,6 +103,18 @@ def place(design, pedestals, base_z):
             ratio = design.checks[m.name].governing
             out.append(Placed(T(a), T(b), R(e2), R(e3), prof, m.group, m.section.name,
                               ratio, m.name))
+    return out
+
+
+def phase_bases(design, pedestals, base_z):
+    """پای هر فاز تجهیز روی سازه (mm) و زاویه سازه: [(نقطه، زاویه)]."""
+    model = design.model
+    out = []
+    for T, _, ang in _frames(design, pedestals, base_z):
+        for nodes in model.load_points:
+            pts = [model.nodes[n] for n in nodes]
+            mid = tuple(sum(p[k] for p in pts) / len(pts) for k in range(3))
+            out.append((T(mid), ang))
     return out
 
 
