@@ -507,5 +507,11 @@ def plan_dxf(result, path, angle=None):
         msp.add_text(p["type"], height=150, rotation=math.degrees(ang),
                      dxfattribs={"layer": "TEXT"}).set_placement(
             (X - s * (p["dy"] * 500 + 250), Y + c * (p["dy"] * 500 + 250)))
+    from ezdxf import zoom
+    zoom.extents(msp, factor=1.1)       # اتوکد روی خود نقشه باز شود، نه مبدأ
+    from ezdxf import bbox
+    ext = bbox.extents(msp)
+    if ext.has_data:
+        doc.header["$EXTMIN"], doc.header["$EXTMAX"] = ext.extmin, ext.extmax
     doc.saveas(path)
     return path

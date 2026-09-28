@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}مقایسه با SAP{% endblock %}
+{% block body %}
+<header class="page">
+  <div><h1>مقایسه با SAP2000</h1>
+  <p>اثبات مستقل: مدل SAP خود دفتر با حل‌کننده برنامه حل می‌شود و هر عدد کنار خروجی خود SAP قرار می‌گیرد</p></div>
+</header>
+
+<div class="grid-verify">
+  <form class="sheet" id="vform">
+    <h2>ورودی</h2>
+    <div class="f">
+      <label>۱. مدل SAP (s2k یا $2k)</label>
+      <input id="model" type="file" accept=".s2k,.$2k,.txt" required>
+      <small class="hint">همان مدلی که در SAP طراحی کرده‌اید؛ یا فایل «مدل SAP سازه» که این برنامه
+        ساخته است. در SAP: File ← Export ← SAP2000 .s2k Text File.</small>
+    </div>
+    <div class="f">
+      <label>۲. خروجی همان مدل از SAP (Excel یا متن) — اختیاری</label>
+      <input id="results" type="file" accept=".xlsx,.xlsm,.s2k,.$2k,.txt">
+      <small class="hint">بدون این فایل، نتایج برنامه به قالب جدول‌های SAP (Excel) داده می‌شود تا
+        دستی مقایسه کنید.</small>
+    </div>
+    <button class="btn wide" id="go" type="submit">تحلیل و مقایسه</button>
+    <p class="note" id="msg"></p>
+
+    <h3>گرفتن خروجی از SAP</h3>
+    <ol class="note steps-list">
+      <li>مدل را در SAP باز کنید؛ واحد پایین صفحه <b dir="ltr">Kgf, m, C</b> باشد.</li>
+      <li>تحلیل: <b dir="ltr">Analyze ← Run Analysis</b> (F5).</li>
+      <li>طراحی: <b dir="ltr">Design ← Steel Frame Design ← Start Design/Check</b>.</li>
+      <li><b dir="ltr">Display ← Show Tables</b> (Ctrl+T) و انتخاب:
+        <span dir="ltr">Analysis Results ← Joint Output ← Reactions</span> و
+        <span dir="ltr">Displacements</span>، و
+        <span dir="ltr">Design Data ← Steel Design ← Summary Data</span>؛ در
+        <span dir="ltr">Select Load Cases</span> همه حالت‌ها و ترکیب‌ها.</li>
+      <li>در پنجره جدول‌ها: <b dir="ltr">File ← Export All Tables ← To Excel</b> و ذخیره فایل.</li>
+      <li>مدل و فایل Excel را این‌جا بدهید.</li>
+    </ol>
+  </form>
+
+  <div>
+    <div class="sheet" id="out" style="display:none"></div>
+  </div>
+</div>
+
+<script>
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f = (v, d=3) => v === null || v === undefined ? "—" : Number(v).toFixed(d);
+const pct = v => (v * 100).toFixed(v < 0.001 ? 4 : 2) + "٪";
+
+$("vform").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  if (!$("model").files[0]) return;
+  $("go").disabled = true; $("msg").textContent = "در حال تحلیل…";
+  const fd = new FormData();
+  fd.append("model", $("model").files[0]);
+  if ($("results").files[0]) fd.append("results", $("results").files[0]);
+  let d;
+  try {
+    const r = await fetch("/api/verify", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
+    try { d = await r.json(); } catch (_) { d = {error: "خطای سرور (" + r.status + ")"}; }
+  } catch (err) { d = {error: "ارتباط با سرور برقرار نشد: " + err}; }
+  $("go").disabled = false;
+  if (d.error) { $("msg").textContent = d.error; return; }
+  $("msg").textContent = "";
+  render(d);
+});
+
+function jointTable(title, rows, cols, worst){
+  if (!rows) return "";
+  const body = rows.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.joint)}</td><td>${esc(r.case)}</td>` +
+    cols.map(c => `<td class="num">${f(r.sap[c], 4)}</td><td class="num">${f(r.program[c], 4)}</td>`).join("") +
+    `<td class="num">${pct(r.error)}</td></tr>`).join("");
+  return `<h3>${title} — بیشترین اختلاف ${pct(worst)}</h3>
+    <div class="tscroll"><table class="compare"><thead><tr><th>گره</th><th>حالت</th>` +
+    cols.map(c => `<th>${c} SAP</th><th>${c} برنامه</th>`).join("") + `<th>اختلاف</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    <p class="note">${rows.length} ردیف با بیشترین اختلاف نمایش داده شده؛ اختلاف نسبت به بزرگ‌ترین مقدار همان حالت بار.</p>`;
+}
+
+function render(d){
+  let h = `<h2>مدل ${esc(d.model)}</h2>
+    <div class="kv"><span>گره / عضو</span><span>${d.joints} / ${d.members}</span></div>
+    <div class="kv"><span>حالت بار / ترکیب</span><span>${d.cases} / ${d.combos}</span></div>
+    <div class="kv"><span>ترکیب‌های طراحی</span><span dir="ltr">${esc(d.design_combos.join(", "))}</span></div>`;
+  if (d.compared) {
+    h += `<div class="verdict ${d.ok ? "ok" : "ng"}" style="margin:10px 0">${d.ok
+      ? `هر ${d.compared} مقدار مقایسه‌شده با SAP برابر است`
+      : `در بخشی از ${d.compared} مقدار مقایسه‌شده اختلاف وجود دارد — ردیف‌های قرمز`}</div>`;
+  } else {
+    h += `<p class="note">خروجی SAP داده نشده یا جدول‌های لازم در آن نبود
+      (${esc((d.found || []).join("، ") || "هیچ‌کدام")}). نتایج برنامه در فایل Excel زیر، به همان قالب SAP است.</p>`;
+  }
+  h += `<a class="btn" href="${d.excel}">نتایج برنامه به قالب جدول‌های SAP (Excel)</a>`;
+  h += jointTable("عکس‌العمل تکیه‌گاه‌ها (Kgf، Kgf·m)", d.reactions, ["F1","F2","F3","M1","M2","M3"], d.reactions_err);
+  h += jointTable("تغییرمکان گره‌ها (m، رادیان)", d.displacements, ["U1","U2","U3"], d.displacements_err);
+  if (d.steel) {
+    h += `<h3>نسبت تنش اعضا (AISC-ASD89) — بیشترین اختلاف ${f(d.steel_err)}</h3>
+      <div class="tscroll"><table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>SAP</th><th>ترکیب SAP</th>
+      <th>برنامه</th><th>ترکیب برنامه</th><th>اختلاف</th></tr></thead><tbody>` +
+      d.steel.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.frame)}</td><td>${esc(r.section)}</td>
+        <td class="num">${f(r.sap)}</td><td>${esc(r.sap_combo)}</td><td class="num">${f(r.program)}</td>
+        <td>${esc(r.program_combo)}</td><td class="num">${f(r.diff)}</td></tr>`).join("") +
+      `</tbody></table></div>`;
+  } else {
+    h += `<h3>نسبت تنش اعضا در برنامه (${d.program_counts.steel} عضو، بیشترین‌ها)</h3>
+      <div class="tscroll"><table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>نسبت</th><th>ترکیب</th><th>رابطه</th></tr></thead><tbody>` +
+      d.program_steel.map(r => `<tr><td>${esc(r.Frame)}</td><td>${esc(r.DesignSect)}</td><td class="num">${f(r.Ratio)}</td>
+        <td>${esc(r.Combo)}</td><td>${esc(r.Equation)}</td></tr>`).join("") + `</tbody></table></div>`;
+  }
+  $("out").innerHTML = h; $("out").style.display = "block";
+}
+</script>
+{% endblock %}

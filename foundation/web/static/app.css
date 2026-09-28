@@ -293,3 +293,10 @@ b.ng{color:var(--fail)}
 .kp-msg.ng{border-color:var(--fail);background:#F7EAE9}
 .btn.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--rule-soft);margin-inline-start:6px}
 .btn.ghost:hover{background:#EEE9E1}
+
+/* مقایسه با SAP */
+.grid-verify{display:grid;grid-template-columns:minmax(280px,380px) 1fr;gap:16px;align-items:start}
+@media (max-width:900px){.grid-verify{grid-template-columns:1fr}}
+.tscroll{overflow-x:auto;max-height:460px;overflow-y:auto}
+table.compare tr.bad td{background:#F7EAE9;color:var(--fail)}
+.steps-list{padding-inline-start:18px;line-height:1.9}

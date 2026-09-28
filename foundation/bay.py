@@ -382,5 +382,11 @@ def plan_dxf(result, path, title="BAY FOUNDATION PLAN"):
         d.render()
     msp.add_text(title, height=250, dxfattribs={"layer": "TEXT"}).set_placement(
         (result["stations"][0].pos * k, -top - 700))
+    from ezdxf import zoom
+    zoom.extents(msp, factor=1.1)       # اتوکد روی خود نقشه باز شود، نه مبدأ
+    from ezdxf import bbox
+    ext = bbox.extents(msp)
+    if ext.has_data:
+        doc.header["$EXTMIN"], doc.header["$EXTMAX"] = ext.extmin, ext.extmax
     doc.saveas(path)
     return path

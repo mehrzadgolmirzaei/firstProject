@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.10.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.11.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -683,6 +683,61 @@ def method_page():
     from structural import validation
     from structural.loads import COMBO_TITLES
     return render_template("method.html", v=validation.run(), combos=COMBO_TITLES)
+
+
+# ================================================================= مقایسه با SAP
+@app.route("/verify")
+@auth.login_required
+def verify_page():
+    return render_template("verify.html")
+
+
+@app.post("/api/verify")
+@auth.requires("engineer")
+def api_verify():
+    """
+    مدل SAP خود دفتر با حل‌کننده برنامه تحلیل و طراحی می‌شود؛ اگر خروجی SAP همان مدل هم
+    داده شود، هر عکس‌العمل، تغییرمکان و نسبت تنش کنار عدد SAP قرار می‌گیرد.
+    """
+    import shutil
+    from structural import sapcheck
+    fm, fr = request.files.get("model"), request.files.get("results")
+    if not fm or not fm.filename.lower().endswith((".s2k", ".$2k", ".txt")):
+        return jsonify({"error": "مدل SAP را با قالب متنی بدهید: در SAP از File ← Export ← "
+                                 "SAP2000 .s2k Text File (یا Save As با پسوند $2k)."}), 400
+    if fr and fr.filename and not fr.filename.lower().endswith((".xlsx", ".xlsm", ".s2k", ".$2k", ".txt")):
+        return jsonify({"error": "خروجی SAP باید Excel (xlsx) یا متن (s2k/txt) باشد."}), 400
+    folder = OUT / f"verify_{secrets.token_hex(8)}"
+    folder.mkdir()
+    try:
+        mp = folder / ("model" + Path(fm.filename).suffix.lower())
+        fm.save(mp)
+        rp = None
+        if fr and fr.filename:
+            rp = folder / ("results" + Path(fr.filename).suffix.lower())
+            fr.save(rp)
+        report = sapcheck.compare(str(mp), str(rp) if rp else None)
+        report["model"] = Path(fm.filename).stem
+        name = f"program_results_{Path(fm.filename).stem}_{secrets.token_hex(3)}.xlsx"
+        sapcheck.write_excel(report["program"], str(OUT / name), Path(fm.filename).stem)
+    except (KeyError, ValueError) as exc:
+        return jsonify({"error": f"فایل خوانده نشد: {exc}"}), 400
+    except Exception as exc:
+        app.logger.exception("verify")
+        return jsonify({"error": f"فایل خوانده نشد ({type(exc).__name__}: {exc})"}), 500
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    auth.record("مقایسه با SAP", "verify", None, {"model": fm.filename,
+                                                  "results": fr.filename if fr else None,
+                                                  "ok": report["ok"]})
+    prog = report.pop("program")
+    report["program_counts"] = {k: len(v) for k, v in prog.items()}
+    report["program_steel"] = sorted(prog["steel"], key=lambda r: -r["Ratio"])[:40]
+    for k in ("reactions", "displacements"):
+        if k in report:
+            report[k] = sorted(report[k], key=lambda r: -r["error"])[:60]
+    report["excel"] = url_for("download", name=name)
+    return jsonify(report)
 
 
 # ================================================================= آیین‌نامه
