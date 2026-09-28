@@ -93,3 +93,12 @@ def test_structure_under_load_data():
     for s in d["steel"]:
         if s["group"] == "chord" and abs(s["p"][2] - base) < 1:
             assert max(abs(v) for v in s["d"]["C2"][:3]) < 1e-6
+
+
+def test_failure_modes_for_overstressed_members():
+    """عضو بیش از ۰٫۹ در هر ترکیب حالت حاکمش را دارد (کمانش، خمش، کشش، برش، لاغری)."""
+    fm = _fm("LA+CVT-3-2.5")
+    d = model.to_dict(fm)
+    for s in d["steel"]:
+        for c, mode in s["f"].items():
+            assert s["r"][c] > 0.9 and mode in {"buckle", "bend", "tension", "shear", "slender"}

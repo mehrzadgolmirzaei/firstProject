@@ -287,7 +287,9 @@ def to_dict(fm: FoundationModel) -> dict:
                    "group": m.group, "section": m.section, "ratio": round(m.ratio, 3),
                    "member": m.member,
                    "d": {c: [round(v, 2) for v in dv] for c, dv in (m.disp or {}).items()},
-                   "r": {c: round(v, 3) for c, v in (m.ratios or {}).items()}} for m in steel]
+                   "r": {c: round(v, 3) for c, v in (m.ratios or {}).items()},
+                   "f": {c: v for c, v in (m.modes or {}).items()
+                         if (m.ratios or {}).get(c, 0) > 0.9}} for m in steel]
     from structural.loads import COMBO_TITLES
     combos = list(dict.fromkeys(c for m in steel for c in (m.disp or {})))
     d["load_cases"] = [{"id": c, "title": COMBO_TITLES.get(c, c)} for c in combos]

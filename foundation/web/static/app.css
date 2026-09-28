@@ -334,3 +334,5 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .suggest{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid #D9C9A8;background:#FBF6EC;padding:10px 12px;margin:8px 0}
 .suggest .t{font-weight:700}
 .suggest .btn{white-space:nowrap}
+.viewer .load-info .fails{margin-top:4px;border-top:1px solid #4A5561;padding-top:4px}
+.viewer .load-info .fail{color:#F5A89E}

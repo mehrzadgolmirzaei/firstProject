@@ -24,6 +24,7 @@ class Placed:
     member: str
     disp: dict = None          # ترکیب ← (dx, dy, dz سر i، dx, dy, dz سر j) mm در مختصات پی
     ratios: dict = None        # ترکیب ← نسبت تنش همین عضو در همان ترکیب
+    modes: dict = None         # ترکیب ← حالت حاکم (buckle، bend، tension، shear، slender)
 
 
 def _centroid(poly):
@@ -92,6 +93,7 @@ def place(design, pedestals, base_z):
     res = design.results
     combos = getattr(model, "design_combos", None) or list(model.combos)
     cr = design.combo_ratios() if hasattr(design, "combo_ratios") else {}
+    cm = design.combo_modes() if hasattr(design, "combo_modes") else {}
     out = []
     for T, R, _ in _frames(design, pedestals, base_z):
         def D(c, n, R=R):
@@ -112,7 +114,8 @@ def place(design, pedestals, base_z):
             out.append(Placed(T(a), T(b), R(e2), R(e3), prof, m.group, m.section.name,
                               ratio, m.name,
                               {c: D(c, m.i) + D(c, m.j) for c in combos},
-                              {c: cr[c][m.name] for c in combos if c in cr}))
+                              {c: cr[c][m.name] for c in combos if c in cr},
+                              {c: cm[c][m.name] for c in combos if c in cm}))
     return out
 
 

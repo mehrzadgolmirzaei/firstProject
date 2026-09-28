@@ -372,7 +372,32 @@
       dv[v * 3] = d[o] * k * scale; dv[v * 3 + 1] = d[o + 2] * k * scale; dv[v * 3 + 2] = -d[o + 1] * k * scale;
     }
     this.loadDv = dv;
-    this.loadInfo = {maxDisp: maxD, maxRatio: maxR, scale: scale};
+    // اعضای ردشده در این ترکیب: شکل نمادین حالت خرابی (کمانش ← خمیدگی جانبی، خمش ← افتادگی)
+    const fails = {}, fg = new THREE.Group();
+    fg.userData.steel = true;
+    const P3 = (v) => new THREE.Vector3(v[0] * k, v[2] * k, -v[1] * k);
+    data.forEach((mb) => {
+      const r = mb.r && mb.r[c];
+      if (!(r > 1)) return;
+      const mode = (mb.f && mb.f[c]) || "bend";
+      const key = mb.group + "|" + mb.section + "|" + mode;
+      if (!fails[key] || fails[key].ratio < r) fails[key] = {group: mb.group, section: mb.section, mode: mode, ratio: r};
+      const d = (mb.d && mb.d[c]) || [0, 0, 0, 0, 0, 0];
+      const a = [0, 1, 2].map((i) => mb.p[i] + d[i] * scale), b = [0, 1, 2].map((i) => mb.q[i] + d[3 + i] * scale);
+      const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const dir = mode === "bend" ? mb.e2.map((v) => -v) : (mode === "buckle" || mode === "slender" ? mb.e3 : [0, 0, 0]);
+      const amp = (mode === "tension" || mode === "shear") ? 0 : (mode === "bend" ? 0.07 : 0.14) * L;
+      const mid = [0, 1, 2].map((i) => (a[i] + b[i]) / 2 + dir[i] * amp * 2);   // نقطه کنترل بزیه: بیشینه = amp
+      const curve = new THREE.QuadraticBezierCurve3(P3(a), P3(mid), P3(b));
+      const rad = Math.max(0.012, 0.9 * k * Math.max(...mb.profile.flat(2).map(Math.abs)));
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, rad, 8, false),
+        new THREE.MeshBasicMaterial({color: 0xFF3B30, transparent: true, opacity: 0.0, depthWrite: false}));
+      fg.add(tube);
+    });
+    this.failGroup = fg.children.length ? fg : null;
+    if (this.failGroup) this.group.add(fg);
+    this.loadInfo = {maxDisp: maxD, maxRatio: maxR, scale: scale,
+                     fails: Object.values(fails).sort((x, y) => y.ratio - x.ratio)};
   };
 
   Viewer.prototype._animateLoad = function () {
@@ -384,6 +409,11 @@
     const arr = mesh.geometry.attributes.position.array;
     for (let i = 0; i < arr.length; i++) arr[i] = base[i] + s * dv[i];
     mesh.geometry.attributes.position.needsUpdate = true;
+    // عضو ردشده با رسیدن بار به مقدار کامل پدیدار و چشمک‌زن می‌شود
+    if (this.failGroup) {
+      const op = Math.max(0, (s - 0.55) / 0.45) * (0.55 + 0.45 * Math.sin(this.loadT * 6));
+      this.failGroup.children.forEach((t) => { t.material.opacity = op; });
+    }
   };
 
   /** نمایش سازه با رنگ نسبت تنش هر عضو، یا رنگ واقعی فولاد */

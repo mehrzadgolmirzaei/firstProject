@@ -931,9 +931,14 @@ function showLoad(id){
   $("legend").classList.toggle("heat", !!id);
   if (!id || !info) { $("loadInfo").innerHTML = ""; return; }
   const ok = info.maxRatio <= 1 + 1e-9;
+  const MODE = {buckle: "کمانش فشاری", bend: "تسلیم خمشی", tension: "تسلیم کششی",
+                shear: "برش", slender: "لاغری بیش از حد مجاز"};
+  const fails = (info.fails || []).slice(0, 3).map(f =>
+    `<div class="fail">⚠ ${GROUP_FA[f.group] || f.group} <b>${f.section}</b>: ${MODE[f.mode] || f.mode} — نسبت ${fmt(f.ratio, 2)}</div>`).join("");
   $("loadInfo").innerHTML = `<b class="${ok ? "yes" : "no"}">${ok ? "✓ جواب می‌دهد" : "✗ جواب نمی‌دهد"}</b>
     نسبت تنش بیشینه <b>${fmt(info.maxRatio, 2)}</b> · تغییرمکان بیشینه <b>${fmt(info.maxDisp, 1)} mm</b>
-    <small>(شکل ×${Math.round(info.scale)} بزرگ‌نمایی شده)</small>`;
+    <small>(شکل ×${Math.round(info.scale)} بزرگ‌نمایی شده)</small>` +
+    (fails ? `<div class="fails">${fails}<small>عضو قرمز چشمک‌زن: اولین عضوی که در این ترکیب از حد مجاز می‌گذرد، با شکل نمادین حالت خرابی‌اش</small></div>` : "");
 }
 $("loadSel").addEventListener("change", e => showLoad(e.target.value));
 

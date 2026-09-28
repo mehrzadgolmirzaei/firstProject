@@ -20,6 +20,20 @@ GROUP_TITLES = {"chord": "نبشی اصلی پایه", "brace": "مهاربند"
                 "beam": "تیر سر سازه"}
 
 
+def failure_mode(ck):
+    """حالت حاکم یک کنترل: کدام اثر نسبت تنش را ساخته است."""
+    g = ck.governing
+    if ck.klr and abs(g - ck.klr / ck.klr_limit) < 1e-12 and g > ck.ratio:
+        return "slender"
+    if abs(g - ck.shear_ratio) < 1e-12 and g > ck.ratio:
+        return "shear"
+    axial = ck.fa / ck.Fa if ck.Fa else 0.0
+    bend = (ck.fb33 / ck.Fb33 if ck.Fb33 else 0.0) + (ck.fb22 / ck.Fb22 if ck.Fb22 else 0.0)
+    if ck.P < 0:
+        return "buckle" if axial >= bend else "bend"
+    return "tension" if axial >= bend else "bend"
+
+
 @dataclass
 class StructureDesign:
     spec: LatticeSpec
@@ -53,7 +67,7 @@ class StructureDesign:
             m, res = self.model, self.results
             combos = getattr(m, "design_combos", None) or list(m.combos)
             fy = getattr(self, "fy", None)
-            out = {c: {} for c in combos}
+            out, modes = {c: {} for c in combos}, {}
             for mb in m.members:
                 L = _m.dist(m.nodes[mb.i], m.nodes[mb.j])
                 f = fy or getattr(mb.section, "fy", None) or 2.4e7
@@ -62,8 +76,15 @@ class StructureDesign:
                                             m.E, mb.k_major, mb.k_minor,
                                             getattr(mb, "l_major", 1.0), getattr(mb, "l_minor", 1.0))
                     out[c][mb.name] = ck.governing
-            self._combo_ratios = out
+                    modes.setdefault(c, {})[mb.name] = failure_mode(ck)
+            self._combo_ratios, self._combo_modes = out, modes
         return self._combo_ratios
+
+    def combo_modes(self):
+        """{ترکیب: {عضو: حالت حاکم}} — «buckle» کمانش فشاری، «bend» خمش، «tension» کشش،
+        «shear» برش، «slender» لاغری."""
+        self.combo_ratios()
+        return self._combo_modes
 
     def chord_extremes(self):
         """
