@@ -96,6 +96,14 @@ def design_structures(layout, cfg, wind, seis):
                      if st.mode == "check" else None)
             d = _STRUCTURE_CACHE[key] = design_structure(eq, st, wind, seis.ch, seis.cv,
                                                          sections=given)
+            if given is not None:
+                # پیشنهاد سیستم: سبک‌ترین سازه‌ای که همه کنترل‌ها را پاس می‌کند (همان هندسه)
+                auto_key = key + ("auto",)
+                auto = _STRUCTURE_CACHE.get(auto_key)
+                if auto is None:
+                    auto = _STRUCTURE_CACHE[auto_key] = design_structure(eq, st, wind, seis.ch,
+                                                                         seis.cv)
+                d.suggestion = auto
         designs.append((gi, d))
         if st.feed_foundation:
             eq = copy.copy(eq)

@@ -325,3 +325,12 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .full-tot span{font-size:12px;color:var(--ink-2)}
 .full-site td div{white-space:nowrap;font-size:12px}
 .full-site b.yes{color:var(--pass)} .full-site b.no{color:var(--fail)}
+.viewer .load-bar{position:absolute;inset-block-start:10px;inset-inline-end:12px;z-index:2;max-width:62%;text-align:end}
+.viewer .load-bar select{font-size:12px;padding:4px 8px;background:#2A333D;color:#E8E4DA;border:1px solid #4A5561;border-radius:2px}
+.viewer .load-info{margin-top:6px;font-size:12px;color:#D8DEE4;background:rgba(20,26,32,.78);padding:6px 9px;line-height:1.7;border-radius:2px}
+.viewer .load-info:empty{display:none}
+.viewer .load-info b.yes{color:#7CCB94} .viewer .load-info b.no{color:#F08A7E}
+.viewer .load-info small{color:#9AA6B2}
+.suggest{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid #D9C9A8;background:#FBF6EC;padding:10px 12px;margin:8px 0}
+.suggest .t{font-weight:700}
+.suggest .btn{white-space:nowrap}

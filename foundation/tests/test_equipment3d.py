@@ -75,3 +75,21 @@ def test_stand_one_phase_per_pedestal():
     prims = for_stand(eq, [(-1000, 0), (0, 0), (1000, 0)], 0.0)
     cols = [p for p in prims if p["t"] == "box" and p["g"] == "metal" and p["p"][2] == 0.0]
     assert len(cols) == 3
+
+
+def test_structure_under_load_data():
+    """داده «زیر بار» نمای سه‌بعدی: تغییرمکان دو سر و نسبت تنش هر عضو در هر ترکیب."""
+    fm = _fm("LA-2.5-1.5")
+    d = model.to_dict(fm)
+    ids = [c["id"] for c in d["load_cases"]]
+    assert {"C1", "C2", "C4+", "C6"} <= set(ids)
+    m = d["steel"][0]
+    assert set(m["d"]) == set(ids) and len(m["d"]["C2"]) == 6
+    # بیشترین نسبت تنش در میان ترکیب‌ها همان نسبت حاکم عضو است
+    for s in d["steel"]:
+        assert max(s["r"].values()) == pytest.approx(s["ratio"], abs=2e-3)
+    # پای سازه روی تکیه‌گاه ثابت است: سر پایینی نبشی‌های پایه تغییرمکان ندارد
+    base = min(min(s["p"][2], s["q"][2]) for s in d["steel"])
+    for s in d["steel"]:
+        if s["group"] == "chord" and abs(s["p"][2] - base) < 1:
+            assert max(abs(v) for v in s["d"]["C2"][:3]) < 1e-6

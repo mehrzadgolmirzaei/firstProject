@@ -77,24 +77,28 @@
   }
 
   /** اعضای سازه با مقطع واقعی — یک هندسه با رنگ هر رأس (گروه یا نسبت تنش) */
-  function steelMesh(members, k, heat) {
-    const pos = [], col = [];
+  function steelMesh(members, k, heat, combo) {
+    const pos = [], col = [], ends = [];
     const P3 = (v) => [v[0] * k, v[2] * k, -v[1] * k];
     const at = (o, e2, e3, u, w) => [o[0] + u * e2[0] + w * e3[0],
       o[1] + u * e2[1] + w * e3[1], o[2] + u * e2[2] + w * e3[2]];
-    members.forEach((mb) => {
-      const c = heat ? ratioColor(mb.ratio) : new THREE.Color(C[mb.group] || C.brace);
-      const push = (...pts) => pts.forEach((p) => { pos.push(...p); col.push(c.r, c.g, c.b); });
+    members.forEach((mb, mi) => {
+      const r = combo && mb.r && mb.r[combo] !== undefined ? mb.r[combo] : mb.ratio;
+      const c = heat || combo ? ratioColor(r) : new THREE.Color(C[mb.group] || C.brace);
+      // هر رأس: سر i (۰) یا سر j (۱) عضو mi — برای تغییرشکل زیر بار
+      const push = (e, ...pts) => pts.forEach((p) => {
+        pos.push(...p); col.push(c.r, c.g, c.b); ends.push(mi * 2 + e);
+      });
       mb.profile.forEach((poly) => {
         const a = poly.map(([u, w]) => P3(at(mb.p, mb.e2, mb.e3, u, w)));
         const b = poly.map(([u, w]) => P3(at(mb.q, mb.e2, mb.e3, u, w)));
         const n = poly.length;
         for (let i = 0; i < n; i++) {
           const j = (i + 1) % n;
-          push(a[i], a[j], b[j], a[i], b[j], b[i]);
+          push(0, a[i], a[j]); push(1, b[j]); push(0, a[i]); push(1, b[j], b[i]);
         }
         THREE.ShapeUtils.triangulateShape(poly.map(([u, w]) => new THREE.Vector2(u, w)), [])
-          .forEach(([i, j, l]) => { push(a[i], a[j], a[l]); push(b[i], b[l], b[j]); });
+          .forEach(([i, j, l]) => { push(0, a[i], a[j], a[l]); push(1, b[i], b[l], b[j]); });
       });
     });
     const g = new THREE.BufferGeometry();
@@ -106,6 +110,8 @@
     mat.userData.opacity = 1;
     const mesh = new THREE.Mesh(g, mat);
     mesh.userData.steel = true;
+    mesh.userData.base = Float32Array.from(pos);
+    mesh.userData.ends = Int32Array.from(ends);
     return mesh;
   }
 
@@ -193,6 +199,7 @@
         }
       });
     }
+    if (this.loadCombo) this._animateLoad();
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -296,6 +303,8 @@
 
     // سازه فولادی طراحی‌شده در برنامه
     this.steelData = m.steel || [];
+    this.loadCases = m.load_cases || [];
+    this.loadCombo = null;
     this.equipmentData = m.equipment || [];
     this.k = k;
     this._steel();
@@ -313,14 +322,68 @@
 
   Viewer.prototype._steel = function () {
     this.group.children.filter((o) => o.userData.steel).forEach((o) => {
-      this.group.remove(o); o.geometry.dispose(); o.material.dispose();
+      this.group.remove(o);
+      o.traverse((c) => { if (c.geometry) c.geometry.dispose(); if (c.material) c.material.dispose(); });
     });
+    this.steelMeshObj = null;
     if (this.steelData && this.steelData.length) {
-      this.group.add(steelMesh(this.steelData, this.k, !!this.heat));
+      this.steelMeshObj = steelMesh(this.steelData, this.k, !!this.heat, this.loadCombo);
+      this.group.add(this.steelMeshObj);
     }
-    if (this.equipmentData && this.equipmentData.length) {
+    // زیر بار فقط قاب نمایش داده می‌شود (مثل SAP)؛ تجهیز پنهان
+    if (this.equipmentData && this.equipmentData.length && !this.loadCombo) {
       this.group.add(equipmentGroup(this.equipmentData, this.k));
     }
+    this._prepareLoad();
+  };
+
+  /**
+   * سازه زیر بار یک ترکیب: شکل تغییرشکل‌یافته (بزرگ‌نمایی خودکار، نوسان آرام مثل انیمیشن SAP)
+   * و رنگ هر عضو بر اساس نسبت تنش همان ترکیب. combo = null ← حالت عادی.
+   * خروجی: خلاصه همان ترکیب {maxDisp (mm)، maxRatio، scale}
+   */
+  Viewer.prototype.setLoad = function (combo) {
+    this.loadCombo = combo || null;
+    this.loadT = 0;
+    if (this.ready) this._steel();
+    return this.loadInfo || null;
+  };
+
+  Viewer.prototype._prepareLoad = function () {
+    const mesh = this.steelMeshObj, c = this.loadCombo;
+    this.loadInfo = null; this.loadDv = null;
+    if (!mesh || !c) return;
+    const k = this.k, data = this.steelData;
+    let maxD = 0, maxR = 0, top = 0;
+    data.forEach((mb) => {
+      const d = mb.d && mb.d[c];
+      if (d) maxD = Math.max(maxD, Math.hypot(d[0], d[1], d[2]), Math.hypot(d[3], d[4], d[5]));
+      if (mb.r && mb.r[c] !== undefined) maxR = Math.max(maxR, mb.r[c]);
+      top = Math.max(top, mb.p[2], mb.q[2]);
+    });
+    // بزرگ‌نمایی: بیشترین تغییرمکان به اندازه ۸٪ ارتفاع سازه دیده شود
+    const scale = maxD > 1e-6 ? 0.08 * top / maxD : 1;
+    const ends = mesh.userData.ends, dv = new Float32Array(ends.length * 3);
+    for (let v = 0; v < ends.length; v++) {
+      const mb = data[ends[v] >> 1], d = mb.d && mb.d[c];
+      if (!d) continue;
+      const o = (ends[v] & 1) * 3;
+      // مختصات مدل (mm، z بالا) ← three.js (m، y بالا)
+      dv[v * 3] = d[o] * k * scale; dv[v * 3 + 1] = d[o + 2] * k * scale; dv[v * 3 + 2] = -d[o + 1] * k * scale;
+    }
+    this.loadDv = dv;
+    this.loadInfo = {maxDisp: maxD, maxRatio: maxR, scale: scale};
+  };
+
+  Viewer.prototype._animateLoad = function () {
+    const mesh = this.steelMeshObj;
+    if (!mesh || !this.loadDv) return;
+    this.loadT = (this.loadT || 0) + 0.03;
+    const s = 0.5 - 0.5 * Math.cos(this.loadT);          // صفر ← کامل ← صفر
+    const base = mesh.userData.base, dv = this.loadDv;
+    const arr = mesh.geometry.attributes.position.array;
+    for (let i = 0; i < arr.length; i++) arr[i] = base[i] + s * dv[i];
+    mesh.geometry.attributes.position.needsUpdate = true;
   };
 
   /** نمایش سازه با رنگ نسبت تنش هر عضو، یا رنگ واقعی فولاد */

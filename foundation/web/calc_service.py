@@ -135,6 +135,17 @@ def layout_problems(layout: PadLayout, b: float, L: float = 0.0, B: float = 0.0)
     return errs
 
 
+def _suggestion(d, st):
+    """پیشنهاد سیستم در حالت کنترل: سبک‌ترین مقاطعی که با همین هندسه جواب می‌دهد."""
+    a = getattr(d, "suggestion", None)
+    if a is None:
+        return None
+    return {"sections": dict(a.sections), "ratio": round(float(a.max_ratio), 3), "ok": bool(a.ok),
+            "weight": round(a.weight * a.stands * st.connection_factor, 1),
+            "same": dict(a.sections) == dict(d.sections),
+            "saving": round((d.weight - a.weight) * d.stands * st.connection_factor, 1)}
+
+
 def structures_dict(res, cfg):
     """سازه‌های فولادی طراحی‌شده برای نمایش و ذخیره."""
     from structural.loads import COMBO_TITLES
@@ -177,6 +188,7 @@ def structures_dict(res, cfg):
                     "fed": st.feed_foundation, "Ws_used": eq.Ws, "As_used": eq.As,
                     "max_ratio": round(d.max_ratio, 3), "ok": d.ok, "k_chord": st.k_chord,
                     "mode": st.mode,
+                    "suggestion": _suggestion(d, st),
                     "fy": st.fy, "iterations": len(d.history), "groups": groups, "legs_reactions": legs,
                     "warnings": d.warnings})
     return out

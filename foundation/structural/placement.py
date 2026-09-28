@@ -22,6 +22,8 @@ class Placed:
     section: str
     ratio: float
     member: str
+    disp: dict = None          # ترکیب ← (dx, dy, dz سر i، dx, dy, dz سر j) mm در مختصات پی
+    ratios: dict = None        # ترکیب ← نسبت تنش همین عضو در همان ترکیب
 
 
 def _centroid(poly):
@@ -87,8 +89,14 @@ def place(design, pedestals, base_z):
     base_z: تراز زیر پای سازه (mm). خروجی: [Placed]
     """
     model = design.model
+    res = design.results
+    combos = getattr(model, "design_combos", None) or list(model.combos)
+    cr = design.combo_ratios() if hasattr(design, "combo_ratios") else {}
     out = []
     for T, R, _ in _frames(design, pedestals, base_z):
+        def D(c, n, R=R):
+            v = res.displacement(c, n)
+            return tuple(x * 1000 for x in R((float(v[0]), float(v[1]), float(v[2]))))
         for m in model.members:
             a, b = model.nodes[m.i], model.nodes[m.j]
             ax, _ = local_axes(a, b, m.angle)
@@ -102,7 +110,9 @@ def place(design, pedestals, base_z):
                 prof = profile(m.section)
             ratio = design.checks[m.name].governing
             out.append(Placed(T(a), T(b), R(e2), R(e3), prof, m.group, m.section.name,
-                              ratio, m.name))
+                              ratio, m.name,
+                              {c: D(c, m.i) + D(c, m.j) for c in combos},
+                              {c: cr[c][m.name] for c in combos if c in cr}))
     return out
 
 

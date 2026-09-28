@@ -163,3 +163,21 @@ def test_check_mode_uses_given_sections_and_reports_failure():
         "L80X8", "L50X5", "L50X5", "UNP160"
     (_, ok), = run_layout(PadLayout([row(ALL_EQUIPMENT["CT63"])]), strong)[0].structures
     assert ok.ok and ok.sections["chord"] == "L80X8"
+
+
+def test_check_mode_suggests_lightest_passing_structure():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parents[1] / "web"))
+    from calc_service import structures_dict
+    from pipeline import run_layout
+    from padlayout import PadLayout, row
+    cfg = kimia_config()
+    cfg.steel.mode = "check"
+    cfg.steel.chord, cfg.steel.brace, cfg.steel.strut, cfg.steel.beam = "L40X4", "L30X3", "L30X3", "UNP80"
+    res = run_layout(PadLayout([row(ALL_EQUIPMENT["CT63"])]), cfg)[0]
+    st, = structures_dict(res, cfg)
+    g = st["suggestion"]
+    assert not st["ok"] and g["ok"] and not g["same"] and g["ratio"] <= 1.0
+    auto = _design("CT63")[0]
+    assert g["sections"] == auto.sections

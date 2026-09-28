@@ -43,6 +43,28 @@ class StructureDesign:
     def ok(self):
         return all(c.ok for c in self.checks.values())
 
+    def combo_ratios(self):
+        """
+        نسبت تنش هر عضو در هر ترکیب طراحی جداگانه — برای نمایش سازه «زیر بار» هر ترکیب.
+        {ترکیب: {عضو: نسبت حاکم}}
+        """
+        if getattr(self, "_combo_ratios", None) is None:
+            import math as _m
+            m, res = self.model, self.results
+            combos = getattr(m, "design_combos", None) or list(m.combos)
+            fy = getattr(self, "fy", None)
+            out = {c: {} for c in combos}
+            for mb in m.members:
+                L = _m.dist(m.nodes[mb.i], m.nodes[mb.j])
+                f = fy or getattr(mb.section, "fy", None) or 2.4e7
+                for c in combos:
+                    ck = asd89.check_member(mb.name, mb.section, L, {c: res.forces[c][mb.name]}, f,
+                                            m.E, mb.k_major, mb.k_minor,
+                                            getattr(mb, "l_major", 1.0), getattr(mb, "l_minor", 1.0))
+                    out[c][mb.name] = ck.governing
+            self._combo_ratios = out
+        return self._combo_ratios
+
     def chord_extremes(self):
         """
         هر پایه: بیشترین فشار و کشش یک نبشی (پای نبشی ← میل مهار)، بیشترین لنگر پایه
@@ -162,6 +184,7 @@ def design_structure(eq, steel_cfg, wind, ch, cv, eq_sc=0.6, sections=None, max_
     d = StructureDesign(spec, model, results, checks, chosen, weight, info["wind_area"],
                         stands, phases, _leg_reactions(model, results, model.combos),
                         history, list(results.warnings))
+    d.fy = fy
     if not d.ok and sections is None:          # فقط در طراحی خودکار؛ در کنترل، رد شدن خودش نتیجه است
         d.warnings.append("با بزرگ‌ترین مقطع کاتالوگ هم همه کنترل‌ها پاس نشد — ابعاد پایه "
                           "(ضلع مربع) یا ارتفاع پانل را تغییر دهید.")

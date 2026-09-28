@@ -318,7 +318,10 @@
           <div class="heat-scale"><span>۰</span><b></b><span>۱٫۲</span><br><small>نسبت تنش اعضا</small></div>
         </div>
         <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
-        <button class="btn quiet heat-btn" type="button" id="heatBtn" style="display:none">رنگ بر اساس نسبت تنش</button>
+        <div class="load-bar" id="loadBar" style="display:none">
+          <select id="loadSel" title="سازه زیر بار یک ترکیب: تغییرشکل و نسبت تنش هر عضو"></select>
+          <div class="load-info" id="loadInfo"></div>
+        </div>
         <div class="readouts" id="readouts"></div>
       </div>
     </div>
@@ -865,6 +868,7 @@ function render(d){
      <div class="kv"><span>وزن آرماتور</span><span>${fmt(q.rebar,1)} kg</span></div>`;
 
   viewer.build(d.model);
+  setupLoad(d.model);
   renderSteel(d.structures || []);
   $("viewTabs").style.display = "flex";
   sheetFor = d.id; sheetLoaded = null;
@@ -910,17 +914,52 @@ $("zIn").addEventListener("click", () => zoomAt(1.5, ...mid()));
 $("zOut").addEventListener("click", () => zoomAt(1 / 1.5, ...mid()));
 $("zFit").addEventListener("click", fit);
 
-let heat = false;
-$("heatBtn").addEventListener("click", () => {
-  heat = !heat;
-  viewer.setHeat(heat);
-  $("heatBtn").textContent = heat ? "رنگ واقعی فولاد" : "رنگ بر اساس نسبت تنش";
-  $("legend").classList.toggle("heat", heat);
-});
+// سازه زیر بار: یک انتخاب — «بدون بار» یا هر ترکیب؛ تغییرشکل متحرک و رنگ نسبت تنش همان ترکیب
+function setupLoad(model){
+  const cases = (model && model.load_cases) || [];
+  const steel = (model && model.steel) || [];
+  $("loadBar").style.display = cases.length && steel.length ? "block" : "none";
+  if (!cases.length) return;
+  const worst = cases.map(c => [c.id, Math.max(...steel.map(m => (m.r || {})[c.id] || 0))])
+    .sort((a, b) => b[1] - a[1])[0][0];
+  $("loadSel").innerHTML = `<option value="">▶ نمایش سازه زیر بار…</option>` +
+    cases.map(c => `<option value="${c.id}">${c.title}${c.id === worst ? " (بحرانی)" : ""}</option>`).join("");
+  $("loadSel").value = ""; showLoad("");
+}
+function showLoad(id){
+  const info = viewer.setLoad(id || null);
+  $("legend").classList.toggle("heat", !!id);
+  if (!id || !info) { $("loadInfo").innerHTML = ""; return; }
+  const ok = info.maxRatio <= 1 + 1e-9;
+  $("loadInfo").innerHTML = `<b class="${ok ? "yes" : "no"}">${ok ? "✓ جواب می‌دهد" : "✗ جواب نمی‌دهد"}</b>
+    نسبت تنش بیشینه <b>${fmt(info.maxRatio, 2)}</b> · تغییرمکان بیشینه <b>${fmt(info.maxDisp, 1)} mm</b>
+    <small>(شکل ×${Math.round(info.scale)} بزرگ‌نمایی شده)</small>`;
+}
+$("loadSel").addEventListener("change", e => showLoad(e.target.value));
+
+// پیشنهاد سیستم در حالت کنترل: سبک‌ترین مقاطعی که با همین هندسه جواب می‌دهد
+const GROUP_FA = {chord: "نبشی اصلی", brace: "مهاربند", strut: "افقی", beam: "تیر سر"};
+function suggestionHtml(st){
+  const g = st.suggestion;
+  if (!g) return "";
+  if (!g.ok) return `<p class="note" style="color:var(--fail)">با بزرگ‌ترین مقاطع کاتالوگ هم جواب نمی‌دهد؛
+    ضلع پایه مشبک یا ارتفاع پانل را تغییر دهید.</p>`;
+  if (g.same) return `<p class="note">مقاطع انتخابی همان سبک‌ترین طرح قابل قبول است.</p>`;
+  if (st.ok && g.saving <= 0) return "";
+  const list = Object.entries(g.sections).map(([k, v]) => `${GROUP_FA[k] || k} <b>${v}</b>`).join("، ");
+  const title = st.ok ? `سبک‌تر هم جواب می‌دهد (${fmt(g.saving, 0)} kg کمتر)` : "پیشنهاد سیستم — سبک‌ترین سازه‌ای که جواب می‌دهد";
+  return `<div class="suggest"><div><span class="t">${title}</span><br>${list}
+    <small> · نسبت تنش ${fmt(g.ratio, 2)} · ${fmt(g.weight, 0)} kg</small></div>
+    <button type="button" class="btn" onclick='applySuggestion(${JSON.stringify(g.sections)})'>اعمال و کنترل دوباره</button></div>`;
+}
+function applySuggestion(sec){
+  Object.entries(sec).forEach(([k, v]) => { if ($("sec_" + k)) $("sec_" + k).value = v; });
+  $("steel_mode").value = "check"; applySteelMode();
+  $("form").requestSubmit();
+}
 
 function renderSteel(list){
   $("steelBox").style.display = list.length ? "block" : "none";
-  $("heatBtn").style.display = list.length ? "inline-block" : "none";
   $("steelOut").innerHTML = list.map(st => {
     const head = `<div class="readout" style="margin-bottom:6px"><span class="big">${st.tag}</span>
       <span class="unit">${st.stands > 1 ? st.stands + " سازه تک‌پایه" : st.legs + " پایه"} · ${st.phases} فاز ·
@@ -931,7 +970,7 @@ function renderSteel(list){
         return `<div class="vverdict ${st.ok ? "ok" : "ng"}">${st.ok
           ? "سازه تعریف‌شده با مقاطع انتخابی <b>جواب می‌دهد</b> — همه اعضا زیر نسبت تنش ۱"
           : "سازه تعریف‌شده <b>جواب نمی‌دهد</b>: " + bad.map(g => `${g.title} (${g.section}) نسبت ${fmt(g.ratio, 2)}`).join("، ") +
-            " — مقطع این گروه را بزرگ‌تر کنید یا طراحی خودکار را ببینید"}</div>`; })() : "");
+            ""}</div>` + suggestionHtml(st); })() : "");
     const rows = st.groups.map(g => `<tr><td>${g.title}</td><td class="num">${g.section}</td>
       <td class="num">${g.count}</td><td class="num">${fmt(g.length, 1)}</td>
       <td class="num"><b class="${g.ratio <= 1 ? "" : "ng"}">${fmt(g.ratio, 3)}</b></td>

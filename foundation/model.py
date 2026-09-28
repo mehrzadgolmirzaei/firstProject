@@ -285,5 +285,10 @@ def to_dict(fm: FoundationModel) -> dict:
                    "e2": [round(v, 5) for v in m.e2], "e3": [round(v, 5) for v in m.e3],
                    "profile": [[[round(u, 2), round(w, 2)] for u, w in poly] for poly in m.profile],
                    "group": m.group, "section": m.section, "ratio": round(m.ratio, 3),
-                   "member": m.member} for m in steel]
+                   "member": m.member,
+                   "d": {c: [round(v, 2) for v in dv] for c, dv in (m.disp or {}).items()},
+                   "r": {c: round(v, 3) for c, v in (m.ratios or {}).items()}} for m in steel]
+    from structural.loads import COMBO_TITLES
+    combos = list(dict.fromkeys(c for m in steel for c in (m.disp or {})))
+    d["load_cases"] = [{"id": c, "title": COMBO_TITLES.get(c, c)} for c in combos]
     return d
