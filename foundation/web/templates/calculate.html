@@ -932,8 +932,19 @@ $("zFit").addEventListener("click", fit);
 function setupLoad(model){
   const cases = (model && model.load_cases) || [];
   const steel = (model && model.steel) || [];
-  $("loadBar").style.display = cases.length && steel.length ? "block" : "none";
-  if (!cases.length) return;
+  $("loadBar").style.display = "block";
+  if (!cases.length || !steel.length) {
+    // سازه‌ای که برنامه تحلیل نکرده: بی‌صدا پنهان نشود، دلیلش گفته شود
+    $("loadSel").style.display = "none";
+    const off = !$("steel_enabled").checked;
+    $("loadInfo").innerHTML = off
+      ? "تحلیل سازه فولادی در فرم خاموش است؛ برای نمایش سازه زیر بار آن را روشن کنید."
+      : "سازه این تجهیز (مانند کلید قدرت) را سازنده تأمین می‌کند و در برنامه تحلیل نمی‌شود؛ " +
+        "نمایش زیر بار فقط برای سازه‌هایی است که برنامه طراحی یا کنترل می‌کند.";
+    viewer.setLoad(null);
+    return;
+  }
+  $("loadSel").style.display = "";
   const worst = cases.map(c => [c.id, Math.max(...steel.map(m => (m.r || {})[c.id] || 0))])
     .sort((a, b) => b[1] - a[1])[0][0];
   $("loadSel").innerHTML = `<option value="">▶ نمایش سازه زیر بار…</option>` +
