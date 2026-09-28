@@ -83,3 +83,8 @@ def test_verify_page(app, la):
     assert r.status_code == 200 and d["ok"], json.dumps(d)[:300]
     assert c.get(d["excel"]).status_code == 200
     assert "مقایسه با SAP" in c.get("/verify").get_data(as_text=True)
+
+
+def test_model_given_as_results_is_explained():
+    with pytest.raises(S.NotResults):
+        S.compare(DATA / "CT1.s2k", DATA / "LA.s2k")

@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.11.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.11.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -720,6 +720,8 @@ def api_verify():
         report["model"] = Path(fm.filename).stem
         name = f"program_results_{Path(fm.filename).stem}_{secrets.token_hex(3)}.xlsx"
         sapcheck.write_excel(report["program"], str(OUT / name), Path(fm.filename).stem)
+    except sapcheck.NotResults as exc:
+        return jsonify({"error": str(exc)}), 400
     except (KeyError, ValueError) as exc:
         return jsonify({"error": f"فایل خوانده نشد: {exc}"}), 400
     except Exception as exc:
@@ -732,10 +734,20 @@ def api_verify():
                                                   "ok": report["ok"]})
     prog = report.pop("program")
     report["program_counts"] = {k: len(v) for k, v in prog.items()}
-    report["program_steel"] = sorted(prog["steel"], key=lambda r: -r["Ratio"])[:40]
+    report["program_steel"] = sorted(prog["steel"], key=lambda r: -r["Ratio"])[:12]
+    # نمونه برای دیدن با چشم: بزرگ‌ترین نیروهای قائم تکیه‌گاه در ترکیب‌های طراحی
+    design = set(report["design_combos"])
+    big = [r for r in prog["reactions"] if r["OutputCase"] in design] or prog["reactions"]
+    report["program_reactions"] = sorted(big, key=lambda r: -abs(r["F3"]))[:8]
+    if "reactions" in report:
+        rows = [r for r in report["reactions"] if r["case"] in design] or report["reactions"]
+        report["sample_reactions"] = sorted(rows, key=lambda r: -abs(r["sap"]["F3"] or 0))[:8]
     for k in ("reactions", "displacements"):
         if k in report:
+            report[k + "_count"] = len(report[k])
             report[k] = sorted(report[k], key=lambda r: -r["error"])[:60]
+    if "steel" in report:
+        report["steel_count"] = len(report["steel"])
     report["excel"] = url_for("download", name=name)
     return jsonify(report)
 

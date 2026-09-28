@@ -300,3 +300,20 @@ b.ng{color:var(--fail)}
 .tscroll{overflow-x:auto;max-height:460px;overflow-y:auto}
 table.compare tr.bad td{background:#F7EAE9;color:var(--fail)}
 .steps-list{padding-inline-start:18px;line-height:1.9}
+.vflow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.vflow>div{display:flex;gap:8px;align-items:center;flex:1;min-width:200px}
+.vflow b{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#B8693C;color:#fff;flex:none}
+.vflow i{font-style:normal;color:var(--ink-2)}
+.vflow em{font-style:normal;font-weight:700}
+.vverdict{margin:10px 0;padding:12px 14px;font-size:15px;border-inline-start:4px solid}
+.vverdict.ok{background:#E7F1EB;border-color:var(--pass)}
+.vverdict.ng{background:#F7EAE9;border-color:var(--fail)}
+.vverdict.wait{background:#FBF3E4;border-color:#C9962E}
+table.vsum td.yes{color:var(--pass);font-weight:700}
+table.vsum td.no{color:var(--fail);font-weight:700}
+table.vsum tr.muted td{color:var(--ink-2)}
+.note.err{color:var(--fail);font-weight:600}
+.howto summary{cursor:pointer;font-weight:700;margin-top:12px}
+.ltr-list{text-align:left;font-family:monospace;font-size:12px;margin:4px 0}
+#out details{margin:6px 0}
+#out details summary{cursor:pointer}

@@ -3,58 +3,65 @@
 {% block body %}
 <header class="page">
   <div><h1>مقایسه با SAP2000</h1>
-  <p>اثبات مستقل: مدل SAP خود دفتر با حل‌کننده برنامه حل می‌شود و هر عدد کنار خروجی خود SAP قرار می‌گیرد</p></div>
+  <p>آیا برنامه همان عددهای SAP را می‌دهد؟ یک مدل SAP دفتر را هم در SAP و هم در برنامه حل کنید و نتیجه را این‌جا ببینید</p></div>
 </header>
+
+<div class="vflow sheet">
+  <div><b>۱</b><span>در SAP: مدل را باز کنید، <em>Run</em> و <em>Steel Design</em> بزنید</span></div>
+  <i>←</i>
+  <div><b>۲</b><span>از SAP دو فایل بگیرید: <em>مدل</em> (s2k) و <em>خروجی نتایج</em> (Excel)</span></div>
+  <i>←</i>
+  <div><b>۳</b><span>هر دو را این‌جا بدهید؛ برنامه همان مدل را خودش حل می‌کند و عدد به عدد مقایسه می‌کند</span></div>
+</div>
 
 <div class="grid-verify">
   <form class="sheet" id="vform">
-    <h2>ورودی</h2>
+    <h2>فایل‌ها</h2>
     <div class="f">
-      <label>۱. مدل SAP (s2k یا $2k)</label>
+      <label>فایل ۱ — مدل SAP <small>(s2k یا $2k)</small></label>
       <input id="model" type="file" accept=".s2k,.$2k,.txt" required>
-      <small class="hint">همان مدلی که در SAP طراحی کرده‌اید؛ یا فایل «مدل SAP سازه» که این برنامه
-        ساخته است. در SAP: File ← Export ← SAP2000 .s2k Text File.</small>
+      <small class="hint">خود مدل: گره‌ها، اعضا، مقاطع و بارها. در SAP:
+        <span dir="ltr">File ← Export ← SAP2000 .s2k Text File</span>.</small>
     </div>
     <div class="f">
-      <label>۲. خروجی همان مدل از SAP (Excel یا متن) — اختیاری</label>
+      <label>فایل ۲ — خروجی نتایج همان مدل از SAP <small>(Excel)</small></label>
       <input id="results" type="file" accept=".xlsx,.xlsm,.s2k,.$2k,.txt">
-      <small class="hint">بدون این فایل، نتایج برنامه به قالب جدول‌های SAP (Excel) داده می‌شود تا
-        دستی مقایسه کنید.</small>
+      <small class="hint"><b>مدل دیگر نیست</b>؛ جدول نتایجی است که SAP <b>بعد از تحلیل و طراحی</b> می‌دهد
+        (عکس‌العمل تکیه‌گاه‌ها و نسبت تنش اعضا). روش گرفتنش در پایین آمده است.</small>
     </div>
-    <button class="btn wide" id="go" type="submit">تحلیل و مقایسه</button>
+    <button class="btn wide" id="go" type="submit">حل با برنامه و مقایسه با SAP</button>
     <p class="note" id="msg"></p>
 
-    <h3>گرفتن خروجی از SAP</h3>
-    <ol class="note steps-list">
-      <li>مدل را در SAP باز کنید؛ واحد پایین صفحه <b dir="ltr">Kgf, m, C</b> باشد.</li>
-      <li>تحلیل: <b dir="ltr">Analyze ← Run Analysis</b> (F5).</li>
-      <li>طراحی: <b dir="ltr">Design ← Steel Frame Design ← Start Design/Check</b>.</li>
-      <li><b dir="ltr">Display ← Show Tables</b> (Ctrl+T) و انتخاب:
-        <span dir="ltr">Analysis Results ← Joint Output ← Reactions</span> و
-        <span dir="ltr">Displacements</span>، و
-        <span dir="ltr">Design Data ← Steel Design ← Summary Data</span>؛ در
-        <span dir="ltr">Select Load Cases</span> همه حالت‌ها و ترکیب‌ها.</li>
-      <li>در پنجره جدول‌ها: <b dir="ltr">File ← Export All Tables ← To Excel</b> و ذخیره فایل.</li>
-      <li>مدل و فایل Excel را این‌جا بدهید.</li>
-    </ol>
+    <details class="howto" open>
+      <summary>گرفتن فایل ۲ از SAP</summary>
+      <ol class="note steps-list">
+        <li>مدل را در SAP باز کنید؛ واحد پایین صفحه <b dir="ltr">Kgf, m, C</b> باشد.</li>
+        <li><b dir="ltr">Analyze ← Run Analysis</b> (کلید F5).</li>
+        <li><b dir="ltr">Design ← Steel Frame Design ← Start Design/Check</b>.</li>
+        <li><b dir="ltr">Display ← Show Tables</b> (Ctrl+T)، و تیک این‌ها:
+          <div dir="ltr" class="ltr-list">Analysis Results → Joint Output → Reactions<br>
+          Analysis Results → Joint Output → Displacements<br>
+          Design Data → Steel Design → Summary Data</div>
+          با دکمه <span dir="ltr">Select Load Cases</span> همه حالت‌ها و ترکیب‌ها را انتخاب کنید.</li>
+        <li>در پنجره جدول‌ها: <b dir="ltr">File ← Export All Tables ← To Excel</b> و ذخیره.</li>
+      </ol>
+    </details>
   </form>
 
-  <div>
-    <div class="sheet" id="out" style="display:none"></div>
-  </div>
+  <div class="sheet" id="out" style="display:none"></div>
 </div>
 
 <script>
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 const $ = id => document.getElementById(id);
 const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const f = (v, d=3) => v === null || v === undefined ? "—" : Number(v).toFixed(d);
-const pct = v => (v * 100).toFixed(v < 0.001 ? 4 : 2) + "٪";
+const n = (v, d=0) => v === null || v === undefined ? "—" : Number(v).toLocaleString("en-US", {minimumFractionDigits: d, maximumFractionDigits: d});
+const pct = v => (v * 100 < 0.01 ? "کمتر از ۰٫۰۱" : (v * 100).toFixed(2)) + "٪";
 
 $("vform").addEventListener("submit", async ev => {
   ev.preventDefault();
   if (!$("model").files[0]) return;
-  $("go").disabled = true; $("msg").textContent = "در حال تحلیل…";
+  $("go").disabled = true; $("msg").textContent = "در حال حل مدل…"; $("msg").className = "note";
   const fd = new FormData();
   fd.append("model", $("model").files[0]);
   if ($("results").files[0]) fd.append("results", $("results").files[0]);
@@ -64,54 +71,80 @@ $("vform").addEventListener("submit", async ev => {
     try { d = await r.json(); } catch (_) { d = {error: "خطای سرور (" + r.status + ")"}; }
   } catch (err) { d = {error: "ارتباط با سرور برقرار نشد: " + err}; }
   $("go").disabled = false;
-  if (d.error) { $("msg").textContent = d.error; return; }
+  if (d.error) { $("msg").textContent = d.error; $("msg").className = "note err"; return; }
   $("msg").textContent = "";
   render(d);
 });
 
-function jointTable(title, rows, cols, worst){
-  if (!rows) return "";
-  const body = rows.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.joint)}</td><td>${esc(r.case)}</td>` +
-    cols.map(c => `<td class="num">${f(r.sap[c], 4)}</td><td class="num">${f(r.program[c], 4)}</td>`).join("") +
-    `<td class="num">${pct(r.error)}</td></tr>`).join("");
-  return `<h3>${title} — بیشترین اختلاف ${pct(worst)}</h3>
-    <div class="tscroll"><table class="compare"><thead><tr><th>گره</th><th>حالت</th>` +
-    cols.map(c => `<th>${c} SAP</th><th>${c} برنامه</th>`).join("") + `<th>اختلاف</th></tr></thead>
-    <tbody>${body}</tbody></table></div>
-    <p class="note">${rows.length} ردیف با بیشترین اختلاف نمایش داده شده؛ اختلاف نسبت به بزرگ‌ترین مقدار همان حالت بار.</p>`;
+function line(title, count, worst, fmtWorst, ok){
+  if (!count) return `<tr class="muted"><td>${title}</td><td>—</td><td>—</td><td>در خروجی SAP نبود</td></tr>`;
+  return `<tr><td>${title}</td><td class="num">${n(count)}</td><td class="num">${fmtWorst(worst)}</td>
+    <td class="${ok ? "yes" : "no"}">${ok ? "✓ یکسان" : "✗ اختلاف"}</td></tr>`;
 }
 
 function render(d){
-  let h = `<h2>مدل ${esc(d.model)}</h2>
-    <div class="kv"><span>گره / عضو</span><span>${d.joints} / ${d.members}</span></div>
-    <div class="kv"><span>حالت بار / ترکیب</span><span>${d.cases} / ${d.combos}</span></div>
-    <div class="kv"><span>ترکیب‌های طراحی</span><span dir="ltr">${esc(d.design_combos.join(", "))}</span></div>`;
+  let h = `<h2>${esc(d.model)} <small class="note">— ${d.joints} گره، ${d.members} عضو، ${d.cases} حالت بار، ${d.combos} ترکیب</small></h2>`;
+
   if (d.compared) {
-    h += `<div class="verdict ${d.ok ? "ok" : "ng"}" style="margin:10px 0">${d.ok
-      ? `هر ${d.compared} مقدار مقایسه‌شده با SAP برابر است`
-      : `در بخشی از ${d.compared} مقدار مقایسه‌شده اختلاف وجود دارد — ردیف‌های قرمز`}</div>`;
+    const okR = (d.reactions || []).every(r => r.ok), okD = (d.displacements || []).every(r => r.ok),
+          okS = (d.steel || []).every(r => r.ok);
+    h += `<div class="vverdict ${d.ok ? "ok" : "ng"}">${d.ok
+      ? `برنامه و SAP برای این مدل <b>یک جواب</b> می‌دهند — ${n(d.compared)} عدد مقایسه شد`
+      : `در بعضی عددها <b>اختلاف</b> هست — ردیف‌های قرمز جدول‌های پایین`}</div>
+      <table class="compare vsum"><thead><tr><th>چه چیزی مقایسه شد</th><th>تعداد عدد</th><th>بیشترین اختلاف</th><th>نتیجه</th></tr></thead><tbody>
+      ${line("عکس‌العمل تکیه‌گاه‌ها (نیرو و لنگر پای سازه)", (d.reactions_count || 0) * 6, d.reactions_err, pct, okR)}
+      ${line("تغییرمکان گره‌ها", (d.displacements_count || 0) * 6, d.displacements_err, pct, okD)}
+      ${line("نسبت تنش هر عضو (AISC-ASD89)", d.steel_count || 0, d.steel_err, v => n(v, 3), okS)}
+      </tbody></table>
+      <p class="note">اختلاف عکس‌العمل و تغییرمکان نسبت به بزرگ‌ترین مقدار همان حالت بار سنجیده می‌شود؛ معیار قبولی ۱٪.
+        نسبت تنش: اختلاف مطلق کمتر از ۰٫۰۱.</p>`;
+    if (d.sample_reactions && d.sample_reactions.length) {
+      h += `<h3>نمونه با چشم: بزرگ‌ترین نیروی قائم پای سازه (kg)</h3>
+        <table class="compare"><thead><tr><th>تکیه‌گاه</th><th>ترکیب</th><th>SAP</th><th>برنامه</th></tr></thead><tbody>` +
+        d.sample_reactions.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.joint)}</td><td>${esc(r.case)}</td>
+          <td class="num">${n(r.sap.F3, 1)}</td><td class="num">${n(r.program.F3, 1)}</td></tr>`).join("") + `</tbody></table>`;
+    }
+    if (d.steel && d.steel.length) {
+      const top = [...d.steel].sort((a, b) => b.sap - a.sap).slice(0, 10);
+      h += `<h3>نمونه با چشم: پرتنش‌ترین اعضا</h3>
+        <table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>نسبت تنش SAP</th><th>نسبت تنش برنامه</th></tr></thead><tbody>` +
+        top.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.frame)}</td><td>${esc(r.section)}</td>
+          <td class="num">${n(r.sap, 3)}</td><td class="num">${n(r.program, 3)}</td></tr>`).join("") + `</tbody></table>`;
+    }
+    h += details(d);
   } else {
-    h += `<p class="note">خروجی SAP داده نشده یا جدول‌های لازم در آن نبود
-      (${esc((d.found || []).join("، ") || "هیچ‌کدام")}). نتایج برنامه در فایل Excel زیر، به همان قالب SAP است.</p>`;
+    h += `<div class="vverdict wait">مقایسه انجام نشد: <b>فایل ۲ (خروجی نتایج SAP)</b> داده نشده است.
+      برنامه مدل را حل کرد و نتایجش پایین آمده؛ برای مقایسه، خروجی SAP همین مدل را هم بدهید.</div>
+      <h3>نتایج برنامه — بزرگ‌ترین نیروی قائم پای سازه (kg)</h3>
+      <table class="compare"><thead><tr><th>تکیه‌گاه</th><th>ترکیب</th><th>F3</th><th>F1</th><th>F2</th></tr></thead><tbody>` +
+      d.program_reactions.map(r => `<tr><td>${esc(r.Joint)}</td><td>${esc(r.OutputCase)}</td><td class="num">${n(r.F3, 1)}</td>
+        <td class="num">${n(r.F1, 1)}</td><td class="num">${n(r.F2, 1)}</td></tr>`).join("") + `</tbody></table>
+      <h3>نتایج برنامه — پرتنش‌ترین اعضا</h3>
+      <table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>نسبت تنش</th><th>ترکیب</th></tr></thead><tbody>` +
+      d.program_steel.map(r => `<tr><td>${esc(r.Frame)}</td><td>${esc(r.DesignSect)}</td><td class="num">${n(r.Ratio, 3)}</td>
+        <td>${esc(r.Combo)}</td></tr>`).join("") + `</tbody></table>`;
   }
-  h += `<a class="btn" href="${d.excel}">نتایج برنامه به قالب جدول‌های SAP (Excel)</a>`;
-  h += jointTable("عکس‌العمل تکیه‌گاه‌ها (Kgf، Kgf·m)", d.reactions, ["F1","F2","F3","M1","M2","M3"], d.reactions_err);
-  h += jointTable("تغییرمکان گره‌ها (m، رادیان)", d.displacements, ["U1","U2","U3"], d.displacements_err);
-  if (d.steel) {
-    h += `<h3>نسبت تنش اعضا (AISC-ASD89) — بیشترین اختلاف ${f(d.steel_err)}</h3>
-      <div class="tscroll"><table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>SAP</th><th>ترکیب SAP</th>
-      <th>برنامه</th><th>ترکیب برنامه</th><th>اختلاف</th></tr></thead><tbody>` +
-      d.steel.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.frame)}</td><td>${esc(r.section)}</td>
-        <td class="num">${f(r.sap)}</td><td>${esc(r.sap_combo)}</td><td class="num">${f(r.program)}</td>
-        <td>${esc(r.program_combo)}</td><td class="num">${f(r.diff)}</td></tr>`).join("") +
-      `</tbody></table></div>`;
-  } else {
-    h += `<h3>نسبت تنش اعضا در برنامه (${d.program_counts.steel} عضو، بیشترین‌ها)</h3>
-      <div class="tscroll"><table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>نسبت</th><th>ترکیب</th><th>رابطه</th></tr></thead><tbody>` +
-      d.program_steel.map(r => `<tr><td>${esc(r.Frame)}</td><td>${esc(r.DesignSect)}</td><td class="num">${f(r.Ratio)}</td>
-        <td>${esc(r.Combo)}</td><td>${esc(r.Equation)}</td></tr>`).join("") + `</tbody></table></div>`;
-  }
+  h += `<p><a class="btn" href="${d.excel}">همه نتایج برنامه در Excel (همان قالب جدول‌های SAP)</a></p>`;
   $("out").innerHTML = h; $("out").style.display = "block";
+  $("out").scrollIntoView({behavior: "smooth"});
+}
+
+function details(d){
+  const jt = (title, rows, cols, dg) => !rows ? "" : `<details><summary>${title} — ${rows.length} ردیف با بیشترین اختلاف</summary>
+    <div class="tscroll"><table class="compare"><thead><tr><th>گره</th><th>حالت</th>` +
+    cols.map(c => `<th>${c} SAP</th><th>${c} برنامه</th>`).join("") + `<th>اختلاف</th></tr></thead><tbody>` +
+    rows.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.joint)}</td><td>${esc(r.case)}</td>` +
+      cols.map(c => `<td class="num">${n(r.sap[c], dg)}</td><td class="num">${n(r.program[c], dg)}</td>`).join("") +
+      `<td class="num">${pct(r.error)}</td></tr>`).join("") + `</tbody></table></div></details>`;
+  let h = `<h3>جزئیات کامل</h3>`;
+  h += jt("عکس‌العمل‌ها (kg، kg·m)", d.reactions, ["F1","F2","F3","M1","M2","M3"], 1);
+  h += jt("تغییرمکان‌ها (m)", d.displacements, ["U1","U2","U3"], 5);
+  if (d.steel) h += `<details><summary>نسبت تنش همه اعضا — ${d.steel.length} عضو</summary><div class="tscroll">
+    <table class="compare"><thead><tr><th>عضو</th><th>مقطع</th><th>SAP</th><th>ترکیب SAP</th><th>برنامه</th><th>ترکیب برنامه</th><th>اختلاف</th></tr></thead><tbody>` +
+    d.steel.map(r => `<tr class="${r.ok ? "" : "bad"}"><td>${esc(r.frame)}</td><td>${esc(r.section)}</td><td class="num">${n(r.sap, 3)}</td>
+      <td>${esc(r.sap_combo)}</td><td class="num">${n(r.program, 3)}</td><td>${esc(r.program_combo)}</td><td class="num">${n(r.diff, 3)}</td></tr>`).join("") +
+    `</tbody></table></div></details>`;
+  return h;
 }
 </script>
 {% endblock %}

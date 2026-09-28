@@ -189,10 +189,22 @@ def _compare_joint_table(ours, sap, cols):
     return out, worst
 
 
+class NotResults(ValueError):
+    """فایل خروجی داده‌شده خودش یک مدل است، نه نتایج تحلیل SAP."""
+
+
 def compare(model_path, sap_path):
     model, res, checks, combos = run(model_path)
     ours = program_tables(model, res, checks, combos)
-    sap = read_sap_results(sap_path) if sap_path else {}
+    if sap_path:
+        sap = read_sap_results(sap_path)
+        if not sap and Path(sap_path).suffix.lower() not in (".xlsx", ".xlsm") \
+                and "JOINT COORDINATES" in read_tables(sap_path):
+            raise NotResults("فایل دوم یک «مدل» SAP است، نه «خروجی تحلیل». فایل دوم باید جدول‌های "
+                             "نتیجه باشد که بعد از Run Analysis و Steel Design از SAP گرفته می‌شود "
+                             "(Joint Reactions و Steel Design Summary).")
+    else:
+        sap = read_sap_results(model_path)      # مدلی که جدول‌های نتیجه را هم همراه دارد
     report = {"model": model.name, "joints": len(model.nodes), "members": len(model.members),
               "cases": len(model.patterns), "combos": len(model.combos),
               "design_combos": combos, "program": ours, "found": sorted(sap)}
