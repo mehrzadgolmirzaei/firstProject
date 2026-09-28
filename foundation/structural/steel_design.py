@@ -162,7 +162,7 @@ def design_structure(eq, steel_cfg, wind, ch, cv, eq_sc=0.6, sections=None, max_
     d = StructureDesign(spec, model, results, checks, chosen, weight, info["wind_area"],
                         stands, phases, _leg_reactions(model, results, model.combos),
                         history, list(results.warnings))
-    if not d.ok:
+    if not d.ok and sections is None:          # فقط در طراحی خودکار؛ در کنترل، رد شدن خودش نتیجه است
         d.warnings.append("با بزرگ‌ترین مقطع کاتالوگ هم همه کنترل‌ها پاس نشد — ابعاد پایه "
                           "(ضلع مربع) یا ارتفاع پانل را تغییر دهید.")
     return d

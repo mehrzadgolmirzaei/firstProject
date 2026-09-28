@@ -324,3 +324,4 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .full-tot b{display:block;font-size:22px;font-family:monospace}
 .full-tot span{font-size:12px;color:var(--ink-2)}
 .full-site td div{white-space:nowrap;font-size:12px}
+.full-site b.yes{color:var(--pass)} .full-site b.no{color:var(--fail)}

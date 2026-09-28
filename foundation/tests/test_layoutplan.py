@@ -172,3 +172,12 @@ def test_full_design_from_layout(layout_file, app):
     assert ct["structures"] and ct["structures"][0]["sections"]["chord"].startswith("L")
     assert {b["section"][0] for b in F["bill"]} == {"L", "U"}
     assert all(c.get(t["url"]).status_code == 200 for t in F["types"])
+
+
+def test_structure_height_from_layout(layout_file, result):
+    """ارتفاع سازه از نقشه: بالای بلاک سازه روی زمین (LA: ۳٫۰، CB: ۲٫۶۵)، نه کاتالوگ."""
+    stations, _, _ = LP.site_stations(LP.read_items(layout_file), "63")
+    hs = {s.kind: s.hs for s in stations if s.key}
+    assert hs["LA"] == pytest.approx(3.0) and hs["CB"] == pytest.approx(2.65)
+    la = [f for f in result["foundations"] if f["name"].startswith("LA")][0]
+    assert la["groups"][0]["Hs"] == pytest.approx(3.0)

@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.12.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.13.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -120,6 +120,8 @@ def calculate():
                            substations=[dict(r) for r in subs],
                            profiles=cp.listing(),
                            defaults=asdict(_office_config()),
+                           angles=[a.name for a in __import__("structural.sections", fromlist=["ANGLES"]).ANGLES],
+                           channels=[c.name for c in __import__("structural.sections", fromlist=["CHANNELS"]).CHANNELS],
                            options=design_options())
 
 
@@ -183,6 +185,18 @@ def config_from_form(form) -> ProjectConfig:
         val = form.get(f"steel.{key}")
         if val is not None:
             setattr(cfg.steel, key, val in (True, 1, "1", "true", "on"))
+    from structural.sections import ANGLES, CHANNELS
+    cfg.steel.mode = _choice(form, "steel.mode", ("design", "check"), cfg.steel.mode)
+    cfg.steel.bracing = _choice(form, "steel.bracing", ("zigzag", "x"), cfg.steel.bracing)
+    for key, allowed in (("chord", ANGLES), ("brace", ANGLES), ("strut", ANGLES), ("beam", CHANNELS)):
+        val = form.get(f"steel.{key}")
+        if val:
+            names = [x.name for x in allowed]
+            if val not in names:
+                raise InputError(f"مقطع «{val}» در فهرست مقاطع نیست")
+            setattr(cfg.steel, key, val)
+    if not 0.2 <= cfg.steel.panel <= 2.0:
+        raise InputError("ارتفاع پانل مهاربندی باید بین ۰٫۲ و ۲ متر باشد")
     if not 0.2 <= cfg.steel.leg_width <= 1.0:
         raise InputError("ضلع پایه مشبک باید بین ۰٫۲ و ۱ متر باشد")
     if cfg.steel.k_chord not in (1.0, 2.0):

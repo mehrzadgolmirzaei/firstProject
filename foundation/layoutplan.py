@@ -118,6 +118,11 @@ class Item:
     name: str
     pts: np.ndarray            # mm، مختصات واقعی
     angle: float               # جهت محور x بلاک در پلان (رادیان)
+    children: list = field(default_factory=list)   # [(نام بلاک تو در تو، کمترین z)] سطح اول
+
+    @property
+    def zmax(self):
+        return float(self.pts[:, 2].max())
 
     @property
     def zmin(self):
@@ -145,7 +150,18 @@ def read_items(path, doc=None):
             continue
         seen.add(key)
         ux = m.transform_direction((1, 0, 0))
-        items.append(Item(e.dxf.name, P, math.atan2(ux.y, ux.x)))
+        # بلاک‌های تو در توی سطح اول (مثلاً سه CT روی سازه در یک بلاک): کمترین z هر کدام
+        children = []
+        blk = doc.blocks.get(e.dxf.name)
+        if blk is not None:
+            from ezdxf.math import Matrix44
+            bp = blk.block.dxf.base_point
+            M = Matrix44.translate(-bp[0], -bp[1], -bp[2]) @ m
+            for ch in blk.query("INSERT"):
+                cp = _insert_points(doc, ch, ch.matrix44() @ M, cache, 1)
+                if cp:
+                    children.append((ch.dxf.name, float(min(p[2] for p in cp))))
+        items.append(Item(e.dxf.name, P, math.atan2(ux.y, ux.x), children))
     return items
 
 
@@ -183,6 +199,7 @@ class SiteStation:
     x1: float
     y0: float
     y1: float
+    hs: float = 0.0            # ارتفاع سازه از روی نقشه (m)؛ صفر = معلوم نیست
     kind: str = ""             # نوع کی‌پلن (LA، CT …) یا مانع (TR …) یا نامعلوم
     key: str = ""              # کلید کاتالوگ؛ خالی = مانع
     note: str = ""
@@ -198,6 +215,24 @@ class SiteStation:
     @property
     def label(self):
         return self.kind or self.names[0].split("$0$")[-1][:12]
+
+
+def _structure_height(st, ground):
+    """
+    ارتفاع سازه نگهدارنده از نقشه سه‌بعدی: سازه پایین‌ترین بلاکِ روی زمینِ ایستگاه است
+    (تجهیز روی آن بالاتر می‌رود)، پس ارتفاع = کمترین «بالای بلاک» در بلاک‌های روی زمین.
+    اگر سازه و تجهیز در یک بلاک‌اند (مثل CT63)، پای پایین‌ترین تجهیزِ تو در تو.
+    """
+    base = [it for it in getattr(st, "_base", []) if it.height >= MIN_HEIGHT]
+    if not base:
+        return 0.0
+    if len(base) == 1:
+        kinds = {t for n in st.names for t in name_tokens(n)}
+        tops = [z for name, z in base[0].children
+                if z > ground + MIN_HEIGHT and set(name_tokens(name)) & kinds]
+        if tops:
+            return round((min(tops) - ground) / 1000, 2)
+    return round((min(it.zmax for it in base) - ground) / 1000, 2)
 
 
 def _frame(items):
@@ -265,8 +300,10 @@ def site_stations(items, voltage="63"):
     stations = []
     for idx in groups.values():
         bx = np.array([boxes[i] for i in idx])
-        stations.append(SiteStation([base[i].name for i in idx], bx[:, 0].min(), bx[:, 1].max(),
-                                    bx[:, 2].min(), bx[:, 3].max()))
+        st = SiteStation([base[i].name for i in idx], bx[:, 0].min(), bx[:, 1].max(),
+                         bx[:, 2].min(), bx[:, 3].max())
+        st._base = [base[i] for i in idx]
+        stations.append(st)
     # تجهیز روی سازه: به ایستگاهی که مرکزش را در بر دارد
     for it in rest:
         b = box(it)
@@ -277,6 +314,7 @@ def site_stations(items, voltage="63"):
                 break
     unknown = set()
     for st in stations:
+        st.hs = _structure_height(st, ground)
         found = Counter(t for n in st.names for t in name_tokens(n))
         kinds = [k for k in PRIORITY if found.get(k)]
         obst = [k for k in ("TR", "GANTRY") if found.get(k)]
@@ -342,7 +380,7 @@ def find_rows(stations):
 def row_stations(row, stations, gap=0.2, B_hi=5.0, L_hi=6.0):
     """ایستگاه‌های bay برای یک ردیف: تجهیزها، و هر چیز دیگر نقشه در نزدیکی به‌صورت مانع."""
     from bay import Station
-    out = [Station(s.kind, row.pos(s), [s.key], 0.0, row.cross(s)) for s in row.members]
+    out = [Station(s.kind, row.pos(s), [s.key], 0.0, row.cross(s), hs=s.hs) for s in row.members]
     lo = min(row.pos(s) for s in row.members) - B_hi - NEAR
     hi = max(row.pos(s) for s in row.members) + B_hi + NEAR
     ymid = sum(row.cross(s) for s in row.members) / len(row.members)
@@ -373,7 +411,7 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
     pads, row_out, cache = [], [], {}
     for r_i, row in enumerate(rows):
         chain = row_stations(row, stations, gap, B_hi, L_hi)
-        sig = tuple((s.label, tuple(s.keys), round(s.pos - chain[0].pos, 2),
+        sig = tuple((s.label, tuple(s.keys), s.hs, round(s.pos - chain[0].pos, 2),
                      round(s.y - row.cross(row.members[0]), 2), round(s.width, 2),
                      round(s.depth, 2)) for s in chain)
         try:
@@ -435,20 +473,21 @@ def _foundations(pads):
     types = {}
     for p in pads:
         u = p["unit"]
-        gs = sorted(((g.eq.tag, [[float(round(x, 3)) + 0.0, float(round(y, 3)) + 0.0] for x, y in g.positions])
-                     for g in u.layout.groups), key=lambda g: rank(g[0]))
-        groups = [{"tag": t, "positions": pos} for t, pos in gs]
-        mirror = [{"tag": g["tag"], "positions": sorted([x, -y + 0.0] for x, y in g["positions"])}
-                  for g in groups]
-        canon = min(json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"])} for g in groups]),
-                    json.dumps(mirror))
+        gs = sorted(((g.eq.tag, [[float(round(x, 3)) + 0.0, float(round(y, 3)) + 0.0] for x, y in g.positions],
+                      g.eq.Hs) for g in u.layout.groups), key=lambda g: rank(g[0]))
+        groups = [{"tag": t, "positions": pos, "Hs": hs} for t, pos, hs in gs]
+        mirror = [{"tag": g["tag"], "positions": sorted([x, -y + 0.0] for x, y in g["positions"]),
+                   "Hs": g["Hs"]} for g in groups]
+        canon = min(json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"]), "Hs": g["Hs"]}
+                                for g in groups]), json.dumps(mirror))
         label = "+".join(sorted(p["label"].split("+"), key=rank))
         key = (label, p["L"], p["B"], p["tf"], canon)
         if key not in types:
             types[key] = {"name": f"{label}-{p['L']:g}-{p['B']:g}", "count": 0, "L": p["L"],
                           "B": p["B"], "tf": p["tf"], "b": 0.0, "groups": groups, "problem": "",
                           "source": "layout",
-                          "describe": " + ".join(f"{g['tag']}×{len(g['positions'])}" for g in groups)}
+                          "describe": " + ".join(f"{g['tag']}×{len(g['positions'])}" for g in groups)
+                          + " · Hs " + "/".join(f"{g['Hs']:g}" for g in groups)}
         types[key]["count"] += 1
         p["type"] = types[key]["name"]
         own = json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"])} for g in groups])
@@ -530,8 +569,9 @@ def design_all(result, cfg, max_extra_tf=0.3):
     from pipeline import run_layout
     out = []
     for f in result["foundations"]:
-        lay = PadLayout([Group(ALL_EQUIPMENT[g["tag"]], [tuple(p) for p in g["positions"]])
-                         for g in f["groups"]])
+        from equipment import with_structure_height
+        lay = PadLayout([Group(with_structure_height(ALL_EQUIPMENT[g["tag"]], g.get("Hs")),
+                               [tuple(p) for p in g["positions"]]) for g in f["groups"]])
         extra = 0.0
         while True:
             c = copy.deepcopy(cfg)
@@ -539,11 +579,13 @@ def design_all(result, cfg, max_extra_tf=0.3):
             c.foundation.tf = round(f["tf"] + extra, 2)
             run = run_layout(lay, c)
             res, des = run[0], run[2]
-            ok = (res is not None and res.ok and all(d.ok for k, d in des.items() if k != "groups")
-                  and not M.clashes(M.build(res, res.layout, des, c))
-                  and all(sd.ok for _, sd in getattr(res, "structures", []) or []))
-            if ok or extra >= max_extra_tf - 1e-9:
+            # ضخامت پی فقط برای کنترل‌های خود پی بیشتر می‌شود؛ رد شدن سازه با پی حل نمی‌شود
+            found_ok = (res is not None and res.ok
+                        and all(d.ok for k, d in des.items() if k != "groups")
+                        and not M.clashes(M.build(res, res.layout, des, c)))
+            if found_ok or extra >= max_extra_tf - 1e-9:
                 break
             extra += 0.1
+        ok = found_ok and all(sd.ok for _, sd in getattr(res, "structures", []) or [])
         out.append((f, lay, c, run, ok))
     return out

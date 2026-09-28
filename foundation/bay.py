@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 
 from engine import analyse, Geometry, from_config
-from equipment import ALL_EQUIPMENT, VOLTAGE_LEVELS
+from equipment import ALL_EQUIPMENT, VOLTAGE_LEVELS, with_structure_height
 from keyplan import KEYPLAN_TOKENS, VARIANTS
 from padlayout import Group, PadLayout, row
 
@@ -37,6 +37,7 @@ class Station:
     width: float = 0.0                 # پهنای اشغالی مانع در امتداد ردیف (m)
     y: float = 0.0                     # موقعیت عرضی (عمود بر ردیف، m) — از نقشه جانمایی
     depth: float = 0.0                 # عمق اشغالی مانع عمود بر ردیف؛ صفر = تمام عرض ردیف
+    hs: float = 0.0                    # ارتفاع استراکچر از نقشه جانمایی (m)؛ صفر = کاتالوگ
 
 
 @dataclass
@@ -109,7 +110,7 @@ def _layout(unit):
         y = st.pos - c
         x = 0.0
         for k, key in enumerate(st.keys):
-            eq = ALL_EQUIPMENT[key]
+            eq = with_structure_height(ALL_EQUIPMENT[key], st.hs)
             g = row(eq, y=y)
             if k:                                  # دو تجهیز روی یک ایستگاه: کنار هم در X
                 prev = groups[-1]

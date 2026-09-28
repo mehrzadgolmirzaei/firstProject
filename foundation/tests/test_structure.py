@@ -144,3 +144,22 @@ def test_sap_export_format_matches_office_files(tmp_path):
     assert lines[-2] == "END TABLE DATA"
     office = (Path(__file__).parent / "data" / "sap" / "LA.s2k").read_bytes().decode("latin-1")
     assert office.split("\r\n")[2] == lines[2]          # همان سرآیند جدول فایل‌های دفتر
+
+
+def test_check_mode_uses_given_sections_and_reports_failure():
+    """حالت «کنترل»: مقاطع مهندس بدون تغییر بارگذاری و کنترل می‌شوند (مثل کنترل در SAP)."""
+    import copy
+    from pipeline import run_layout
+    from padlayout import PadLayout, row
+    cfg = kimia_config()
+    cfg.steel.mode = "check"
+    cfg.steel.chord, cfg.steel.brace, cfg.steel.strut, cfg.steel.beam = "L40X4", "L30X3", "L30X3", "UNP80"
+    res = run_layout(PadLayout([row(ALL_EQUIPMENT["CT63"])]), cfg)[0]
+    (_, weak), = res.structures
+    assert weak.sections == {"chord": "L40X4", "brace": "L30X3", "strut": "L30X3", "beam": "UNP80"}
+    assert not weak.ok and not weak.warnings
+    strong = copy.deepcopy(cfg)
+    strong.steel.chord, strong.steel.brace, strong.steel.strut, strong.steel.beam = \
+        "L80X8", "L50X5", "L50X5", "UNP160"
+    (_, ok), = run_layout(PadLayout([row(ALL_EQUIPMENT["CT63"])]), strong)[0].structures
+    assert ok.ok and ok.sections["chord"] == "L80X8"

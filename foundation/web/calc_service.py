@@ -176,6 +176,7 @@ def structures_dict(res, cfg):
                     "wind_area": round(d.wind_area * d.stands, 3),
                     "fed": st.feed_foundation, "Ws_used": eq.Ws, "As_used": eq.As,
                     "max_ratio": round(d.max_ratio, 3), "ok": d.ok, "k_chord": st.k_chord,
+                    "mode": st.mode,
                     "fy": st.fy, "iterations": len(d.history), "groups": groups, "legs_reactions": legs,
                     "warnings": d.warnings})
     return out

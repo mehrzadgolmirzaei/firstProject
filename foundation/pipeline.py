@@ -92,7 +92,10 @@ def design_structures(layout, cfg, wind, seis):
                wind.sc_ratio, round(seis.ch, 9), round(seis.cv, 9))
         d = _STRUCTURE_CACHE.get(key)
         if d is None:
-            d = _STRUCTURE_CACHE[key] = design_structure(eq, st, wind, seis.ch, seis.cv)
+            given = ({"chord": st.chord, "brace": st.brace, "strut": st.strut, "beam": st.beam}
+                     if st.mode == "check" else None)
+            d = _STRUCTURE_CACHE[key] = design_structure(eq, st, wind, seis.ch, seis.cv,
+                                                         sections=given)
         designs.append((gi, d))
         if st.feed_foundation:
             eq = copy.copy(eq)

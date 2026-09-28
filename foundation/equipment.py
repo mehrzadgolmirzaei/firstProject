@@ -190,3 +190,17 @@ def equipment_type(key):
             if k == key:
                 return t
     return key
+
+
+def with_structure_height(eq, Hs):
+    """
+    همان تجهیز با ارتفاع استراکچر دیگر (مثلاً از نقشه جانمایی). مرکز ثقل، وزن و سطح بادگیر
+    استراکچر به نسبت ارتفاع (تقریب مرتبه اول)؛ با «وزن و سطح بادگیر از سازه طراحی‌شده» مقدار
+    واقعی سازه جای این‌ها می‌نشیند.
+    """
+    import dataclasses
+    if not Hs or not eq.Hs or abs(Hs - eq.Hs) < 1e-9:
+        return eq
+    k = Hs / eq.Hs
+    return dataclasses.replace(eq, Hs=round(Hs, 3), hs=round(eq.hs * k, 3),
+                               Ws=round(eq.Ws * k, 1), As=round(eq.As * k, 3))

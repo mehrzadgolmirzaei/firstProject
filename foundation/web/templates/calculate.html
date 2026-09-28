@@ -221,6 +221,26 @@
         تحلیل و طراحی سازه فولادی طبق AISC-ASD89</label>
       <label class="check-inline"><input type="checkbox" id="steel_feed" checked>
         استفاده از وزن و سطح بادگیر سازه طراحی‌شده در محاسبه فونداسیون</label>
+      <div class="f"><label>روش تعیین مقاطع</label>
+        <select id="steel_mode">
+          <option value="check" selected>کنترل سازه تعریف‌شده توسط مهندس (مثل کنترل در SAP)</option>
+          <option value="design">طراحی خودکار — سبک‌ترین مقطع قابل قبول</option>
+        </select>
+        <small class="hint">ارتفاع سازه (Hs) از بخش تجهیز یا از نقشه جانمایی می‌آید؛ در حالت کنترل، مقاطع
+          زیر بارگذاری و با AISC-ASD89 کنترل می‌شوند و نتیجه «قبول» یا «رد» است.</small></div>
+      <div class="row" id="secRow">
+        {% for key, label, lst in [("chord", "نبشی اصلی پایه", angles), ("brace", "مهاربند قطری", angles),
+                                   ("strut", "افقی پانل", angles), ("beam", "تیر سر (ناودانی)", channels)] %}
+        <div class="f"><label>{{ label }}</label><select id="sec_{{ key }}">
+          {% for n in lst %}<option {{ 'selected' if defaults.steel[key] == n }}>{{ n }}</option>{% endfor %}</select></div>
+        {% endfor %}
+      </div>
+      <div class="row">
+        <div class="f"><label>ارتفاع پانل مهاربندی (m)</label><input id="steel_panel" type="number" step="0.05" value="{{ defaults.steel.panel }}"></div>
+        <div class="f"><label>نوع مهاربندی</label><select id="steel_bracing">
+          <option value="zigzag" {{ 'selected' if defaults.steel.bracing == 'zigzag' }}>زیگزاگ</option>
+          <option value="x" {{ 'selected' if defaults.steel.bracing == 'x' }}>ضربدری</option></select></div>
+      </div>
       <div class="row">
         <div class="f"><label>ضلع پایه مشبک (m)</label><input id="leg_width" type="number" step="0.05" value="{{ defaults.steel.leg_width }}">
           <small class="hint">فاصله محور چهار نبشی اصلی هر پایه؛ مدل‌های دفتر ۰٫۴۰ (سکسیونر ۰٫۳۰)</small></div>
@@ -234,9 +254,8 @@
           <small class="hint">ورق اتصال، پیچ و صفحه کف نسبت به وزن اعضا</small></div>
       </div>
       <p class="note" style="margin:0">سازه مطابق الگوی سازه‌های دفتر (پایه مشبک چهارنبشی، مهاربند و تیر
-        ناودانی سر سازه) ایجاد می‌شود، تحت پنج حالت بار فونداسیون به‌علاوه زلزله عمود و بار تعمیر
-        تحلیل می‌شود و برای هر گروه اعضا سبک‌ترین مقطعی که همه کنترل‌ها را پاس کند انتخاب می‌گردد.
-        سازه کلید قدرت توسط سازنده تأمین می‌شود و طراحی نمی‌گردد.</p>
+        ناودانی سر سازه) به ارتفاع Hs ساخته و تحت پنج حالت بار فونداسیون به‌علاوه زلزله عمود و بار تعمیر
+        تحلیل می‌شود. سازه کلید قدرت توسط سازنده تأمین می‌شود و طراحی نمی‌گردد.</p>
     </fieldset>
 
     <fieldset>
@@ -489,6 +508,8 @@ function populateEquipment(){
   if (fixedLayout) clearFixedLayout();
 }
 $("voltage").addEventListener("change", () => { populateEquipment(); drawPreview(); });
+function applySteelMode(){ $("secRow").style.display = $("steel_mode").value === "check" ? "" : "none"; }
+$("steel_mode").addEventListener("change", applySteelMode); applySteelMode();
 
 // نقشه جانمایی یا کی‌پلن: همه پی‌ها، انتخاب یکی
 var KP = [], KP_KIND = "";
@@ -541,6 +562,8 @@ $("kpsel").addEventListener("change", e => {
   const src = KP_KIND === "layout" ? `نقشه جانمایی «${f.name}»` : `کی‌پلن «${f.name}»`;
   setFixedLayout(src, f);
   if (f.tf) $("tf").value = f.tf;
+  if (f.groups[0] && f.groups[0].Hs) $("Hs").value = f.groups[0].Hs;
+  if (f.groups[1] && f.groups[1].Hs && $("g2_Hs")) $("g2_Hs").value = f.groups[1].Hs;
   highlightPad(f.name);
   $("msg").textContent = `پی ${f.name}: ${f.describe}. اعداد تجهیز را با اوت‌لاین پروژه کنترل کنید.`;
 });
@@ -582,7 +605,7 @@ function showFull(F){
   const rows = F.types.map(t => {
     const st = t.structures.length ? t.structures.map(s =>
       `<div><b>${esc(s.tag)}</b>: ` + Object.entries(s.sections).map(([g, v]) => `${G[g] || g} ${esc(v)}`).join("، ") +
-      ` · ${fmt(s.weight, 0)} kg · نسبت تنش ${fmt(s.ratio, 2)}</div>`).join("")
+      ` · ${fmt(s.weight, 0)} kg · نسبت تنش ${fmt(s.ratio, 2)} <b class="${s.ok ? "yes" : "no"}">${s.ok ? "✓ جواب می‌دهد" : "✗ جواب نمی‌دهد"}</b></div>`).join("")
       : `<span class="note">سازه از سازنده</span>`;
     return `<tr class="${t.ok ? "" : "bad"}"><td><a href="${t.url}" target="_blank">${esc(t.name)}</a></td><td class="num">${t.count}</td>
       <td class="num">${fmt(t.L)}×${fmt(t.B)}×${fmt(t.tf)}</td><td class="num">${t.pedestals}×${fmt(t.b)}</td>
@@ -701,6 +724,10 @@ function formPayload(){
     "steel.enabled": $("steel_enabled").checked, "steel.feed_foundation": $("steel_feed").checked,
     "steel.leg_width": num("leg_width"), "steel.k_chord": num("k_chord"),
     "steel.fy": num("steel_fy"), "steel.connection_factor": num("conn_factor"),
+    "steel.mode": $("steel_mode").value, "steel.panel": num("steel_panel"),
+    "steel.bracing": $("steel_bracing").value,
+    "steel.chord": $("sec_chord").value, "steel.brace": $("sec_brace").value,
+    "steel.strut": $("sec_strut").value, "steel.beam": $("sec_beam").value,
     "design.governing": $("governing").value, "design.bearing": $("bearing").value
   };
 }
@@ -898,7 +925,13 @@ function renderSteel(list){
     const head = `<div class="readout" style="margin-bottom:6px"><span class="big">${st.tag}</span>
       <span class="unit">${st.stands > 1 ? st.stands + " سازه تک‌پایه" : st.legs + " پایه"} · ${st.phases} فاز ·
         ارتفاع ${fmt(st.height)} m · ${st.members} عضو</span>
-      <span class="verdict ${st.ok ? "ok" : "ng"}">نسبت تنش حداکثر ${fmt(st.max_ratio, 2)}</span></div>`;
+      <span class="verdict ${st.ok ? "ok" : "ng"}">نسبت تنش حداکثر ${fmt(st.max_ratio, 2)}</span></div>` +
+      (st.mode === "check" ? (() => {
+        const bad = st.groups.filter(g => g.ratio > 1);
+        return `<div class="vverdict ${st.ok ? "ok" : "ng"}">${st.ok
+          ? "سازه تعریف‌شده با مقاطع انتخابی <b>جواب می‌دهد</b> — همه اعضا زیر نسبت تنش ۱"
+          : "سازه تعریف‌شده <b>جواب نمی‌دهد</b>: " + bad.map(g => `${g.title} (${g.section}) نسبت ${fmt(g.ratio, 2)}`).join("، ") +
+            " — مقطع این گروه را بزرگ‌تر کنید یا طراحی خودکار را ببینید"}</div>`; })() : "");
     const rows = st.groups.map(g => `<tr><td>${g.title}</td><td class="num">${g.section}</td>
       <td class="num">${g.count}</td><td class="num">${fmt(g.length, 1)}</td>
       <td class="num"><b class="${g.ratio <= 1 ? "" : "ng"}">${fmt(g.ratio, 3)}</b></td>

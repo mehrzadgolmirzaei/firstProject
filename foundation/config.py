@@ -124,6 +124,13 @@ class SteelStructure:
     min_chord: str = "L50X5"
     min_brace: str = "L40X4"
     min_beam: str = "UNP100"
+    # «design»: برنامه سبک‌ترین مقطع قابل قبول را انتخاب می‌کند
+    # «check»: مهندس مقاطع را تعیین می‌کند و برنامه فقط بارگذاری و کنترل می‌کند (مثل کنترل در SAP)
+    mode: str = "design"
+    chord: str = "L60X6"           # مقاطع حالت «check»
+    brace: str = "L40X4"
+    strut: str = "L50X5"
+    beam: str = "UNP120"
 
 
 @dataclass
