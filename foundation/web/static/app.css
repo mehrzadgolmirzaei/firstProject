@@ -317,3 +317,10 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .ltr-list{text-align:left;font-family:monospace;font-size:12px;margin:4px 0}
 #out details{margin:6px 0}
 #out details summary{cursor:pointer}
+.full-site{margin-bottom:16px}
+.full-site h2 .btn{float:left;font-size:12px;padding:4px 10px}
+.full-tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0 14px}
+.full-tot>div{border:1px solid var(--rule-soft);padding:10px;text-align:center}
+.full-tot b{display:block;font-size:22px;font-family:monospace}
+.full-tot span{font-size:12px;color:var(--ink-2)}
+.full-site td div{white-space:nowrap;font-size:12px}

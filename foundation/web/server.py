@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.11.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "1.12.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -319,6 +319,59 @@ def _dxf_candidates(f, folder):
     return out
 
 
+def _layout_full(result, cfg, form, label):
+    """
+    طراحی کامل هر تیپ پی نقشه جانمایی و ثبت هر کدام به‌صورت یک محاسبه (گزارش و نقشه جدا)؛
+    خلاصه کل پست: ابعاد، بتن، آرماتور، مقاطع سازه‌ها و فهرست کل فولاد.
+    """
+    import layoutplan as LP
+    from structural.sections import CATALOG, STEEL
+    types, steel_bill = [], {}
+    tot = {"concrete": 0.0, "rebar": 0.0, "steel": 0.0, "pads": 0}
+    for f, lay, c, run, ok in LP.design_all(result, cfg):
+        res, seis, des, qty, bbs = run
+        eq = lay.main
+        payload = to_dict(res, seis, des, qty, bbs, eq, c)
+        groups = []
+        for i, g in enumerate(lay.groups):
+            item = {"positions": [list(p) for p in g.positions]}
+            if i:
+                item["equipment"] = asdict(g.eq)
+            groups.append(item)
+        spec = {"kind": "combined", "source": f"نقشه جانمایی {label}: {f['name']}", "groups": groups}
+        cid = _store(form, eq, c, spec, payload)
+        n = f["count"]
+        structs = []
+        for st_ in payload.get("structures", []):
+            secs = {g["group"]: g["section"] for g in st_["groups"]}
+            structs.append({"tag": st_["tag"], "sections": secs, "weight": st_["weight_design"],
+                            "ratio": st_["max_ratio"], "ok": st_["ok"]})
+            tot["steel"] += st_["weight_design"] * n
+            for g in st_["groups"]:
+                sec = CATALOG.get(g["section"])
+                row = steel_bill.setdefault(g["section"], {"section": g["section"], "length": 0.0,
+                                                           "weight": 0.0, "count": 0})
+                row["length"] += g["length"] * n
+                row["count"] += g["count"] * n
+                if sec is not None:
+                    row["weight"] += g["length"] * n * sec.A * STEEL["gamma"]
+        tot["concrete"] += qty["concrete"] * n
+        tot["rebar"] += qty["rebar"] * n
+        tot["pads"] += n
+        types.append({"name": f["name"], "count": n, "L": c.foundation.L, "B": c.foundation.B,
+                      "tf": c.foundation.tf, "b": c.foundation.b, "hp": c.foundation.hp,
+                      "pedestals": sum(len(g.positions) for g in lay.groups),
+                      "concrete": round(qty["concrete"], 2), "rebar": round(qty["rebar"], 1),
+                      "ok": payload["ok"], "id": cid, "structures": structs,
+                      "url": url_for("calculation_detail", cid=cid)})
+    bill = sorted(steel_bill.values(), key=lambda r: (r["section"][0], CATALOG[r["section"]].A
+                                                       if r["section"] in CATALOG else 0))
+    for r in bill:
+        r["length"], r["weight"] = round(r["length"], 1), round(r["weight"], 1)
+    return {"types": types, "bill": bill,
+            "totals": {k: round(v, 1) for k, v in tot.items()}}
+
+
 @app.post("/api/keyplan")
 @auth.requires("engineer")
 def api_keyplan():
@@ -378,6 +431,7 @@ def api_keyplan():
         result = LP.design_layout(None, cfg, voltage_found, items=items)
         dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
         LP.plan_dxf(result, str(OUT / dxf))
+        full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None
     except InputError as exc:
         return jsonify({"error": str(exc)}), 400
     except ValueError as exc:
@@ -394,7 +448,7 @@ def api_keyplan():
                     "foundations": result["foundations"],
                     "plan": result["plan"], "notes": result["notes"], "unknown": result["unknown"],
                     "rows": [{"axis": r["axis"], "units": r["units"]} for r in result["rows"]],
-                    "dxf": url_for("download", name=dxf)})
+                    "dxf": url_for("download", name=dxf), "full": full})
 
 
 # ================================================================= تنظیمات نقشه

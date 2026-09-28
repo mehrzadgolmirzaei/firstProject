@@ -6,6 +6,7 @@
   <span class="note" id="stamp"></span>
 </header>
 
+<div class="sheet full-site" id="fullWide" style="display:none"></div>
 <div class="cols">
   <!-- ورودی -->
   <form class="sheet" id="form" autocomplete="off">
@@ -501,12 +502,14 @@ $("kpfile").addEventListener("change", e => {
   e.target.value = "";                 // انتخاب دوباره همان فایل هم دوباره خوانده شود
   uploadDrawing(file);
 });
-async function uploadDrawing(file){
+async function uploadDrawing(file, full){
   LAST_FILE = file;
+  if (full) kpStatus("در حال طراحی کامل همه پی‌ها و سازه‌ها… (چند ثانیه تا یک دقیقه)", "busy"); else
   kpStatus("در حال خواندن نقشه… (نقشه جانمایی سه‌بعدی ممکن است کمی طول بکشد)", "busy");
   $("lytBox").style.display = "none"; $("kpsel").style.display = "none";
   const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
   fd.append("form", JSON.stringify(formPayload()));
+  if (full) fd.append("full", "1");
   let d;
   try {
     const r = await fetch("/api/keyplan", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
@@ -528,6 +531,7 @@ async function uploadDrawing(file){
         (f.tf ? `×${fmt(f.tf)}` : "") + ` · ${f.count} عدد`) + `</option>`).join("");
   sel.style.display = "block";
   if (d.kind === "layout") showLayout(d);
+  if (full && d.full) { kpStatus(`طراحی کامل ${d.full.totals.pads} پی و سازه‌هایشان انجام و ثبت شد.`, "ok"); return; }
   kpStatus((d.kind === "layout"
     ? `نقشه جانمایی خوانده شد و ${KP.length} تیپ پی متناسب با فضا طراحی شد؛ پی مورد نظر را از فهرست یا روی پلان انتخاب کنید.`
     : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.") + note + ` (${file.name})`, "ok");
@@ -559,13 +563,46 @@ function showLayout(d){
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
     <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>
-    <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>`;
+    <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>
+    <button type="button" class="btn wide" id="lytFull" style="margin-top:8px">طراحی کامل همه پی‌ها و سازه‌ها (نبشی‌ها، ناودانی‌ها، بتن، آرماتور)</button>
+`;
   $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
+  $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
+  if (d.full) showFull(d.full);
   $("lytBox").style.display = "block";
   $("lytBox").querySelectorAll("g.pad").forEach(g => g.addEventListener("click", () => {
     const i = KP.findIndex(f => f.name === g.dataset.type);
     if (i >= 0) { $("kpsel").value = i; $("kpsel").dispatchEvent(new Event("change")); }
   }));
+}
+// طراحی کامل: همه تیپ‌ها، مقاطع سازه‌ها و فهرست کل فولاد
+function showFull(F){
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const G = {chord: "نبشی اصلی", brace: "مهاربند", strut: "افقی", beam: "تیر سر"};
+  const rows = F.types.map(t => {
+    const st = t.structures.length ? t.structures.map(s =>
+      `<div><b>${esc(s.tag)}</b>: ` + Object.entries(s.sections).map(([g, v]) => `${G[g] || g} ${esc(v)}`).join("، ") +
+      ` · ${fmt(s.weight, 0)} kg · نسبت تنش ${fmt(s.ratio, 2)}</div>`).join("")
+      : `<span class="note">سازه از سازنده</span>`;
+    return `<tr class="${t.ok ? "" : "bad"}"><td><a href="${t.url}" target="_blank">${esc(t.name)}</a></td><td class="num">${t.count}</td>
+      <td class="num">${fmt(t.L)}×${fmt(t.B)}×${fmt(t.tf)}</td><td class="num">${t.pedestals}×${fmt(t.b)}</td>
+      <td class="num">${fmt(t.concrete)}</td><td class="num">${fmt(t.rebar, 0)}</td><td>${st}</td>
+      <td>${t.ok ? "✓" : "✗"}</td></tr>`;
+  }).join("");
+  const bill = F.bill.map(r => `<tr><td>${esc(r.section)}</td><td class="num">${r.count}</td>
+    <td class="num">${fmt(r.length, 1)}</td><td class="num">${fmt(r.weight, 0)}</td></tr>`).join("");
+  const T = F.totals;
+  $("fullWide").style.display = "block";
+  $("fullWide").innerHTML = `<h2>طراحی کامل پست از نقشه جانمایی <button type="button" class="btn ghost" id="fullClose">بستن</button></h2>
+    <div class="full-tot"><div><b>${T.pads}</b><span>پی</span></div><div><b>${fmt(T.concrete, 1)}</b><span>m³ بتن</span></div>
+      <div><b>${fmt(T.rebar, 0)}</b><span>kg آرماتور</span></div><div><b>${fmt(T.steel, 0)}</b><span>kg فولاد سازه‌ها (با اتصالات)</span></div></div>
+    <div class="tscroll"><table class="compare"><thead><tr><th>تیپ پی</th><th>تعداد</th><th>L×B×tf (m)</th><th>ستون</th>
+      <th>بتن هر پی m³</th><th>آرماتور kg</th><th>سازه فولادی</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <h3>فهرست کل مقاطع فولادی پست</h3>
+    <table class="compare"><thead><tr><th>مقطع</th><th>تعداد عضو</th><th>طول کل m</th><th>وزن kg</th></tr></thead><tbody>${bill}</tbody></table>
+    <p class="note">هر تیپ به‌صورت یک محاسبه کامل ثبت شد؛ با کلیک روی نام تیپ، گزارش، نقشه ساخت، مدل سه‌بعدی و مدل SAP همان پی باز می‌شود.</p>`;
+  $("fullClose").addEventListener("click", () => { $("fullWide").style.display = "none"; });
+  $("fullWide").scrollIntoView({behavior: "smooth", block: "start"});
 }
 function highlightPad(name){
   document.querySelectorAll("#lytBox g.pad").forEach(g => g.classList.toggle("on", g.dataset.type === name));

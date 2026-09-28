@@ -515,3 +515,35 @@ def plan_dxf(result, path, angle=None):
         doc.header["$EXTMIN"], doc.header["$EXTMAX"] = ext.extmin, ext.extmax
     doc.saveas(path)
     return path
+
+
+# ------------------------------------------------------------------ طراحی کامل همه تیپ‌ها
+def design_all(result, cfg, max_extra_tf=0.3):
+    """
+    طراحی کامل هر تیپ پی نقشه (ستون، آرماتور، برش، پانچ، میل مهار، سازه فولادی و کنترل تداخل)؛
+    اگر کنترلی جز پایداری رد شود، ضخامت پی ۱۰ سانت‌ـ۱۰ سانت بیشتر می‌شود.
+    خروجی: [(تیپ، چیدمان، cfg، (res, seis, des, qty, bbs)، ok)]
+    """
+    import copy
+    import model as M
+    from padlayout import Group, PadLayout
+    from pipeline import run_layout
+    out = []
+    for f in result["foundations"]:
+        lay = PadLayout([Group(ALL_EQUIPMENT[g["tag"]], [tuple(p) for p in g["positions"]])
+                         for g in f["groups"]])
+        extra = 0.0
+        while True:
+            c = copy.deepcopy(cfg)
+            c.foundation.L, c.foundation.B = f["L"], f["B"]
+            c.foundation.tf = round(f["tf"] + extra, 2)
+            run = run_layout(lay, c)
+            res, des = run[0], run[2]
+            ok = (res is not None and res.ok and all(d.ok for k, d in des.items() if k != "groups")
+                  and not M.clashes(M.build(res, res.layout, des, c))
+                  and all(sd.ok for _, sd in getattr(res, "structures", []) or []))
+            if ok or extra >= max_extra_tf - 1e-9:
+                break
+            extra += 0.1
+        out.append((f, lay, c, run, ok))
+    return out

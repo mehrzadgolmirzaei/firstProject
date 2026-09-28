@@ -152,3 +152,23 @@ def test_voltage_from_layout_names(layout_file, app):
     d = r.get_json()
     assert r.status_code == 200 and d["voltage"] == "63" and d["voltage_changed"], d
     assert all(g["tag"].endswith("63") for f in d["foundations"] for g in f["groups"])
+
+
+def test_full_design_from_layout(layout_file, app):
+    """یک کلیک: همه تیپ‌ها طراحی و ثبت می‌شوند، با مقاطع سازه و فهرست کل فولاد."""
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    form = {"seismic.edition": "4", "seismic.a": 0.25, "seismic.b": 2.5, "seismic.i": 1.4,
+            "seismic.r": 2, "soil.q_base": 1.72}
+    with open(layout_file, "rb") as fh:
+        r = c.post("/api/keyplan", data={"file": (fh, "layout.dxf"), "voltage": "63",
+                                         "form": json.dumps(form), "full": "1"},
+                   headers=h, content_type="multipart/form-data")
+    d = r.get_json()
+    assert r.status_code == 200, d
+    F = d["full"]
+    assert F["totals"]["pads"] == 4 and F["totals"]["concrete"] > 0
+    ct = [t for t in F["types"] if t["name"].startswith("CT")][0]
+    assert ct["structures"] and ct["structures"][0]["sections"]["chord"].startswith("L")
+    assert {b["section"][0] for b in F["bill"]} == {"L", "U"}
+    assert all(c.get(t["url"]).status_code == 200 for t in F["types"])
