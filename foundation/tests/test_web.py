@@ -344,3 +344,11 @@ def test_sheet_preview_is_the_autocad_sheet(client):
     body = r.get_data(as_text=True)
     assert body.lstrip().startswith("<?xml") or "<svg" in body[:200]
     assert client.get("/api/sheet/999999.svg").status_code == 404
+
+
+def test_calculate_without_equipment_explains(client):
+    """محاسبه بدون انتخاب تجهیز: پیام فارسی روشن، نه خطای پایتون."""
+    r = client.post("/api/calculate", json={"equipment": {"tag": "EQ"}, "seismic.edition": "5"},
+                    headers={"X-CSRF-Token": client.csrf})
+    msg = r.get_json()["error"]
+    assert r.status_code == 400 and "انتخاب" in msg and "__init__" not in msg

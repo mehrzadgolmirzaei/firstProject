@@ -23,6 +23,13 @@ def build_equipment(data: dict) -> Equipment:
     """ساخت شیء تجهیز از دیکشنری کاتالوگ یا فرم."""
     allowed = Equipment.__dataclass_fields__
     kwargs = {k: v for k, v in data.items() if k in allowed and v not in ("", None)}
+    missing = [n for n, t in (("He", "ارتفاع تجهیز"), ("Ae", "سطح بادگیر"), ("We", "وزن تجهیز"))
+               if n not in kwargs]
+    if missing:
+        raise ValueError("تجهیز انتخاب نشده یا مشخصات آن ناقص است ("
+                         + "، ".join(t for n, t in (("He", "ارتفاع تجهیز He"), ("Ae", "سطح بادگیر Ae"),
+                                                    ("We", "وزن تجهیز We")) if n in missing)
+                         + "). یک پی را از فهرست نقشه جانمایی یا روی پلان انتخاب کنید، یا تجهیز را برگزینید.")
     kwargs.setdefault("tag", data.get("tag", "EQ"))
     kwargs.setdefault("title", data.get("title", kwargs["tag"]))
     for num in ("He", "Ae", "We", "he", "Ce", "Hs", "As", "Ws", "hs",
