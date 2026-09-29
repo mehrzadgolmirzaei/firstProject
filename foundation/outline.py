@@ -83,22 +83,50 @@ def _pymupdf():
                            "python -m pip install -r requirements.txt")
 
 
+def _ocr_module():
+    """
+    موتور OCR: rapidocr نسخه ۳ (برای همه نسخه‌های پایتون، از جمله ۳٫۱۳ به بعد) یا
+    rapidocr_onnxruntime قدیمی (فقط تا پایتون ۳٫۱۲). مدل‌ها داخل خود بسته‌اند؛ اینترنت لازم نیست.
+    """
+    import importlib.util
+    for name in ("rapidocr", "rapidocr_onnxruntime"):
+        try:
+            if importlib.util.find_spec(name) is not None:
+                return name
+        except (ImportError, ValueError):
+            continue
+    return None
+
+
 def ocr_available():
-    try:
-        import rapidocr_onnxruntime  # noqa: F401
-        return True
-    except Exception:
-        return False
+    return _ocr_module() is not None
 
 
 def _ocr_engine():
+    """تابعی که تصویر می‌گیرد و [(چهارگوشه، متن، اطمینان)] برمی‌گرداند."""
     global _ocr
     with _ocr_lock:
         if _ocr is None:
             import logging
-            from rapidocr_onnxruntime import RapidOCR
-            _ocr = RapidOCR()
-            logging.getLogger("RapidOCR").setLevel(logging.ERROR)
+            if _ocr_module() == "rapidocr":
+                from rapidocr import RapidOCR
+                eng = RapidOCR()
+
+                def run(img):
+                    r = eng(img)
+                    if r is None or r.boxes is None:
+                        return []
+                    return list(zip(r.boxes.tolist(), r.txts, r.scores))
+            else:
+                from rapidocr_onnxruntime import RapidOCR
+                eng = RapidOCR()
+
+                def run(img):
+                    res, _ = eng(img)
+                    return res or []
+            for n in ("RapidOCR", "rapidocr"):
+                logging.getLogger(n).setLevel(logging.ERROR)
+            _ocr = run
         return _ocr
 
 
@@ -121,10 +149,10 @@ def _tokens_ocr(page, dpi=200):
     import numpy as np
     pix = page.get_pixmap(dpi=dpi)
     img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)[:, :, :3]
-    res, _ = _ocr_engine()(img)
+    res = _ocr_engine()(img)
     k = 72.0 / dpi
     out = []
-    for box, txt, score in res or []:
+    for box, txt, score in res:
         if score < 0.5 or not txt.strip():
             continue
         xs = [p[0] * k for p in box]

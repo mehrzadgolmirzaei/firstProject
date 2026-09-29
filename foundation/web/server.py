@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.6.2"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.6.3"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -579,7 +579,8 @@ def api_outline():
     return jsonify({"file": f.filename, "pages": pages, "ocr": OL.ocr_available(),
                     "types": {t: EQUIPMENT_TYPES.get(t, t) for t in types},
                     "warning": (f"{scanned} صفحه اسکن است و خواندن متن تصویر (OCR) روی این رایانه "
-                                "نصب نیست؛ عددها را از تصویر همان صفحه وارد کنید."
+                                "نصب نیست. برنامه را یک بار ببندید و دوباره اجرا کنید تا خودش نصب کند "
+                                "(اینترنت لازم است)؛ تا آن موقع عددها را از تصویر همان صفحه وارد کنید."
                                 if scanned else "")})
 
 
@@ -1178,13 +1179,28 @@ def ensure_requirements():
             print("نصب انجام نشد؛ اتصال اینترنت را بررسی کنید و دستور زیر را در پوشه foundation بزنید:\n"
                   "  python -m pip install -r requirements.txt")
         importlib.invalidate_caches()
+    # OCR اختیاری: هر بار که فهرست requirements-ocr عوض شود دوباره امتحان می‌شود (نه در هر اجرا)
+    import hashlib
+    req = root / "requirements-ocr.txt"
     marker = root / ".ocr_tried"
-    if importlib.util.find_spec("rapidocr_onnxruntime") is None and not marker.exists():
-        print("نصب خواندن متن نقشه‌های اسکن‌شده (OCR، اختیاری، یک بار) …")
-        subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
-                        "-r", str(root / "requirements-ocr.txt")],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        marker.write_text("1")
+    stamp = hashlib.md5(req.read_bytes()).hexdigest() if req.exists() else ""
+    have = (importlib.util.find_spec("rapidocr") is not None
+            or importlib.util.find_spec("rapidocr_onnxruntime") is not None)
+    if req.exists() and (not marker.exists() or marker.read_text().strip() != stamp) and \
+            importlib.util.find_spec("rapidocr") is None:
+        print("نصب خواندن متن نقشه‌های اسکن‌شده (OCR، اختیاری) …")
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
+                            "-r", str(req)], capture_output=True, text=True)
+        if r.returncode:
+            last = [ln for ln in (r.stderr or "").splitlines() if ln.strip()][-2:]
+            print("OCR نصب نشد (برنامه بدون آن هم کار می‌کند؛ صفحه‌های اسکن را دستی وارد کنید):")
+            for ln in last:
+                print("   " + ln)
+        else:
+            print("OCR نصب شد.")
+            have = True
+        marker.write_text(stamp)
+    print("خواندن نقشه اسکن‌شده (OCR): " + ("آماده" if have else "نصب نیست"))
 
 
 if __name__ == "__main__":
