@@ -300,3 +300,48 @@ def test_duplicate_block_counted_once():
     st, _, _ = LP.site_stations(_soleimani_bays(), "63")
     ct = [s for s in st if s.kind == "CT"]
     assert len(ct) == 2 and all(s.hs == pytest.approx(2.13) for s in ct)
+
+
+def _future_sheet():
+    """
+    برگه‌ای مثل «04 HV Switchgear Layout» سلیمانی: xref نقشه سه‌بعدی (_3D) با جابه‌جایی، و ابر
+    FUTURE PLAN روی viewport فضای کاغذ، دور bay دوم (x ≈ ۱۶۵ تا ۱۷۰ m نقشه سه‌بعدی).
+    """
+    import ezdxf
+    doc = ezdxf.new("R2010")
+    doc.blocks.new("_3D")
+    ins = (-93686.0, -88949.0)
+    doc.modelspace().add_blockref("_3D", ins)
+    ps = doc.layouts.get("Layout1")
+    k = 100.0                                                # مقیاس viewport: ۱ کاغذ = ۱۰۰ mm مدل
+    vp = ps.add_viewport(center=(100, 50), size=(300, 200), view_center_point=(167000 + ins[0], 126000 + ins[1]),
+                         view_height=200 * k)
+    vp.dxf.status = 2
+    to_paper = lambda x, y: (100 + (x * 1000 - 167000) / k,
+                             50 + (y * 1000 - 126000) / k)
+    x0, y0 = to_paper(164.5, 118.0)
+    x1, y1 = to_paper(171.0, 134.0)
+    pts, n = [], 10
+    for i in range(n):                                       # ابر: کمان‌های پیاپی دور مستطیل
+        pts.append((x0 + (x1 - x0) * i / n, y0, 0, 0, 0.4))
+    for i in range(n):
+        pts.append((x1, y0 + (y1 - y0) * i / n, 0, 0, 0.4))
+    for i in range(n):
+        pts.append((x1 - (x1 - x0) * i / n, y1, 0, 0, 0.4))
+    for i in range(n):
+        pts.append((x0, y1 - (y1 - y0) * i / n, 0, 0, 0.4))
+    ps.add_lwpolyline(pts, format="xyseb", close=True)
+    ps.add_text("FUTURE PLAN", dxfattribs={"insert": (x1 + 5, y0)})
+    ps.add_lwpolyline([(p[0] + 400, p[1], 0, 0, 0.4) for p in pts], format="xyseb")   # ابر راهنما، دور از viewport
+    return doc
+
+
+def test_future_plan_cloud_excludes_bay():
+    zones = LP.future_zones(_future_sheet(), "_3D")
+    assert len(zones) == 1
+    z = zones[0] / 1000
+    assert z[:, 0].min() == pytest.approx(164.5, abs=0.01) and z[:, 1].max() == pytest.approx(134.0, abs=0.01)
+    r = LP.design_layout(None, kimia_config(), "63", items=_soleimani_bays(), future=zones)
+    assert sum(f["count"] for f in r["foundations"]) == 5                  # فقط bay اول
+    assert any("FUTURE PLAN" in n for n in r["notes"])
+    assert sum(s["future"] for s in r["plan"]["stations"]) == 8               # هشت تجهیز bay دوم

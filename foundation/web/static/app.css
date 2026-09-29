@@ -394,3 +394,6 @@ input.from-outline{border-color:var(--steel);background:#EEF3F6}
 .inline-f{display:flex;align-items:center;gap:8px;margin:6px 0 0}
 .inline-f label{margin:0;font-size:13px}
 .inline-f input{width:80px}
+.lyt-plan rect.fu{fill:none;stroke:#6FA0C8;stroke-width:.05;stroke-dasharray:.25 .15}
+.inline-f.chk{font-size:13px;display:flex;gap:6px;align-items:center}
+.inline-f.chk input{width:auto}

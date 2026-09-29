@@ -40,6 +40,7 @@
         می‌توان به‌صورت ZIP داد. <b>کی‌پلن:</b> ابعاد و ستون‌های پی‌های موجود خوانده می‌شود.</small>
       <div class="f inline-f"><label>فاصله آزاد بین پی‌ها (m)</label>
         <input id="pad_gap" type="number" step="0.05" min="0" max="1" value="0.20"></div>
+      <label class="inline-f chk"><input id="future_design" type="checkbox"> محدوده «FUTURE PLAN» نقشه هم طراحی شود</label>
       <div id="kpMsg" class="kp-msg" style="display:none"></div>
       <select id="kpsel" class="no-final" style="display:none;margin-top:6px"></select>
       <div id="lytBox" class="lyt-box" style="display:none"></div>
@@ -610,7 +611,7 @@ function showLayout(d){
   const y0 = Math.min(...all.map(a => a[2])) - 1, y1 = Math.max(...all.map(a => a[3])) + 1;
   const Y = y => (y0 + y1 - y);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  const st = P.stations.map(s => `<rect class="${s.design ? "eq" : "ob"}" x="${s.x0}" y="${Y(s.y1)}"
+  const st = P.stations.map(s => `<rect class="${s.design ? "eq" : (s.future ? "fu" : "ob")}" x="${s.x0}" y="${Y(s.y1)}"
       width="${s.x1 - s.x0}" height="${s.y1 - s.y0}"><title>${esc(s.label)}</title></rect>`).join("");
   const pads = P.pads.map(p => `<g class="pad" data-type="${esc(p.type)}"><rect x="${p.cx - p.dx / 2}"
       y="${Y(p.cy + p.dy / 2)}" width="${p.dx}" height="${p.dy}"><title>${esc(p.type)}</title></rect>
@@ -905,6 +906,7 @@ function formPayload(){
     },
     layout: layoutPayload(),
     "layout.gap": num("pad_gap"),
+    "layout.future": $("future_design").checked ? "design" : "",
     "seismic.k_lateral": num("k_lateral"),
     "seismic.edition": $("edition").value,
     "seismic.ss": num("ss"), "seismic.s1": num("s1"),

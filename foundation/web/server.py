@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.4.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.5.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -465,13 +465,14 @@ def api_keyplan():
             stations, _, _ = LP.site_stations(items, v, axes)
             n = sum(1 for s in stations if s.key)
             if n:
-                docs.append((n, label, items, v, axes))
+                docs.append((n, label, items, v, axes, doc))
             if n >= 3:
                 break
         if not docs:
             return jsonify({"error": "نه بلاک پی کی‌پلن (مثل LA+CVT-3-2.5) پیدا شد، نه تجهیز در "
                                      "نقشه جانمایی (بلاک‌هایی با نام LA، CT، CB، DS، CVT، PI)."}), 400
-        _, label, items, voltage_found, axes = max(docs, key=lambda d: d[0])
+        _, label, items, voltage_found, axes, doc = max(docs, key=lambda d: d[0])
+        del docs
         try:
             form = json.loads(request.form.get("form") or "{}")
         except ValueError:
@@ -484,8 +485,22 @@ def api_keyplan():
         gap = 0.20 if gap is None else gap
         if not 0 <= gap <= 1:
             raise InputError("فاصله آزاد بین پی‌ها باید بین ۰ و ۱ متر باشد.")
+        # محدوده FUTURE PLAN: از ابرهای همین نقشه یا برگه‌هایی از ZIP که همین فایل را xref کرده‌اند
+        future = []
+        if form.get("layout.future") != "design":
+            future = LP.future_zones(doc)
+            target = Path(label).stem
+            for path, lab in cands:
+                if lab == label or Path(path).stat().st_size > 30e6:
+                    continue
+                try:
+                    future += LP.future_zones(ezdxf.readfile(str(path)), target)
+                except Exception:
+                    continue
+        del doc
         with outline_values(voltage_found, _outline_form()):
-            result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes, gap=gap)
+            result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes, gap=gap,
+                                      future=future)
             dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
             LP.plan_dxf(result, str(OUT / dxf))
             full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None

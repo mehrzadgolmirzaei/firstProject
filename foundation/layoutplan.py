@@ -266,6 +266,7 @@ class SiteStation:
     key: str = ""              # کلید کاتالوگ؛ خالی = مانع
     note: str = ""
     points: list = None        # ستون‌های تجهیزهای تک‌فاز یک ایستگاه خوشه‌ای (m، دستگاه ردیف‌ها)
+    future: bool = False       # در محدوده FUTURE PLAN نقشه
 
     @property
     def cx(self):
@@ -574,8 +575,90 @@ def row_stations(row, stations, gap=0.2, B_hi=5.0, L_hi=6.0):
 
 
 # ------------------------------------------------------------------ طراحی کل نقشه
+# ------------------------------------------------------------------ محدوده آینده (FUTURE PLAN)
+FUTURE_TEXT = re.compile(r"FUTURE|OUT\s*OF\s*SCOPE|آینده", re.I)
+
+
+def _clouds(space):
+    """ابرهای نقشه (پلی‌لاین با کمان‌های پیاپی) در یک فضا: [(نقاط، (xmin, ymin, xmax, ymax))]."""
+    out = []
+    for e in space.query("LWPOLYLINE"):
+        pts = list(e.get_points("xyb"))
+        if len(pts) >= 8 and sum(1 for p in pts if abs(p[2]) > 1e-6) >= 0.7 * len(pts):
+            xy = np.array([(p[0], p[1]) for p in pts])
+            out.append((xy, (*xy.min(0), *xy.max(0))))
+    return out
+
+
+def _labelled_clouds(space):
+    """ابرهایی که متن FUTURE / OUT OF SCOPE کنارشان است (نه ابر بازنگری یا راهنمای نقشه)."""
+    texts = []
+    for t in space.query("TEXT MTEXT"):
+        s = t.dxf.text if t.dxftype() == "TEXT" else t.text
+        if FUTURE_TEXT.search(s or ""):
+            texts.append((t.dxf.insert.x, t.dxf.insert.y))
+    out = []
+    for xy, (x0, y0, x1, y1) in _clouds(space):
+        r = 0.5 * max(x1 - x0, y1 - y0)
+        if any(x0 - r <= tx <= x1 + r and y0 - r <= ty <= y1 + r for tx, ty in texts):
+            out.append(xy)
+    return out
+
+
+def future_zones(doc, target=None):
+    """
+    محدوده‌های «FUTURE PLAN» نقشه (mm) در مختصات مدل؛ اگر target داده شود (نام xref، مثل _3D)،
+    در مختصات همان xref. ابر ممکن است در فضای مدل باشد یا روی viewport فضای کاغذ کشیده شده باشد.
+    """
+    zones = list(_labelled_clouds(doc.modelspace()))
+    for lay in doc.layouts:
+        if lay.name == "Model":
+            continue
+        clouds = _labelled_clouds(lay)
+        if not clouds:
+            continue
+        for v in lay.query("VIEWPORT"):
+            if v.dxf.status < 2 or not v.dxf.height:
+                continue
+            cx, cy = v.dxf.center.x, v.dxf.center.y
+            w, h = v.dxf.width / 2, v.dxf.height / 2
+            k = v.dxf.view_height / v.dxf.height
+            tw = math.radians(v.dxf.get("view_twist_angle", 0.0) or 0.0)
+            vc = v.dxf.view_center_point
+            for xy in clouds:
+                m = xy.mean(0)
+                if not (cx - w <= m[0] <= cx + w and cy - h <= m[1] <= cy + h):
+                    continue
+                d = (xy - (cx, cy)) * k
+                rot = np.array([[math.cos(-tw), -math.sin(-tw)], [math.sin(-tw), math.cos(-tw)]])
+                zones.append(d @ rot.T + (vc.x, vc.y))
+    if target is None:
+        return zones
+    out = []
+    for ins in doc.modelspace().query("INSERT"):
+        if ins.dxf.name.lower() != target.lower():
+            continue
+        a = math.radians(ins.dxf.rotation)
+        rot = np.array([[math.cos(-a), -math.sin(-a)], [math.sin(-a), math.cos(-a)]])
+        p0 = (ins.dxf.insert.x, ins.dxf.insert.y)
+        out += [((z - p0) @ rot.T) / (ins.dxf.xscale or 1.0) for z in zones]
+    return out
+
+
+def _inside(pt, poly):
+    x, y = pt
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        x1, y1 = poly[i]
+        x2, y2 = poly[(i + 1) % n]
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            inside = not inside
+    return inside
+
+
 def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_span=1.6,
-                  items=None, axes=None):
+                  items=None, axes=None, future=None):
     """
     خروجی: {"foundations": [مثل کی‌پلن]، "rows": [...]، "plan": داده نقشه، "unknown": [...]،
     "notes": [...]}
@@ -586,11 +669,22 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
         doc = ezdxf.readfile(path)
         items, axes = read_items(None, doc=doc), read_axes(doc)
     stations, ang, unknown = site_stations(items, voltage, axes)
+    n_future = 0
+    for st in stations:                      # محدوده آینده: طراحی نمی‌شود، فقط جایش گرفته است
+        if st.key and future:
+            pts = np.vstack([it.pts[:, :2] for it in st._base])
+            c = (pts.min(0) + pts.max(0)) / 2
+            if any(_inside(c, z) for z in future):
+                st.key, st.future = "", True
+                n_future += 1
     stations = _cluster_singles(stations)
     if not any(s.key for s in stations):
         raise ValueError("در نقشه تجهیز قابل طراحی (LA، CT، CB، DS، CVT، PI …) پیدا نشد")
     rows = find_rows(stations)
     notes = [f"{s.names[0].split('$0$')[-1]}: {s.note}" for s in stations if s.note]
+    if n_future:
+        notes.append(f"{n_future} تجهیز در محدوده «FUTURE PLAN» نقشه است؛ طراحی نشد و فقط جایش در "
+                     "چیدمان پی‌های مجاور در نظر گرفته شد.")
     by_axis = Counter(s.kind for s in stations if s.by_axis)
     if by_axis:
         notes.append("نوع این پی‌ها از برچسب محورهای نقشه تشخیص داده شد (نام بلاک چیزی نمی‌گفت): "
@@ -626,6 +720,7 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
             units.append(u.label)
         row_out.append({"axis": row.axis, "units": units,
                         "merges": [list(m) for m in res["merges"]]})
+    _unify(pads, stations, gap)
     notes += _pad_clashes(pads, gap)
     notes = list(dict.fromkeys(notes))
     found = _foundations(pads)
@@ -633,6 +728,57 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
         f["b"] = cfg.foundation.b
     return {"foundations": found, "rows": row_out, "angle": ang,
             "plan": _plan(stations, pads), "unknown": unknown, "notes": notes}
+
+
+def _fits(p, others, obstacles, gap):
+    for q in others:
+        if q is p:
+            continue
+        sx = abs(p["cx"] - q["cx"]) - (p["dx"] + q["dx"]) / 2
+        sy = abs(p["cy"] - q["cy"]) - (p["dy"] + q["dy"]) / 2
+        if max(sx, sy) < gap - 1e-6:
+            return False
+    for x0, x1, y0, y1 in obstacles:
+        sx = max(x0 - (p["cx"] + p["dx"] / 2), (p["cx"] - p["dx"] / 2) - x1)
+        sy = max(y0 - (p["cy"] + p["dy"] / 2), (p["cy"] - p["dy"] / 2) - y1)
+        if max(sx, sy) < gap - 1e-6:
+            return False
+    return True
+
+
+def _unify(pads, stations, gap):
+    """
+    یکسان‌سازی تیپ‌ها مثل کی‌پلن دفتر: همه پی‌های یک ترکیب تجهیز (LA، CB، LA+CT …) یک اندازه
+    می‌گیرند اگر اندازه‌ای باشد که در همه جاها هم پایدار باشد و هم جا شود؛ از میان چنین
+    اندازه‌هایی کمترین حجم کل. اگر نبود، اندازه‌های جدا می‌مانند.
+    """
+    obstacles = [(s.x0, s.x1, s.y0, s.y1) for s in stations if not s.key and s.kind != ""]
+    groups = defaultdict(list)
+    for p in pads:
+        groups[(p["label"], tuple(round(g.eq.Hs, 2) for g in p["unit"].layout.groups))].append(p)
+    for ps in groups.values():
+        if len({(p["B"], p["L"]) for p in ps}) < 2:
+            continue
+        cands = sorted({(p["B"], p["L"], p["tf"]) for p in ps} |
+                       {(max(p["B"] for p in ps), max(p["L"] for p in ps), max(p["tf"] for p in ps))},
+                       key=lambda c: c[0] * c[1] * c[2])
+        for B, L, tf in cands:
+            stable = all(any(abs(o[0] - B) < 1e-6 and o[1] <= L + 1e-6 and o[2] <= tf + 1e-6
+                             for o in p["unit"].options) or (B, L, tf) == (p["B"], p["L"], p["tf"])
+                         for p in ps)
+            if not stable:
+                continue
+            old = [(p["B"], p["L"], p["tf"], p["dx"], p["dy"], p["volume"]) for p in ps]
+            for p in ps:
+                p["B"], p["L"], p["tf"] = B, L, tf
+                p["dx"], p["dy"] = (B, L) if p["along_x"] else (L, B)
+                p["volume"] = B * L * tf
+            if all(_fits(p, pads, obstacles, gap) for p in ps):
+                for p in ps:
+                    p["unit"].choice = (B, L, tf, B * L * tf)
+                break
+            for p, o in zip(ps, old):
+                p["B"], p["L"], p["tf"], p["dx"], p["dy"], p["volume"] = o
 
 
 def _pad_clashes(pads, gap):
@@ -696,7 +842,8 @@ def _foundations(pads):
 def _plan(stations, pads):
     """داده پلان برای نمایش (m، دستگاه ردیف‌ها)."""
     return {"stations": [{"label": s.label, "x0": round(s.x0, 3), "x1": round(s.x1, 3),
-                          "y0": round(s.y0, 3), "y1": round(s.y1, 3), "design": bool(s.key)}
+                          "y0": round(s.y0, 3), "y1": round(s.y1, 3), "design": bool(s.key),
+                          "future": bool(getattr(s, "future", False))}
                          for s in stations],
             "pads": [{"label": p["label"], "type": p.get("type", ""), "cx": round(p["cx"], 3), "cy": round(p["cy"], 3),
                       "dx": p["dx"], "dy": p["dy"], "L": p["L"], "B": p["B"],
