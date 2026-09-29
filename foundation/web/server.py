@@ -21,10 +21,10 @@ from calc_service import (build_equipment, run_layout, to_dict, layout_from_spec
                           layout_problems, ALL_EQUIPMENT, VOLTAGE_LEVELS, EQUIPMENT_TYPES)
 from config import ProjectConfig
 from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED, WHY
-from equipment import CATALOG  # noqa: F401
+from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.2.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.3.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -410,6 +410,15 @@ def _layout_full(result, cfg, form, label):
             "totals": {k: round(v, 1) for k, v in tot.items()}}
 
 
+def _outline_form():
+    """عددهای تأییدشده اوت‌لاین که همراه فرم آمده: {نوع: {He, he, Ae, We}}."""
+    import outline as OL
+    try:
+        return OL.overrides_ok(json.loads(request.form.get("outline") or "{}"))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise InputError(f"عددهای اوت‌لاین نامعتبر است: {exc}")
+
+
 @app.post("/api/keyplan")
 @auth.requires("engineer")
 def api_keyplan():
@@ -471,10 +480,11 @@ def api_keyplan():
             raise InputError("این فایل نقشه جانمایی است. برای طراحی پی‌ها ابتدا مشخصات ساختگاه "
                              "(زلزله، خاک و باد) را در فرم وارد کنید و سپس دوباره بارگذاری کنید.")
         cfg = config_from_form(form)
-        result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes)
-        dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
-        LP.plan_dxf(result, str(OUT / dxf))
-        full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None
+        with outline_values(voltage_found, _outline_form()):
+            result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes)
+            dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
+            LP.plan_dxf(result, str(OUT / dxf))
+            full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None
     except InputError as exc:
         return jsonify({"error": str(exc)}), 400
     except ValueError as exc:
@@ -492,6 +502,68 @@ def api_keyplan():
                     "plan": result["plan"], "notes": result["notes"], "unknown": result["unknown"],
                     "rows": [{"axis": r["axis"], "units": r["units"]} for r in result["rows"]],
                     "dxf": url_for("download", name=dxf), "full": full})
+
+
+# ================================================================= اوت‌لاین سازنده
+@app.post("/api/outline")
+@auth.requires("engineer")
+def api_outline():
+    """
+    نقشه اوت‌لاین سازنده (PDF، یک یا چند صفحه): نوع تجهیز و عددهای بار هر صفحه، کنار عدد
+    کاتالوگ همان نوع. فقط پیشنهاد است؛ مهندس با دیدن تصویر صفحه تأیید می‌کند.
+    """
+    import outline as OL
+    f = request.files.get("file")
+    voltage = request.form.get("voltage") or "230"
+    if not f or not f.filename.lower().endswith(".pdf"):
+        return jsonify({"error": "نقشه اوت‌لاین را به‌صورت PDF بدهید."}), 400
+    if voltage not in VOLTAGE_LEVELS:
+        return jsonify({"error": "سطح ولتاژ نامعتبر است."}), 400
+    oid = secrets.token_hex(8)
+    folder = OUT / f"outline_{oid}"
+    folder.mkdir()
+    try:
+        f.save(folder / "source.pdf")
+        pages = OL.read_pdf(str(folder / "source.pdf"))
+    except Exception as exc:
+        app.logger.exception("outline")
+        return jsonify({"error": f"PDF خوانده نشد ({type(exc).__name__}: {exc})"}), 400
+    types = VOLTAGE_LEVELS[voltage]["types"]
+    for p in pages:
+        key = types.get(p["type"])
+        eq = ALL_EQUIPMENT.get(key) if key else None
+        p["catalog"] = {k: getattr(eq, k) for k in ("He", "he", "Ae", "We")} if eq else None
+        p["catalog_key"] = key or ""
+        p["image"] = url_for("outline_page", oid=oid, page=p["page"])
+    (folder / "pages.json").write_text(json.dumps(pages, ensure_ascii=False))
+    auth.record("خواندن اوت‌لاین", "outline", None,
+                {"file": f.filename, "pages": len(pages),
+                 "types": [p["type"] for p in pages]})
+    scanned = sum(p["method"] == "none" for p in pages)
+    return jsonify({"file": f.filename, "pages": pages, "ocr": OL.ocr_available(),
+                    "types": {t: EQUIPMENT_TYPES.get(t, t) for t in types},
+                    "warning": (f"{scanned} صفحه اسکن است و خواندن متن تصویر (OCR) روی این رایانه "
+                                "نصب نیست؛ عددها را از تصویر همان صفحه وارد کنید."
+                                if scanned else "")})
+
+
+@app.route("/api/outline/<oid>/<int:page>.png")
+@auth.login_required
+def outline_page(oid, page):
+    import outline as OL
+    if not re.fullmatch(r"[0-9a-f]{16}", oid):
+        abort(404)
+    folder = OUT / f"outline_{oid}"
+    src = folder / "source.pdf"
+    if not src.is_file():
+        abort(404)
+    pages = {p["page"]: p for p in json.loads((folder / "pages.json").read_text())}
+    if page not in pages:
+        abort(404)
+    png = folder / f"p{page}.png"
+    if not png.is_file():
+        png.write_bytes(OL.render_page(str(src), page, pages[page]["fields"]))
+    return send_file(png, mimetype="image/png")
 
 
 # ================================================================= تنظیمات نقشه

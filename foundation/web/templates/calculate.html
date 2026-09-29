@@ -43,6 +43,17 @@
       <div id="lytBox" class="lyt-box" style="display:none"></div>
     </div>
 
+    <div class="f">
+      <label>اوت‌لاین سازنده تجهیزات (PDF) — اختیاری</label>
+      <input id="olfile" type="file" accept=".pdf">
+      <small class="hint">هر صفحه یک تجهیز. ارتفاع، وزن، سطح بادگیر، مرکز ثقل و بار مجاز ترمینال خوانده
+        و کنار تصویر همان صفحه برای تأیید نشان داده می‌شود؛ عدد تأییدشده برای همه پی‌های آن نوع تجهیز
+        (فرم و طراحی کامل از نقشه جانمایی) به جای عدد کاتالوگ به کار می‌رود.</small>
+      <div id="olMsg" class="kp-msg" style="display:none"></div>
+      <div id="olChips" class="ol-chips"></div>
+      <div id="olBox"></div>
+    </div>
+
     <div class="f no-final">
       <label>تجهیز</label>
       <select id="preset"></select>
@@ -545,6 +556,7 @@ async function uploadDrawing(file, full){
   $("lytBox").style.display = "none"; $("kpsel").style.display = "none";
   const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
   fd.append("form", JSON.stringify(formPayload()));
+  fd.append("outline", JSON.stringify(outlineValues()));
   if (full) fd.append("full", "1");
   let d;
   try {
@@ -680,6 +692,123 @@ function highlightPad(name){
   document.querySelectorAll("#lytBox g.pad").forEach(g => g.classList.toggle("on", g.dataset.type === name));
 }
 
+// ---- اوت‌لاین سازنده: عددهای تأییدشده هر نوع تجهیز، به جای کاتالوگ
+const OL_FIELDS = [["He", "ارتفاع تجهیز", "m", 3], ["he", "مرکز ثقل", "m", 3],
+                   ["Ae", "سطح بادگیر", "m²", 2], ["We", "وزن یک فاز", "kg", 0]];
+let OUTLINE = {};
+try { OUTLINE = JSON.parse(localStorage.getItem("outline.v1") || "{}") || {}; } catch (_) { OUTLINE = {}; }
+function typeOf(key){
+  for (const v in VOLTAGES) for (const t in VOLTAGES[v].types) if (VOLTAGES[v].types[t] === key) return t;
+  return key;
+}
+function olType(t){ return String(t || "").replace(/[12]$/, ""); }
+function outlineValues(){
+  const o = {};
+  for (const t in OUTLINE) { o[t] = {}; OL_FIELDS.forEach(([k]) => { if (OUTLINE[t][k]) o[t][k] = OUTLINE[t][k]; }); }
+  return o;
+}
+function saveOutline(){
+  try { localStorage.setItem("outline.v1", JSON.stringify(OUTLINE)); } catch (_) {}
+  const box = $("olChips");
+  const tags = Object.keys(OUTLINE);
+  box.innerHTML = !tags.length ? "" : `<span class="note">عدد اوت‌لاین به جای کاتالوگ:</span> ` + tags.map(t => {
+    const o = OUTLINE[t];
+    const bits = OL_FIELDS.filter(([k]) => o[k]).map(([k, , u, d]) => `${k} ${fmtN(o[k], d)} ${u}`).join(" · ");
+    return `<span class="ol-chip" title="${esc(o.src || "")}"><b>${esc(TYPES[t] || t)}</b> ${bits}` +
+           ` <a href="#" data-t="${esc(t)}" title="برگشت به عدد کاتالوگ">✕</a></span>`;
+  }).join("");
+  box.querySelectorAll("a[data-t]").forEach(a => a.addEventListener("click", ev => {
+    ev.preventDefault(); delete OUTLINE[a.dataset.t]; saveOutline(); reapplyPreset();
+  }));
+}
+function reapplyPreset(){ if ($("preset").value) $("preset").dispatchEvent(new Event("change")); }
+const fmtN = (v, d) => v === null || v === undefined || v === "" ? "—" : Number(v).toLocaleString("en-US", {maximumFractionDigits: d});
+const esc = t => String(t ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function olStatus(text, kind){
+  const m = $("olMsg"); m.textContent = text; m.className = "kp-msg " + (kind || "");
+  m.style.display = text ? "block" : "none";
+}
+$("olfile").addEventListener("change", async e => {
+  const file = e.target.files[0]; if (!file) return;
+  e.target.value = "";
+  olStatus("در حال خواندن اوت‌لاین… (صفحه‌های اسکن‌شده با OCR خوانده می‌شوند؛ هر صفحه چند ثانیه)", "busy");
+  $("olBox").innerHTML = "";
+  const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
+  let d;
+  try {
+    const r = await fetch("/api/outline", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
+    try { d = await r.json(); } catch (_) { d = {error: "خطای سرور (" + r.status + ")."}; }
+  } catch (err) { d = {error: "ارتباط با سرور برقرار نشد: " + err}; }
+  if (d.error) { olStatus(`${file.name}: ${d.error}`, "ng"); return; }
+  olStatus(`${file.name}: ${d.pages.length} صفحه خوانده شد. هر صفحه را با تصویرش مقایسه و تأیید کنید.` +
+           (d.warning ? " " + d.warning : ""), d.warning ? "warn" : "ok");
+  d.pages.forEach(p => $("olBox").appendChild(outlineCard(p, d.types)));
+});
+
+function outlineCard(p, types){
+  const card = document.createElement("div");
+  card.className = "ol-card";
+  const how = {text: "متن PDF", ocr: "OCR تصویر", none: "اسکن — خوانده نشد"}[p.method] || p.method;
+  const opts = `<option value="">— نوع تجهیز —</option>` + Object.keys(types)
+    .map(t => `<option value="${t}" ${t === p.type ? "selected" : ""}>${esc(types[t])}</option>`).join("");
+  const F = p.fields.F;
+  const rows = OL_FIELDS.map(([k, title, u, dg]) => {
+    const f = p.fields[k] || {}, cat = p.catalog ? p.catalog[k] : null;
+    const v = f.value ?? "";
+    const diff = (v !== "" && cat) ? (v - cat) / cat : null;
+    const chips = (f.options || []).map(o => `<button type="button" class="ol-opt" data-k="${k}" data-v="${o}">${o}</button>`).join("");
+    return `<tr class="${f.value === undefined ? "ol-miss" : (f.confident ? "" : "ol-check")}">
+      <td><b>${k}</b> ${title} <small>(${u})</small></td>
+      <td><input type="number" step="any" data-k="${k}" value="${v}"></td>
+      <td class="num">${fmtN(cat, dg)}</td>
+      <td class="num ${diff !== null && Math.abs(diff) > 0.05 ? "ol-diff" : ""}">${diff === null ? "" : (diff > 0 ? "+" : "") + (diff * 100).toFixed(0) + "٪"}</td>
+      <td class="ol-how">${f.value === undefined ? "در نقشه پیدا نشد" : esc(f.how)}${f.note ? `<small>${esc(f.note)}</small>` : ""}${chips ? `<div>${chips}</div>` : ""}</td></tr>`;
+  }).join("");
+  card.innerHTML = `
+    <div class="ol-head"><b>صفحه ${p.page}</b> <select class="ol-type">${opts}</select>
+      <span class="ol-badge ${p.method}">${how}</span><small class="note">${esc(p.title)}</small></div>
+    <div class="ol-body">
+      <a href="${p.image}" target="_blank" title="تصویر کامل؛ جای هر عدد برداشته‌شده قاب رنگی خورده">
+        <img src="${p.image}" loading="lazy" alt="صفحه ${p.page}"></a>
+      <div>
+        <table class="ol-tab"><thead><tr><th></th><th>اوت‌لاین</th><th>کاتالوگ</th><th>اختلاف</th><th>منبع</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+        ${F ? `<p class="note">بار مجاز ترمینال سازنده: <b>${fmtN(F.value, 0)} N</b> (${esc(F.how)})
+          <span class="ol-fc"></span></p>` : ""}
+        <div class="ol-act"><button type="button" class="btn ol-ok">تأیید و به‌کار بردن</button>
+          <button type="button" class="btn quiet ol-skip">کنار گذاشتن</button></div>
+      </div>
+    </div>`;
+  const sel = card.querySelector(".ol-type");
+  const checkF = () => {                       // کشش هادی در اتصال کوتاه در برابر بار مجاز ترمینال
+    const el = card.querySelector(".ol-fc"); if (!el || !F) return;
+    const key = VOLTAGES[$("voltage").value].types[sel.value], eq = BUILTIN[key];
+    if (!eq) { el.textContent = ""; return; }
+    const need = (eq.Fc || 0) * 9.81;
+    el.innerHTML = need <= F.value
+      ? ` — کشش عادی هادی (کاتالوگ) ${fmtN(need, 0)} N ≤ مجاز <span class="yes">✓</span>`
+      : ` — کشش عادی هادی (کاتالوگ) ${fmtN(need, 0)} N بیشتر از بار مجاز ترمینال است <span class="no">✗</span>`;
+  };
+  sel.addEventListener("change", checkF); checkF();
+  card.querySelectorAll(".ol-opt").forEach(b => b.addEventListener("click", () => {
+    card.querySelector(`input[data-k="${b.dataset.k}"]`).value = b.dataset.v;
+  }));
+  card.querySelector(".ol-skip").addEventListener("click", () => card.remove());
+  card.querySelector(".ol-ok").addEventListener("click", () => {
+    const t = olType(sel.value);
+    if (!t) { sel.focus(); olStatus(`صفحه ${p.page}: نوع تجهیز را انتخاب کنید.`, "ng"); return; }
+    const o = {src: `اوت‌لاین صفحه ${p.page}${p.title ? " — " + p.title : ""}`};
+    card.querySelectorAll("input[data-k]").forEach(i => { const v = parseFloat(i.value); if (v > 0) o[i.dataset.k] = v; });
+    if (F) o.F = F.value;
+    OUTLINE[t] = o; saveOutline(); reapplyPreset();
+    card.classList.add("done");
+    card.querySelector(".ol-act").innerHTML = `<span class="yes">✓ برای ${esc(TYPES[t] || t)} به کار رفت</span>`;
+  });
+  return card;
+}
+saveOutline();
+
 $("preset").addEventListener("change", e => {
   const eq = BUILTIN[e.target.value];
   const need = OUTLINE_FIELDS[e.target.value] || [];
@@ -704,6 +833,15 @@ $("preset").addEventListener("change", e => {
     el.value = "";
     el.classList.add("needs-outline");
     el.placeholder = "از اوت‌لاین سازنده";
+  });
+
+  // عدد تأییدشده اوت‌لاین همین نوع تجهیز، روی عدد کاتالوگ
+  document.querySelectorAll(".from-outline").forEach(el => { el.classList.remove("from-outline"); el.title = ""; });
+  const o = OUTLINE[olType(typeOf(e.target.value))];
+  if (o) OL_FIELDS.forEach(([k]) => {
+    if (!o[k]) return;
+    $(k).value = o[k]; $(k).classList.add("from-outline"); $(k).classList.remove("needs-outline");
+    $(k).title = o.src || "اوت‌لاین";
   });
 });
 

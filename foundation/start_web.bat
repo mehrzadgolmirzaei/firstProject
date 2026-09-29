@@ -22,6 +22,8 @@ if not exist ".venv\Scripts\python.exe" (
   python -m venv .venv || goto :error
 )
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -r requirements.txt || goto :error
+rem OCR for scanned outline PDFs: optional, the app runs without it
+".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q -r requirements-ocr.txt >nul 2>nul
 
 set FOUNDATION_OPEN_BROWSER=1
 cd web

@@ -204,3 +204,56 @@ def with_structure_height(eq, Hs):
     k = Hs / eq.Hs
     return dataclasses.replace(eq, Hs=round(Hs, 3), hs=round(eq.hs * k, 3),
                                Ws=round(eq.Ws * k, 1), As=round(eq.As * k, 3))
+
+
+# ------------------------------------------------------------------
+# عددهای تأییدشده از اوت‌لاین سازنده همین پروژه، به جای کاتالوگ.
+# کاتالوگ یک دیکشنری مشترک است که bay و layoutplan هم می‌خوانند؛ جایگزینی موقت زیر قفل
+# انجام می‌شود تا دو درخواست هم‌زمان عدد یکدیگر را نبینند.
+# ------------------------------------------------------------------
+import threading as _threading
+from contextlib import contextmanager as _contextmanager
+
+_OUTLINE_LOCK = _threading.RLock()
+
+
+def outline_keys(voltage, tag):
+    """کلیدهای کاتالوگ یک نوع تجهیز در یک سطح ولتاژ (CVT ← CVT63 و CVT63_1)."""
+    types = VOLTAGE_LEVELS.get(str(voltage), {}).get("types", {})
+    return [k for t, k in types.items() if t == tag or t.rstrip("12") == tag]
+
+
+@_contextmanager
+def outline_values(voltage, overrides):
+    """
+    در طول بلوک، He/he/Ae/We هر نوع تجهیز از overrides ({نوع: {He, he, Ae, We}}) خوانده می‌شود.
+    ارتفاع مرکز ثقل اگر داده نشده باشد به نسبت ارتفاع تجهیز تغییر می‌کند.
+    """
+    import dataclasses
+    if not overrides:
+        yield {}
+        return
+    with _OUTLINE_LOCK:
+        saved = {}
+        try:
+            for tag, vals in overrides.items():
+                for key in outline_keys(voltage, tag):
+                    eq = ALL_EQUIPMENT[key]
+                    v = {k: vals[k] for k in ("He", "he", "Ae", "We") if vals.get(k)}
+                    if "He" in v and "he" not in v and eq.He:
+                        v["he"] = round(eq.he * v["He"] / eq.He, 3)
+                    if "He" in v and eq.conductor_points == [eq.He]:
+                        v["conductor_points"] = [v["He"]]
+                    saved[key] = eq
+                    ALL_EQUIPMENT[key] = dataclasses.replace(
+                        eq, **v, source=f"{eq.source} + اوت‌لاین پروژه")
+                    for cat in (CATALOG, CATALOG_KIMIA63):
+                        if key in cat:
+                            cat[key] = ALL_EQUIPMENT[key]
+            yield {k: ALL_EQUIPMENT[k] for k in saved}
+        finally:
+            for key, eq in saved.items():
+                ALL_EQUIPMENT[key] = eq
+                for cat in (CATALOG, CATALOG_KIMIA63):
+                    if key in cat:
+                        cat[key] = eq
