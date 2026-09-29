@@ -5,8 +5,7 @@
 <head>
 <meta charset="utf-8">
 <title>گزارش محاسبه {{ calc.id }} — {{ calc.equipment_tag }}</title>
-<link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="{{ url_for('static', filename='fonts.css', v=VERSION) }}" rel="stylesheet">
 <style>
   @page{size:A4;margin:16mm 14mm}
   *{box-sizing:border-box}
