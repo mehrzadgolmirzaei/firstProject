@@ -150,3 +150,15 @@ def test_layout_design_uses_outline(app, tmp_path):  # noqa: F811
                                          "form": json.dumps(form), "outline": '{"CT": {"We": -1}}'},
                    headers=h, content_type="multipart/form-data")
     assert r.status_code == 400 and "اوت‌لاین" in r.get_json()["error"]
+
+
+def test_project_pedestals_override_catalog():
+    """ستون‌های سازه این پروژه (CVT سلیمانی: دو پایه با فاصله ۱٫۵) فقط روی گونه سه‌فاز اثر دارد."""
+    ov = OL.overrides_ok({"CVT": {"n_pedestal": "2", "pedestal_spacing": "1.5"}})
+    assert ov == {"CVT": {"n_pedestal": 2, "pedestal_spacing": 1.5}}
+    with outline_values("63", ov):
+        assert (ALL_EQUIPMENT["CVT63"].n_pedestal, ALL_EQUIPMENT["CVT63"].pedestal_spacing) == (2, 1.5)
+        assert ALL_EQUIPMENT["CVT63_1"].n_pedestal == 1
+    assert ALL_EQUIPMENT["CVT63"].n_pedestal == 3
+    with pytest.raises(ValueError):
+        OL.overrides_ok({"CVT": {"n_pedestal": 7}})

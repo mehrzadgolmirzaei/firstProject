@@ -397,3 +397,6 @@ input.from-outline{border-color:var(--steel);background:#EEF3F6}
 .lyt-plan rect.fu{fill:none;stroke:#6FA0C8;stroke-width:.05;stroke-dasharray:.25 .15}
 .inline-f.chk{font-size:13px;display:flex;gap:6px;align-items:center}
 .inline-f.chk input{width:auto}
+.peds{margin:10px 0;font-size:13px}
+.peds summary{cursor:pointer;font-weight:600}
+.peds tr.own input{border-color:var(--steel);background:#EEF3F6}

@@ -625,11 +625,13 @@ function showLayout(d){
   $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
+    ${pedsTable(d)}
     <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>
     <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>
     <button type="button" class="btn wide only-final" id="lytFull" style="margin-top:8px">تهیه خروجی نهایی — طراحی همه پی‌ها و سازه‌ها</button>
 `;
   if (d.kind !== "keyplan") {
+    bindPeds();
     $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
     $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
   }
@@ -712,10 +714,55 @@ function typeOf(key){
   return key;
 }
 function olType(t){ return String(t || "").replace(/[12]$/, ""); }
+// ستون‌های سازه هر تجهیز که مهندس برای این پروژه تعیین کرده: {ولتاژ: {نوع: {n_pedestal, pedestal_spacing}}}
+let PEDS = {};
+try { PEDS = JSON.parse(localStorage.getItem("peds.v1") || "{}") || {}; } catch (_) { PEDS = {}; }
+function savePeds(){ try { localStorage.setItem("peds.v1", JSON.stringify(PEDS)); } catch (_) {} }
 function outlineValues(){
   const o = {};
   for (const t in OUTLINE) { o[t] = {}; OL_FIELDS.forEach(([k]) => { if (OUTLINE[t][k]) o[t][k] = OUTLINE[t][k]; }); }
+  const P = PEDS[$("voltage").value] || {};
+  for (const t in P) o[t] = Object.assign(o[t] || {}, P[t]);
   return o;
+}
+// جدول ستون‌های سازه برای تجهیزهای همین نقشه
+function pedsTable(d){
+  const v = $("voltage").value, types = VOLTAGES[v].types, P = PEDS[v] || {};
+  const seen = [...new Set(d.foundations.flatMap(f => f.groups.map(g => g.tag)))]
+    .map(k => [typeOf(k), k]).filter(([t, k]) => types[t] === k && BUILTIN[k] && BUILTIN[k].n_pedestal > 1);
+  if (!seen.length) return "";
+  const rows = seen.map(([t, k]) => {
+    const c = BUILTIN[k], p = P[t] || {};
+    const n = p.n_pedestal || c.n_pedestal, s = p.pedestal_spacing || c.pedestal_spacing;
+    const own = p.n_pedestal || p.pedestal_spacing;
+    return `<tr class="${own ? "own" : ""}"><td>${TYPES[t] || t}</td>
+      <td><input type="number" min="1" max="4" step="1" data-t="${t}" data-k="n_pedestal" value="${n}"></td>
+      <td><input type="number" min="0.5" max="5" step="0.05" data-t="${t}" data-k="pedestal_spacing" value="${s}"></td>
+      <td class="note">${own ? "این پروژه" : `کاتالوگ (${c.n_pedestal} × ${c.pedestal_spacing})`}</td></tr>`;
+  }).join("");
+  return `<details class="peds" ${Object.keys(P).length ? "open" : ""}><summary>ستون‌های سازه هر تجهیز در این پروژه</summary>
+    <p class="note">سازه را مهندس تعیین می‌کند (مثلاً CVT دو پایه یا سه پایه، طبق برش‌های نقشه جانمایی).
+      برای هر پروژه یک بار تنظیم و نگه داشته می‌شود.</p>
+    <table class="ol-tab"><thead><tr><th>تجهیز</th><th>تعداد ستون</th><th>فاصله (m)</th><th></th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    <div class="ol-act"><button type="button" class="btn" id="pedsGo">طراحی دوباره با این ستون‌ها</button>
+      <button type="button" class="btn quiet" id="pedsReset">برگشت به کاتالوگ</button></div></details>`;
+}
+function bindPeds(){
+  const go = $("pedsGo"); if (!go) return;
+  go.addEventListener("click", () => {
+    const v = $("voltage").value, P = PEDS[v] = PEDS[v] || {};
+    document.querySelectorAll(".peds input[data-t]").forEach(i => {
+      const t = i.dataset.t, k = i.dataset.k, c = BUILTIN[VOLTAGES[v].types[t]], x = parseFloat(i.value);
+      P[t] = P[t] || {};
+      if (x > 0 && Math.abs(x - c[k]) > 1e-9) P[t][k] = x; else delete P[t][k];
+      if (!Object.keys(P[t]).length) delete P[t];
+    });
+    savePeds(); reapplyPreset(); if (LAST_FILE) uploadDrawing(LAST_FILE);
+  });
+  $("pedsReset").addEventListener("click", () => {
+    delete PEDS[$("voltage").value]; savePeds(); reapplyPreset(); if (LAST_FILE) uploadDrawing(LAST_FILE);
+  });
 }
 function saveOutline(){
   try { localStorage.setItem("outline.v1", JSON.stringify(OUTLINE)); } catch (_) {}
@@ -847,6 +894,11 @@ $("preset").addEventListener("change", e => {
 
   // عدد تأییدشده اوت‌لاین همین نوع تجهیز، روی عدد کاتالوگ
   document.querySelectorAll(".from-outline").forEach(el => { el.classList.remove("from-outline"); el.title = ""; });
+  const pp = (PEDS[$("voltage").value] || {})[typeOf(e.target.value)];
+  if (pp) {
+    if (pp.n_pedestal) $("n_pedestal").value = pp.n_pedestal;
+    if (pp.pedestal_spacing) $("pedestal_spacing").value = pp.pedestal_spacing;
+  }
   const o = OUTLINE[olType(typeOf(e.target.value))];
   if (o) OL_FIELDS.forEach(([k]) => {
     if (!o[k]) return;

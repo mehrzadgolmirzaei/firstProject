@@ -232,7 +232,8 @@ def outline_keys(voltage, tag):
 @_contextmanager
 def outline_values(voltage, overrides):
     """
-    در طول بلوک، He/he/Ae/We هر نوع تجهیز از overrides ({نوع: {He, he, Ae, We}}) خوانده می‌شود.
+    در طول بلوک، He/he/Ae/We هر نوع تجهیز از overrides ({نوع: {He, he, Ae, We}}) خوانده می‌شود؛
+    و ستون‌های سازه (n_pedestal، pedestal_spacing) که مهندس برای این پروژه تعیین کرده.
     ارتفاع مرکز ثقل اگر داده نشده باشد به نسبت ارتفاع تجهیز تغییر می‌کند.
     """
     import dataclasses
@@ -242,10 +243,17 @@ def outline_values(voltage, overrides):
     with _OUTLINE_LOCK:
         saved = {}
         try:
+            types = VOLTAGE_LEVELS.get(str(voltage), {}).get("types", {})
             for tag, vals in overrides.items():
                 for key in outline_keys(voltage, tag):
                     eq = ALL_EQUIPMENT[key]
                     v = {k: vals[k] for k in ("He", "he", "Ae", "We") if vals.get(k)}
+                    # ستون‌های سازه فقط برای همان گونه (CVT سه‌فاز، نه CVT تک‌فاز)
+                    if types.get(tag) == key:
+                        if vals.get("n_pedestal"):
+                            v["n_pedestal"] = int(vals["n_pedestal"])
+                        if vals.get("pedestal_spacing") is not None and v.get("n_pedestal", eq.n_pedestal) > 1:
+                            v["pedestal_spacing"] = float(vals["pedestal_spacing"])
                     if "He" in v and "he" not in v and eq.He:
                         v["he"] = round(eq.he * v["He"] / eq.He, 3)
                     if "He" in v and eq.conductor_points == [eq.He]:

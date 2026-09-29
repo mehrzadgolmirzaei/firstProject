@@ -384,7 +384,10 @@ def compare(fields, eq):
 
 
 def overrides_ok(ov):
-    """اعتبار عددهای تأییدشده اوت‌لاین که از فرم می‌آید: {نوع: {He, he, Ae, We}}."""
+    """
+    اعتبار عددهایی که از فرم می‌آید: {نوع: {He, he, Ae, We, n_pedestal, pedestal_spacing}} —
+    عددهای تأییدشده اوت‌لاین و ستون‌های سازه‌ای که مهندس برای این پروژه تعیین کرده.
+    """
     clean = {}
     for tag, vals in (ov or {}).items():
         d = {}
@@ -396,6 +399,18 @@ def overrides_ok(ov):
             if not math.isfinite(v) or v <= 0:
                 raise ValueError(f"{tag}: مقدار {k} از اوت‌لاین باید مثبت باشد.")
             d[k] = v
+        n = (vals or {}).get("n_pedestal")
+        if n not in (None, ""):
+            n = int(float(n))
+            if not 1 <= n <= 4:
+                raise ValueError(f"{tag}: تعداد ستون سازه باید ۱ تا ۴ باشد.")
+            d["n_pedestal"] = n
+        sp = (vals or {}).get("pedestal_spacing")
+        if sp not in (None, ""):
+            sp = float(sp)
+            if not 0.5 <= sp <= 5:
+                raise ValueError(f"{tag}: فاصله ستون‌های سازه باید ۰٫۵ تا ۵ متر باشد.")
+            d["pedestal_spacing"] = sp
         if d:
             clean[str(tag)] = d
     return clean

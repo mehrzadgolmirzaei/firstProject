@@ -720,6 +720,7 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
             units.append(u.label)
         row_out.append({"axis": row.axis, "units": units,
                         "merges": [list(m) for m in res["merges"]]})
+    _resolve(pads, stations, gap)
     _unify(pads, stations, gap)
     notes += _pad_clashes(pads, gap)
     notes = list(dict.fromkeys(notes))
@@ -779,6 +780,48 @@ def _unify(pads, stations, gap):
                 break
             for p, o in zip(ps, old):
                 p["B"], p["L"], p["tf"], p["dx"], p["dy"], p["volume"] = o
+
+
+def _set(p, o):
+    p["B"], p["L"], p["tf"] = o[0], o[1], o[2]
+    p["dx"], p["dy"] = (o[0], o[1]) if p["along_x"] else (o[1], o[0])
+    p["volume"] = o[0] * o[1] * o[2]
+    p["unit"].choice = (o[0], o[1], o[2], p["volume"])
+
+
+def _resolve(pads, stations, gap, rounds=20):
+    """
+    تداخل پی‌های دو ردیف مختلف (هر ردیف جدا طراحی شده): برای یکی از دو پی، کم‌حجم‌ترین اندازه
+    پایدار دیگری که با همه پی‌ها و مانع‌ها فاصله آزاد دارد.
+    """
+    obstacles = [(s.x0, s.x1, s.y0, s.y1) for s in stations if not s.key and s.kind != ""]
+    for _ in range(rounds):
+        bad = None
+        for i, a in enumerate(pads):
+            for b in pads[i + 1:]:
+                sx = abs(a["cx"] - b["cx"]) - (a["dx"] + b["dx"]) / 2
+                sy = abs(a["cy"] - b["cy"]) - (a["dy"] + b["dy"]) / 2
+                if max(sx, sy) < gap - 1e-6:
+                    bad = (a, b)
+                    break
+            if bad:
+                break
+        if not bad:
+            return
+        best = None
+        for p in bad:
+            keep = (p["B"], p["L"], p["tf"])
+            for o in sorted(p["unit"].options, key=lambda o: o[3]):
+                _set(p, o)
+                if _fits(p, pads, obstacles, gap):
+                    extra = o[3] - keep[0] * keep[1] * keep[2]
+                    if best is None or extra < best[0]:
+                        best = (extra, p, o)
+                    break
+            _set(p, keep)
+        if best is None:
+            return
+        _set(best[1], best[2])
 
 
 def _pad_clashes(pads, gap):
