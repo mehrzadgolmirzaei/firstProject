@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.6.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.6.2"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -442,7 +442,8 @@ def api_keyplan():
     """
     import shutil
     import ezdxf
-    from keyplan import read_foundations, detect_voltage as kp_voltage, plan as kp_plan
+    from keyplan import (read_foundations, detect_voltage as kp_voltage, plan as kp_plan,
+                         keyplan_dxf as kp_dxf)
     import layoutplan as LP
     f = request.files.get("file")
     voltage = request.form.get("voltage") or "63"
@@ -466,11 +467,14 @@ def api_keyplan():
                 # سطح ولتاژ از خود کی‌پلن: ستون‌های پی با کاتالوگ کدام سطح می‌خواند
                 v_kp, found = kp_voltage(doc, ALL_EQUIPMENT, voltage)
                 auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
+                kp_name = f"keyplan_{Path(label).stem}_{secrets.token_hex(3)}.dxf"
+                kp_dxf(doc, found, str(OUT / kp_name))
                 return jsonify({"kind": "keyplan", "file": label, "warning": "",
                                 "voltage": v_kp, "voltage_changed": v_kp != voltage,
                                 "foundations": [x.to_dict() for x in found],
                                 "plan": {"stations": [],
-                                         "pads": kp_plan(doc, {x.name for x in found if x.ok})}})
+                                         "pads": kp_plan(doc, {x.name for x in found if x.ok})},
+                                "dxf": url_for("download", name=kp_name)})
             items, axes = LP.read_items(None, doc=doc), LP.read_axes(doc)
             v = LP.detect_voltage(items) or voltage
             stations, _, _ = LP.site_stations(items, v, axes)

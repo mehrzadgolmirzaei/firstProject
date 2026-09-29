@@ -227,3 +227,72 @@ def plan(doc, names):
                     "cx": round(e.center.x / 1000, 3), "cy": round(e.center.y / 1000, 3),
                     "dx": round(e.size.x / 1000, 3), "dy": round(e.size.y / 1000, 3)})
     return out
+
+
+def keyplan_dxf(doc, found, path):
+    """
+    کی‌پلن تمیز از کی‌پلن بارگذاری‌شده: هر پی با ستون‌هایش در همان جا و جهت نقشه اصلی، نام تیپ،
+    و جدول تیپ‌ها (تعداد، ابعاد، ستون، تجهیز). فقط پی‌هایی که درست خوانده شده‌اند.
+    """
+    import math
+    import ezdxf
+    from ezdxf import bbox, zoom
+    ok = {f.name: f for f in found if f.ok}
+    out = ezdxf.new("R2010", setup=True)
+    out.header["$INSUNITS"] = 4
+    for name, color in (("FOUNDATION", 7), ("PEDESTAL", 1), ("TEXT", 2), ("TABLE", 7)):
+        out.layers.add(name, color=color)
+    msp = out.modelspace()
+    for f in ok.values():                       # بلاک هر تیپ، مرکز پی روی مبدأ
+        blk = out.blocks.new(f.name)
+        L, B, b = f.L * 1000, f.B * 1000, (f.b or 0.6) * 1000
+        blk.add_lwpolyline([(-L / 2, -B / 2), (L / 2, -B / 2), (L / 2, B / 2), (-L / 2, B / 2)],
+                           close=True, dxfattribs={"layer": "FOUNDATION"})
+        for g in f.groups:
+            for x, y in g["positions"]:
+                x, y = x * 1000, y * 1000
+                blk.add_lwpolyline([(x - b / 2, y - b / 2), (x + b / 2, y - b / 2),
+                                    (x + b / 2, y + b / 2), (x - b / 2, y + b / 2)], close=True,
+                                   dxfattribs={"layer": "PEDESTAL"})
+    centre = {}
+    for name in ok:
+        rects = _rects(doc.blocks.get(name))
+        pad = max(rects, key=lambda r: (r[2] - r[0]) * (r[3] - r[1]))
+        centre[name] = ((pad[0] + pad[2]) / 2, (pad[1] + pad[3]) / 2)
+    for ins in doc.modelspace().query("INSERT"):
+        if ins.dxf.name not in ok:
+            continue
+        m = ins.matrix44()
+        X, Y, _ = m.transform(centre[ins.dxf.name] + (0,))
+        sx, sy = ins.dxf.xscale, ins.dxf.yscale
+        msp.add_blockref(ins.dxf.name, (X, Y), dxfattribs={
+            "rotation": ins.dxf.rotation, "xscale": math.copysign(1, sx), "yscale": math.copysign(1, sy),
+            "layer": "FOUNDATION"})
+        f = ok[ins.dxf.name]
+        a = math.radians(ins.dxf.rotation)                   # نیم‌پهنای پی در امتداد x نقشه
+        hx = (abs(math.cos(a)) * f.L + abs(math.sin(a)) * f.B) * 500
+        msp.add_text(ins.dxf.name, height=150, dxfattribs={"layer": "TEXT"}).set_placement(
+            (X - hx - 250, Y), align=ezdxf.enums.TextEntityAlignment.MIDDLE_RIGHT)
+    ext = bbox.extents(msp)
+    if ext.has_data:                            # جدول تیپ‌ها کنار نقشه
+        x0, y0 = ext.extmax.x + 3000, ext.extmax.y
+        cols = [("TYPE", 5000), ("NO.", 1200), ("L x B (m)", 2600), ("PEDESTAL", 2600), ("EQUIPMENT", 5200)]
+        rows = [[f.name, str(f.count), f"{f.L:g} x {f.B:g}",
+                 f"{sum(len(g['positions']) for g in f.groups)} x {f.b:g}", f.describe()]
+                for f in sorted(ok.values(), key=lambda f: f.name)]
+        rows.append(["TOTAL", str(sum(f.count for f in ok.values())), "", "", ""])
+        h = 500
+        for r, row in enumerate([[c for c, _ in cols]] + rows):
+            x = x0
+            for (c, w), val in zip(cols, row):
+                msp.add_lwpolyline([(x, y0 - r * h), (x + w, y0 - r * h), (x + w, y0 - (r + 1) * h),
+                                    (x, y0 - (r + 1) * h)], close=True, dxfattribs={"layer": "TABLE"})
+                msp.add_text(val, height=180, dxfattribs={"layer": "TEXT"}).set_placement(
+                    (x + 120, y0 - r * h - h / 2), align=ezdxf.enums.TextEntityAlignment.MIDDLE_LEFT)
+                x += w
+    zoom.extents(msp, factor=1.1)
+    ext = bbox.extents(msp)
+    if ext.has_data:
+        out.header["$EXTMIN"], out.header["$EXTMAX"] = ext.extmin, ext.extmax
+    out.saveas(path)
+    return path

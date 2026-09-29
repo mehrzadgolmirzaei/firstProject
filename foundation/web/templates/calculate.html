@@ -674,7 +674,8 @@ function showLayout(d){
   const notes = (d.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
   if (d.kind === "keyplan") {                 // کی‌پلن موجود: فقط پلان پی‌ها، انتخاب با کلیک
     $("lytBox").innerHTML = `<div class="plan-wrap"><div class="plan-tools"><button type="button" data-z="in" title="بزرگ‌نمایی">+</button><button type="button" data-z="out" title="کوچک‌نمایی">−</button><button type="button" data-z="fit">کل پلان</button><button type="button" data-z="full">تمام‌صفحه</button><button type="button" data-z="png">دانلود تصویر</button><span>اسکرول: بزرگ‌نمایی · کشیدن: جابه‌جایی</span></div><svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${pads}</svg></div>
-      <p class="note">${P.pads.length} پی از کی‌پلن؛ روی هر پی بزنید تا همان نوع انتخاب شود.</p>`;
+      <p class="note">${P.pads.length} پی از کی‌پلن؛ روی هر پی بزنید تا همان نوع انتخاب شود.</p>
+      ${d.dxf ? `<a class="btn" href="${d.dxf}">کی‌پلن فونداسیون با جدول تیپ‌ها (DXF اتوکد)</a>` : ""}`;
   } else
   $("lytBox").innerHTML = `<div class="plan-wrap"><div class="plan-tools"><button type="button" data-z="in" title="بزرگ‌نمایی">+</button><button type="button" data-z="out" title="کوچک‌نمایی">−</button><button type="button" data-z="fit">کل پلان</button><button type="button" data-z="full">تمام‌صفحه</button><button type="button" data-z="png">دانلود تصویر</button><span>اسکرول: بزرگ‌نمایی · کشیدن: جابه‌جایی</span></div><svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg></div>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>

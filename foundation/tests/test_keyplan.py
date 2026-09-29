@@ -79,3 +79,10 @@ def test_web_keyplan_has_plan_and_voltage(app):  # noqa: F811
     d = r.get_json()
     assert r.status_code == 200 and d["kind"] == "keyplan", d
     assert d["voltage"] == "63" and d["voltage_changed"] and d["plan"]["pads"]
+    r = c.get(d["dxf"])                                            # کی‌پلن اتوکد با جدول تیپ‌ها
+    assert r.status_code == 200
+    import io
+    import ezdxf
+    back = read_foundations(None, ALL_EQUIPMENT, "63", doc=ezdxf.read(io.StringIO(r.data.decode("utf-8", "ignore"))))
+    assert sorted((f.name, f.count) for f in back) == sorted((f.name, f.count) for f in
+                                                             read_foundations(str(DXF), ALL_EQUIPMENT, "63") if f.ok)
