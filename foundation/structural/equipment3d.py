@@ -53,7 +53,7 @@ def build(eq, base, ang=0.0):
     out = []
     out.append(_box((x, y, z), (x, y, z + 20), w * 1.1, w * 1.1, ang, "metal"))      # صفحه پایه
     z0 = z + 20
-    if t in ("LA", "PI"):
+    if t in ("LA", "PI", "PI1"):
         _column(x, y, z0, z + He * 0.94, w * 0.26, w * 0.46, out)
         out.append(_cyl((x, y, z + He * 0.94), (x, y, z + He), w * 0.30, "metal"))
         if t == "LA":                                            # حلقه یکنواخت‌کننده ولتاژ

@@ -18,10 +18,10 @@ from equipment import VOLTAGE_LEVELS
 from padlayout import Group, PadLayout
 
 # نام تجهیز در کی‌پلن ← نوع تجهیز. «DS-DSE» یک تجهیز است.
-KEYPLAN_TOKENS = {"LA": "LA", "CB": "CB", "CT": "CT", "CVT": "CVT", "CVT1": "CVT1", "PI": "PI",
+KEYPLAN_TOKENS = {"LA": "LA", "CB": "CB", "CT": "CT", "CVT": "CVT", "CVT1": "CVT1", "PI": "PI", "PI1": "PI1",
                   "DS": "DSE", "DSE": "DSE", "DS2": "DS2", "DSROW": "DSROW"}
 # نوعی که بسته به تعداد ستون در کی‌پلن گونه دیگری دارد (CVT سه‌ستونه / تک‌فاز)
-VARIANTS = {"CVT": ["CVT", "CVT1"]}
+VARIANTS = {"CVT": ["CVT", "CVT1"], "PI": ["PI", "PI1"]}
 
 TOL = 5.0        # mm — تلرانس هم‌ترازی و مربع بودن
 

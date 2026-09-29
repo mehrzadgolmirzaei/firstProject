@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.3.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.4.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -480,8 +480,12 @@ def api_keyplan():
             raise InputError("این فایل نقشه جانمایی است. برای طراحی پی‌ها ابتدا مشخصات ساختگاه "
                              "(زلزله، خاک و باد) را در فرم وارد کنید و سپس دوباره بارگذاری کنید.")
         cfg = config_from_form(form)
+        gap = _number(form, "layout.gap")
+        gap = 0.20 if gap is None else gap
+        if not 0 <= gap <= 1:
+            raise InputError("فاصله آزاد بین پی‌ها باید بین ۰ و ۱ متر باشد.")
         with outline_values(voltage_found, _outline_form()):
-            result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes)
+            result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes, gap=gap)
             dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
             LP.plan_dxf(result, str(OUT / dxf))
             full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None

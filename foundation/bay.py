@@ -38,6 +38,7 @@ class Station:
     y: float = 0.0                     # موقعیت عرضی (عمود بر ردیف، m) — از نقشه جانمایی
     depth: float = 0.0                 # عمق اشغالی مانع عمود بر ردیف؛ صفر = تمام عرض ردیف
     hs: float = 0.0                    # ارتفاع استراکچر از نقشه جانمایی (m)؛ صفر = کاتالوگ
+    points: list = None                # ستون‌های تک‌فاز از نقشه: [(عرضی، طولی)] نسبت به ایستگاه
 
 
 @dataclass
@@ -111,6 +112,9 @@ def _layout(unit):
         x = 0.0
         for k, key in enumerate(st.keys):
             eq = with_structure_height(ALL_EQUIPMENT[key], st.hs)
+            if st.points:                          # چند تجهیز تک‌فاز با جای واقعی از نقشه
+                groups.append(Group(eq, [(round(dx, 3), round(y + dy, 3)) for dx, dy in st.points]))
+                continue
             g = row(eq, y=y)
             if k:                                  # دو تجهیز روی یک ایستگاه: کنار هم در X
                 prev = groups[-1]

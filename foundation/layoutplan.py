@@ -27,6 +27,8 @@ GROUND_TOL = 300.0          # mm — بلاکی که پایش تا این فاص
 MIN_HEIGHT = 500.0          # mm — نماد تخت (مثل پلان ارت) ایستگاه نیست
 MAX_SIZE = 20000.0          # mm — بلاک بزرگ‌تر (پلان محوطه، ساختمان، کادر) ایستگاه تجهیز نیست
 ROW_TOL = 0.6               # m — ایستگاه‌های هم‌محور یک ردیف
+CLUSTER = 2.3               # m — تجهیزهای تک‌ستونه هم‌نوع نزدیک‌تر از این روی یک پی
+JOIN = 4.0                  # m — ایستگاه تک‌فاز تا این فاصله به زنجیره هم‌محورش می‌پیوندد
 NEAR = 8.0                  # m — مانع‌هایی که در طراحی یک ردیف دیده می‌شوند
 
 # نام تجهیز در بلاک‌های نقشه ← نوع (همان نام‌های کی‌پلن)
@@ -263,6 +265,7 @@ class SiteStation:
     by_axis: str = ""          # اگر نوع از راهنمای محور آمده: متن همان برچسب
     key: str = ""              # کلید کاتالوگ؛ خالی = مانع
     note: str = ""
+    points: list = None        # ستون‌های تجهیزهای تک‌فاز یک ایستگاه خوشه‌ای (m، دستگاه ردیف‌ها)
 
     @property
     def cx(self):
@@ -275,6 +278,19 @@ class SiteStation:
     @property
     def label(self):
         return self.kind or self.names[0].split("$0$")[-1][:12]
+
+
+def _dedupe(items, tol=300.0):
+    """بلاک تکراری نقشه (همان نام و همان جا، روی هم کپی شده) یک بار شمرده می‌شود."""
+    out, seen = [], defaultdict(list)
+    for it in items:
+        lo, hi = it.pts.min(0), it.pts.max(0)
+        if any(np.all(np.abs(lo - a) <= tol) and np.all(np.abs(hi - b) <= tol)
+               for a, b in seen[it.name]):
+            continue
+        seen[it.name].append((lo, hi))
+        out.append(it)
+    return out
 
 
 def _structure_height(st, ground):
@@ -328,6 +344,7 @@ def site_stations(items, voltage="63", axes=None):
     if not items:
         return [], 0.0, []
     items = [it for it in items if np.ptp(it.pts[:, :2], axis=0).max() <= MAX_SIZE]
+    items = _dedupe(items)
     if not items:
         return [], 0.0, []
     zs = Counter(round(it.zmin / 10) * 10 for it in items if it.height >= MIN_HEIGHT)
@@ -438,25 +455,111 @@ def _cluster(values, tol):
     return groups
 
 
+def _chain_axis(st):
+    """
+    امتداد زنجیره bay از خود ایستگاه: فازهای تجهیز (ستون‌های پی) در امتداد بلندای جای پا
+    چیده شده‌اند و bay عمود بر آن امتداد دارد. جای پای تقریباً مربعی (تک‌فاز) چیزی نمی‌گوید.
+    """
+    w, h = st.x1 - st.x0, st.y1 - st.y0
+    if w > 1.3 * h:
+        return "y"
+    if h > 1.3 * w:
+        return "x"
+    return ""
+
+
+def _cluster_singles(stations):
+    """
+    تجهیزهای تک‌ستونه هم‌نوع که نزدیک هم‌اند (مثل سه مقره تک‌فاز که مورب چیده شده‌اند) یک
+    ایستگاه با پی مشترک می‌شوند؛ جای ستون‌ها همان جای تجهیزها در نقشه است.
+    """
+    singles = [s for s in stations if s.key and ALL_EQUIPMENT[s.key].n_pedestal == 1]
+    parent = {id(s): s for s in singles}
+
+    def find(s):
+        while parent[id(s)] is not s:
+            s = parent[id(s)]
+        return s
+    for i, a in enumerate(singles):
+        for b in singles[i + 1:]:
+            if a.key == b.key and math.hypot(a.cx - b.cx, a.cy - b.cy) <= CLUSTER:
+                parent[id(find(a))] = find(b)
+    groups = defaultdict(list)
+    for s in singles:
+        groups[id(find(s))].append(s)
+    merged = {id(m) for g in groups.values() if len(g) > 1 for m in g}
+    out = [s for s in stations if id(s) not in merged]
+    for g in groups.values():
+        if len(g) < 2:
+            continue
+        st = SiteStation(sum((m.names for m in g), []), min(m.x0 for m in g), max(m.x1 for m in g),
+                         min(m.y0 for m in g), max(m.y1 for m in g), hs=max(m.hs for m in g),
+                         kind=g[0].kind, key=g[0].key,
+                         note="")
+        st._base = sum((m._base for m in g), [])
+        st.points = [(m.cx, m.cy) for m in g]
+        out.append(st)
+    return out
+
+
 def find_rows(stations):
-    """ردیف‌های افقی با دست‌کم دو تجهیز؛ باقی‌مانده‌ها ستون‌های عمودی، و تک‌ها ردیف یک‌عضوی."""
+    """
+    زنجیره‌های bay. هر ایستگاه در امتداد عمود بر خط فازهایش زنجیره می‌شود (LA، CT، CB، DSE …
+    پشت سر هم، نه LA‌های bayهای کنار هم)؛ ایستگاه تک‌فاز از جهت اکثریت پیروی می‌کند.
+    در هر امتداد: هم‌محورها (رواداری ROW_TOL) یک زنجیره‌اند.
+    """
     design = [s for s in stations if s.key]
+    axes = [_chain_axis(s) for s in design]
+    known = [a for a in axes if a]
+    if not known:
+        return _rows_by_cluster(design, "x")
+    major = max(("x", "y"), key=known.count)
+    rows = []
+    for ax in ("x", "y"):
+        rows += _rows_by_cluster([s for s, a in zip(design, axes) if a == ax], ax)
+    # تک‌فاز (مثل CVT کنار مقره): به زنجیره‌ای که هم‌محورش است و نزدیکش، وگرنه جهت اکثریت
+    left = []
+    for s in (s for s, a in zip(design, axes) if not a):
+        best = None
+        for r in rows:
+            off = abs(r.cross(s) - sum(r.cross(m) for m in r.members) / len(r.members))
+            d = min(abs(r.pos(s) - r.pos(m)) for m in r.members)
+            if off <= ROW_TOL and d <= JOIN and (best is None or d < best[0]):
+                best = (d, r)
+        if best:
+            best[1].members = sorted(best[1].members + [s], key=best[1].pos)
+        else:
+            left.append(s)
+    return rows + _rows_by_cluster(left, major)
+
+
+def _rows_by_cluster(design, first):
+    """هم‌محورها در امتداد first با دست‌کم دو عضو؛ باقی در امتداد دیگر (یا تک‌عضوی)."""
+    other = "y" if first == "x" else "x"
+    cross = (lambda s: s.cy) if first == "x" else (lambda s: s.cx)
+    along = (lambda s: s.cx) if first == "x" else (lambda s: s.cy)
     rows, used = [], set()
-    for g in _cluster([s.cy for s in design], ROW_TOL):
+    for g in _cluster([cross(s) for s in design], ROW_TOL):
         if len(g) > 1:
-            rows.append(Row("x", sorted((design[i] for i in g), key=lambda s: s.cx)))
+            rows.append(Row(first, sorted((design[i] for i in g), key=along)))
             used.update(id(design[i]) for i in g)
     left = [s for s in design if id(s) not in used]
-    for g in _cluster([s.cx for s in left], ROW_TOL):
-        members = sorted((left[i] for i in g), key=lambda s: s.cy)
-        rows.append(Row("y" if len(members) > 1 else "x", members))
+    for g in _cluster([along(s) for s in left], ROW_TOL):
+        members = sorted((left[i] for i in g), key=cross)
+        rows.append(Row(other if len(members) > 1 else first, members))
     return rows
 
 
 def row_stations(row, stations, gap=0.2, B_hi=5.0, L_hi=6.0):
     """ایستگاه‌های bay برای یک ردیف: تجهیزها، و هر چیز دیگر نقشه در نزدیکی به‌صورت مانع."""
     from bay import Station
-    out = [Station(s.kind, row.pos(s), [s.key], 0.0, row.cross(s), hs=s.hs) for s in row.members]
+    def pts(s):
+        if not s.points:
+            return None
+        return [((py - s.cy, px - s.cx) if row.axis == "x" else (px - s.cx, py - s.cy))
+                for px, py in s.points]
+    out = [Station(s.kind, row.pos(s), [s.key], 0.0, row.cross(s), hs=s.hs, points=pts(s))
+           for s in row.members]
     lo = min(row.pos(s) for s in row.members) - B_hi - NEAR
     hi = max(row.pos(s) for s in row.members) + B_hi + NEAR
     ymid = sum(row.cross(s) for s in row.members) / len(row.members)
@@ -483,6 +586,7 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
         doc = ezdxf.readfile(path)
         items, axes = read_items(None, doc=doc), read_axes(doc)
     stations, ang, unknown = site_stations(items, voltage, axes)
+    stations = _cluster_singles(stations)
     if not any(s.key for s in stations):
         raise ValueError("در نقشه تجهیز قابل طراحی (LA، CT، CB، DS، CVT، PI …) پیدا نشد")
     rows = find_rows(stations)
@@ -496,7 +600,7 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
         chain = row_stations(row, stations, gap, B_hi, L_hi)
         sig = tuple((s.label, tuple(s.keys), s.hs, round(s.pos - chain[0].pos, 2),
                      round(s.y - row.cross(row.members[0]), 2), round(s.width, 2),
-                     round(s.depth, 2)) for s in chain)
+                     round(s.depth, 2), tuple(map(tuple, s.points or []))) for s in chain)
         try:
             if sig in cache:
                 res = cache[sig]
@@ -559,10 +663,13 @@ def _foundations(pads):
         gs = sorted(((g.eq.tag, [[float(round(x, 3)) + 0.0, float(round(y, 3)) + 0.0] for x, y in g.positions],
                       g.eq.Hs) for g in u.layout.groups), key=lambda g: rank(g[0]))
         groups = [{"tag": t, "positions": pos, "Hs": hs} for t, pos, hs in gs]
-        mirror = [{"tag": g["tag"], "positions": sorted([x, -y + 0.0] for x, y in g["positions"]),
+        # هم‌تیپی با رواداری اجرایی ۵ سانت (مختصات نقشه‌ها دقیق نیست: ۱٫۵۰ و ۱٫۴۹)
+        snap = lambda v: round(round(v / 0.05) * 0.05, 2) + 0.0
+        mirror = [{"tag": g["tag"], "positions": sorted([snap(x), snap(-y)] for x, y in g["positions"]),
                    "Hs": g["Hs"]} for g in groups]
-        canon = min(json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"]), "Hs": g["Hs"]}
-                                for g in groups]), json.dumps(mirror))
+        canon = min(json.dumps([{"tag": g["tag"], "positions": sorted([snap(x), snap(y)]
+                                                                      for x, y in g["positions"]),
+                                 "Hs": g["Hs"]} for g in groups]), json.dumps(mirror))
         label = "+".join(sorted(p["label"].split("+"), key=rank))
         key = (label, p["L"], p["B"], p["tf"], canon)
         if key not in types:
@@ -572,10 +679,17 @@ def _foundations(pads):
                           "describe": " + ".join(f"{g['tag']}×{len(g['positions'])}" for g in groups)
                           + " · Hs " + "/".join(f"{g['Hs']:g}" for g in groups)}
         types[key]["count"] += 1
-        p["type"] = types[key]["name"]
+        p["_key"] = key
         own = json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"])} for g in groups])
         p["mirror"] = own != json.dumps([{"tag": g["tag"], "positions": sorted(g["positions"])}
                                          for g in types[key]["groups"]])
+    # دو تیپ هم‌نام (هم‌اندازه، با ارتفاع سازه متفاوت): ارتفاع سازه به نام افزوده می‌شود
+    seen = Counter(f["name"] for f in types.values())
+    for f in types.values():
+        if seen[f["name"]] > 1:
+            f["name"] = f"{f['name']}-H{max(g['Hs'] for g in f['groups']):g}"
+    for p in pads:
+        p["type"] = types[p.pop("_key")]["name"]
     return sorted(types.values(), key=lambda f: f["name"])
 
 

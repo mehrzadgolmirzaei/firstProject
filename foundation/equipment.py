@@ -146,6 +146,11 @@ CATALOG_KIMIA63 = {
     "CVT63_1": Equipment("CVT63_1", "63kV CVT — single phase", He=1.645, he=0.585, Ae=0.60,
                          We=320, Hs=2.00, hs=1.00, As=1.17, Ws=150, Fc=250, Fc_sc=250, npol=1,
                          n_pedestal=1, **_K63),
+    # مقره تک‌فاز روی پایه خودش (مثل STST-PI نقشه سلیمانی): مانند CVT63_1 نسبت به CVT63،
+    # وزن سازه به نسبت یک فاز؛ ارتفاع سازه از نقشه جانمایی و مقطع از طراحی سازه می‌آید.
+    "PI63_1": Equipment("PI63_1", "63kV Post Insulator — single phase", He=0.77, he=0.385, Ae=0.30,
+                        We=36, Hs=4.58, hs=2.29, As=2.20, Ws=270, Fc=320, Fc_sc=640, npol=1,
+                        n_pedestal=1, **{**_K63, "source": _K63["source"] + " — تک‌فاز، مشتق از PI63"}),
     "PI63": Equipment("PI63", "63kV Post Insulator (C8)", He=0.77, he=0.385, Ae=0.30, We=36,
                       Hs=4.58, hs=2.29, As=2.20, Ws=620, Fc=320, Fc_sc=640, npol=3,
                       n_pedestal=2, pedestal_spacing=1.70, **_K63),
@@ -165,6 +170,7 @@ EQUIPMENT_TYPES = {                 # نوع ← نام فارسی
     "CVT": "ترانس ولتاژ خازنی (CVT)",
     "CVT1": "ترانس ولتاژ خازنی تک‌فاز (CVT)",
     "PI": "مقره اتکایی (PI)",
+    "PI1": "مقره اتکایی تک‌فاز (PI)",
     "DSE": "سکسیونر با تیغه زمین (DS/DSE)",
     "DS": "سکسیونر (DS)",
     "DSROW": "سکسیونر ردیفی (DS)",
@@ -175,7 +181,7 @@ EQUIPMENT_TYPES = {                 # نوع ← نام فارسی
 VOLTAGE_LEVELS = {
     "63": {"title": "پست ۶۳ کیلوولت", "pad": "combined",
            "types": {"LA": "LA63", "CB": "CB63", "CT": "CT63", "CVT": "CVT63",
-                     "CVT1": "CVT63_1", "PI": "PI63", "DSE": "DSE63", "DS2": "DS2_63"}},
+                     "CVT1": "CVT63_1", "PI": "PI63", "PI1": "PI63_1", "DSE": "DSE63", "DS2": "DS2_63"}},
     "230": {"title": "پست ۲۳۰ کیلوولت", "pad": "single",
             "types": {t: t for t in ("LA", "CB", "CT", "CVT", "PI", "DSE", "DS", "DSROW")}},
     "400": {"title": "پست ۴۰۰ کیلوولت", "pad": "single",

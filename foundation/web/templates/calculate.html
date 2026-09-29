@@ -38,6 +38,8 @@
       <small class="hint"><b>نقشه جانمایی (Layout):</b> سامانه جای تجهیزها و فضای موجود را می‌خواند و همه
         پی‌ها را متناسب با فضا طراحی می‌کند (پیش از بارگذاری، مشخصات ساختگاه را وارد کنید). پوشه نقشه‌ها را
         می‌توان به‌صورت ZIP داد. <b>کی‌پلن:</b> ابعاد و ستون‌های پی‌های موجود خوانده می‌شود.</small>
+      <div class="f inline-f"><label>فاصله آزاد بین پی‌ها (m)</label>
+        <input id="pad_gap" type="number" step="0.05" min="0" max="1" value="0.20"></div>
       <div id="kpMsg" class="kp-msg" style="display:none"></div>
       <select id="kpsel" class="no-final" style="display:none;margin-top:6px"></select>
       <div id="lytBox" class="lyt-box" style="display:none"></div>
@@ -895,6 +897,7 @@ function formPayload(){
       pedestal_spacing: num("pedestal_spacing")
     },
     layout: layoutPayload(),
+    "layout.gap": num("pad_gap"),
     "seismic.k_lateral": num("k_lateral"),
     "seismic.edition": $("edition").value,
     "seismic.ss": num("ss"), "seismic.s1": num("s1"),

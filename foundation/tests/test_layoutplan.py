@@ -242,3 +242,61 @@ def test_ds_row_block_name():
     from keyplan import equipment_tokens
     assert equipment_tokens("DS-ROW") == (["DSROW"], None)
     assert LP.name_tokens("DS-ROW") == ["DSROW"]
+
+
+# ------------------------------------------------------------------ نقشه سلیمانی (bay در امتداد y)
+def _item(name, x0, x1, y0, y1, h, z0=0.0, children=()):
+    import numpy as np
+    pts = np.array([(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z0 + h)]) * 1000
+    return LP.Item(name, pts, 0.0, [(n, z * 1000) for n, z in children])
+
+
+def _soleimani_bays():
+    """دو bay نقشه سلیمانی (مختصات واقعی، m): فازها در امتداد x، تجهیزها پشت سر هم در امتداد y."""
+    out = []
+    for dx in (0.0, 9.0):
+        out += [
+            _item("STST-LA1", 156.6 + dx, 159.4 + dx, 119.6, 120.1, 3.0),
+            _item("CT63", 156.5 + dx, 160.2 + dx, 121.0, 121.8, 3.96, children=[("6CT1", 2.13)]),
+            _item("STST-CB", 157.2 + dx, 159.6 + dx, 123.1, 123.7, 2.6),
+            _item("6Bay - Tr 1$0$Ds-e 2250", 156.7 + dx, 160.1 + dx, 125.2, 126.5, 2.65),
+            _item("STST-PI", 156.7 + dx, 157.1 + dx, 127.1, 127.6, 3.07),     # سه مقره تک‌فاز مورب
+            _item("STST-PI", 158.2 + dx, 158.6 + dx, 128.6, 129.1, 3.07),
+            _item("STST-PI", 159.7 + dx, 160.1 + dx, 130.1, 130.6, 3.07),
+            _item("6Bay - Tr 1$0$Ds-e 2250", 156.7 + dx, 160.1 + dx, 131.2, 132.5, 2.65),
+        ]
+    out.append(_item("CT63", 156.5, 160.2, 121.0, 121.8, 3.96, children=[("6CT1", 2.13)]))  # کپی روی هم
+    return out
+
+
+def test_bay_chain_follows_equipment_orientation():
+    """
+    فازهای هر تجهیز در امتداد x چیده شده‌اند، پس bay در امتداد y است: LA→CT→CB→DSE پشت سر هم
+    طراحی می‌شوند (نه LAهای دو bay کنار هم) و پی‌ها روی هم نمی‌افتند.
+    """
+    st, _, _ = LP.site_stations(_soleimani_bays(), "63")
+    rows = LP.find_rows(LP._cluster_singles(st))
+    chains = [r for r in rows if r.axis == "y"]
+    assert len(chains) == 2 and all(len(r.members) == 6 for r in chains)
+    assert [m.kind for m in chains[0].members] == ["LA", "CT", "CB", "DSE", "PI", "DSE"]
+    r = LP.design_layout(None, kimia_config(), "63", items=_soleimani_bays())
+    assert not [n for n in r["notes"] if "جا نمی‌شود" in n or "فاصله آزاد" in n], r["notes"]
+    names = {f["name"].split("-")[0]: f["count"] for f in r["foundations"]}
+    assert names == {"LA+CT": 2, "CB": 2, "DSE": 4, "PI": 2}      # مثل کی‌پلن سلیمانی: LA/CT مشترک
+
+
+def test_single_phase_trio_on_one_pad():
+    """سه مقره تک‌فاز مورب یک پی مشترک با ستون‌ها درست در جای نقشه."""
+    r = LP.design_layout(None, kimia_config(), "63", items=_soleimani_bays())
+    pi = [f for f in r["foundations"] if any(g["tag"] == "PI63_1" for g in f["groups"])]
+    assert pi and pi[0]["count"] == 2
+    pos = sorted(p for g in pi[0]["groups"] if g["tag"] == "PI63_1" for p in g["positions"])
+    assert len(pos) == 3
+    d = [(round(b[0] - a[0], 2), round(b[1] - a[1], 2)) for a, b in zip(pos, pos[1:])]
+    assert all(abs(abs(x) - 1.5) < 0.01 and abs(abs(y) - 1.5) < 0.01 for x, y in d)
+
+
+def test_duplicate_block_counted_once():
+    st, _, _ = LP.site_stations(_soleimani_bays(), "63")
+    ct = [s for s in st if s.kind == "CT"]
+    assert len(ct) == 2 and all(s.hs == pytest.approx(2.13) for s in ct)

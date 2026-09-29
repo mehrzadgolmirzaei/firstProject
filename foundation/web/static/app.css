@@ -391,3 +391,6 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .ol-act{display:flex;gap:8px;margin-top:6px;align-items:center}
 .ol-card .yes{color:var(--pass)}.ol-card .no{color:var(--fail)}
 input.from-outline{border-color:var(--steel);background:#EEF3F6}
+.inline-f{display:flex;align-items:center;gap:8px;margin:6px 0 0}
+.inline-f label{margin:0;font-size:13px}
+.inline-f input{width:80px}
