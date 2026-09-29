@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.6.4"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.6.5"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -37,8 +37,8 @@ def _secret_key():
         return env
     path = Path(__file__).with_name(".secret_key")
     if not path.exists():
-        path.write_text(secrets.token_hex(32))
-    return path.read_text().strip()
+        path.write_text(secrets.token_hex(32), encoding="utf-8")
+    return path.read_text(encoding="utf-8").strip()
 
 
 app = Flask(__name__)
@@ -571,13 +571,21 @@ def api_outline():
         p["catalog"] = {k: getattr(eq, k) for k in ("He", "he", "Ae", "We")} if eq else None
         p["catalog_key"] = key or ""
         p["image"] = url_for("outline_page", oid=oid, page=p["page"])
-    (folder / "pages.json").write_text(json.dumps(pages, ensure_ascii=False))
+    (folder / "pages.json").write_text(json.dumps(pages, ensure_ascii=False), encoding="utf-8")
     auth.record("خواندن اوت‌لاین", "outline", None,
                 {"file": f.filename, "pages": len(pages),
                  "types": [p["type"] for p in pages]})
     scanned = sum(p["method"] == "none" for p in pages)
+    # صفحه‌ای که نه نوع تجهیز دارد نه هیچ عددی: اوت‌لاین تجهیز نیست (جانمایی، شماتیک، جلد …)
+    foreign = [p["page"] for p in pages if p.get("foreign")
+               or (p["method"] != "none" and not p["type"] and not p["fields"])]
+    if pages and len(foreign) == len(pages):
+        return jsonify({"error": "این PDF اوت‌لاین تجهیز به نظر نمی‌رسد: در هیچ صفحه‌اش نام تجهیز یا "
+                                 "وزن/ارتفاع/سطح بادگیر پیدا نشد (مثلاً نقشه جانمایی یا شماتیک است). "
+                                 "نقشه Outline / Dimension Drawing سازنده را بدهید."}), 400
     return jsonify({"file": f.filename, "pages": pages, "ocr": OL.ocr_available(),
                     "types": {t: EQUIPMENT_TYPES.get(t, t) for t in types},
+                    "foreign": foreign,
                     "warning": (f"{scanned} صفحه اسکن است و خواندن متن تصویر (OCR) روی این رایانه "
                                 "نصب نیست. برنامه را یک بار ببندید و دوباره اجرا کنید تا خودش نصب کند "
                                 "(اینترنت لازم است)؛ تا آن موقع عددها را از تصویر همان صفحه وارد کنید."
@@ -594,7 +602,7 @@ def outline_page(oid, page):
     src = folder / "source.pdf"
     if not src.is_file():
         abort(404)
-    pages = {p["page"]: p for p in json.loads((folder / "pages.json").read_text())}
+    pages = {p["page"]: p for p in json.loads((folder / "pages.json").read_text(encoding="utf-8"))}
     if page not in pages:
         abort(404)
     png = folder / f"p{page}.png"
@@ -1151,6 +1159,22 @@ def missing(_):
                            message="چنین صفحه‌ای وجود ندارد."), 404
 
 
+@app.errorhandler(Exception)
+def unexpected(exc):
+    """
+    هر خطای پیش‌بینی‌نشده: برای درخواست‌های /api پیام JSON (صفحه فقط «خطای سرور ۵۰۰» نشان ندهد)،
+    برای صفحه‌ها همان صفحه خطا. متن کامل خطا در ترمینال ثبت می‌شود.
+    """
+    from werkzeug.exceptions import HTTPException
+    if isinstance(exc, HTTPException):
+        return exc
+    app.logger.exception("unexpected")
+    text = f"خطای پیش‌بینی‌نشده در سرور ({type(exc).__name__}: {exc}). متن کامل در پنجره ترمینال برنامه آمده است."
+    if request.path.startswith("/api/"):
+        return jsonify({"error": text}), 500
+    return render_template("error.html", code=500, message=text), 500
+
+
 def bootstrap():
     db.init_db()
     creds = auth.seed_admin()
@@ -1186,7 +1210,7 @@ def ensure_requirements():
     stamp = hashlib.md5(req.read_bytes()).hexdigest() if req.exists() else ""
     have = (importlib.util.find_spec("rapidocr") is not None
             or importlib.util.find_spec("rapidocr_onnxruntime") is not None)
-    if req.exists() and (not marker.exists() or marker.read_text().strip() != stamp) and \
+    if req.exists() and (not marker.exists() or marker.read_text(encoding="utf-8").strip() != stamp) and \
             importlib.util.find_spec("rapidocr") is None:
         print("نصب خواندن متن نقشه‌های اسکن‌شده (OCR، اختیاری) …")
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
@@ -1199,7 +1223,7 @@ def ensure_requirements():
         else:
             print("OCR نصب شد.")
             have = True
-        marker.write_text(stamp)
+        marker.write_text(stamp, encoding="utf-8")
     print("خواندن نقشه اسکن‌شده (OCR): " + ("آماده" if have else "نصب نیست"))
 
 

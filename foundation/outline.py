@@ -145,8 +145,10 @@ def _tokens_text(page):
     return out
 
 
-def _tokens_ocr(page, dpi=200):
+def _tokens_ocr(page, dpi=200, max_px=5000):
     import numpy as np
+    # برگه‌های بزرگ (A1/A0) کوچک‌تر خوانده می‌شوند تا حافظه و زمان معقول بماند
+    dpi = int(min(dpi, max_px * 72.0 / max(page.rect.width, page.rect.height, 1)))
     pix = page.get_pixmap(dpi=dpi)
     img = np.frombuffer(pix.samples, np.uint8).reshape(pix.h, pix.w, pix.n)[:, :, :3]
     res = _ocr_engine()(img)
@@ -263,6 +265,19 @@ def _labelled(toks, label_re, lo, hi, units, inline_re=None):
         if hit:
             return hit[2][0], hit[2][1], [t, hit[1]], t.text
     return None
+
+
+NOT_OUTLINE = r"LAYOUT|GENERAL\s*PLAN|SITE\s*PLAN|KEY\s*PLAN|SINGLE\s*LINE|SCHEMATIC|FOUNDATION\s*PLAN"
+
+
+def not_outline(text):
+    """
+    صفحه‌ای که اوت‌لاین یک تجهیز نیست: نقشه جانمایی، شماتیک، کی‌پلن … (عنوانش، یا نام سه نوع تجهیز
+    یا بیشتر مثل راهنمای نقشه جانمایی). اوت‌لاین سکسیونر با تیغه زمین دو نوع دارد، نه سه.
+    """
+    up = text.upper()
+    kinds = {tag for tag, pat in TYPE_WORDS if re.search(pat, up)}
+    return bool(re.search(NOT_OUTLINE, up)) or len(kinds - {"DS"}) >= 3
 
 
 def detect_type(text):
@@ -392,6 +407,10 @@ def read_pdf(path, pages=None, max_pages=30):
             continue
         toks, how = page_tokens(page)
         text = "\n".join(t.text for t in toks)
+        if not_outline(text):
+            out.append({"page": i + 1, "type": "", "title": "", "method": how, "fields": {},
+                        "foreign": True, "width": page.rect.width, "height": page.rect.height})
+            continue
         tag = detect_type(text)
         out.append({"page": i + 1, "type": tag, "title": _title(toks, tag),
                     "method": how, "fields": extract(toks) if toks else {},

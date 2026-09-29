@@ -170,3 +170,45 @@ def test_missing_pdf_library_is_explained(monkeypatch):
     monkeypatch.setitem(sys.modules, "fitz", None)
     with pytest.raises(RuntimeError, match="requirements"):
         OL._pymupdf()
+
+
+def test_layout_or_schematic_is_not_an_outline():
+    """راهنمای نقشه جانمایی همه تجهیزها را نام می‌برد؛ اوت‌لاین سکسیونر با تیغه زمین فقط دو نوع."""
+    legend = "LIGHTNING ARRESTER\\nCURRENT TRANSFORMER\\nCIRCUIT BREAKER\\nPOST INSULATOR\\nDISCONNECTING SWITCH"
+    assert OL.not_outline(legend)
+    assert OL.not_outline("132kV Line 1 Protection Panel Schematic Diagram")
+    assert OL.not_outline("General Layout & Section — HV Switchgear Layout")
+    assert not OL.not_outline("Disconnector NSA245 with Earthing Switch\\nTotal permissible force")
+    assert not OL.not_outline("230kV SF6 Circuit Breaker\\nPOST INSULATOR\\nSECTION A-A")
+
+
+def test_web_rejects_layout_pdf_clearly(app, tmp_path):  # noqa: F811
+    pdf = _pdf(tmp_path / "layout.pdf", [[(40, 40, "GENERAL LAYOUT"), (40, 60, "LIGHTNING ARRESTER"),
+                                          (40, 80, "CURRENT TRANSFORMER"), (40, 100, "CIRCUIT BREAKER")]])
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    with open(pdf, "rb") as fh:
+        r = c.post("/api/outline", data={"file": (fh, "layout.pdf"), "voltage": "230"}, headers=h,
+                   content_type="multipart/form-data")
+    assert r.status_code == 400 and "اوت‌لاین تجهیز به نظر نمی‌رسد" in r.get_json()["error"]
+
+
+def test_server_text_files_are_utf8():
+    """ویندوز فارسی cp1256 است و «۳» را ندارد؛ هر نوشتن/خواندن متن باید encoding صریح داشته باشد."""
+    import re
+    from pathlib import Path
+    src = (Path(__file__).parent.parent / "web" / "server.py").read_text(encoding="utf-8")
+    calls = re.findall(r"\.(?:write_text|read_text)\((?:[^()]|\([^()]*\))*\)", src, re.S)
+    assert calls and all("encoding=" in c for c in calls), [c for c in calls if "encoding=" not in c]
+
+
+def test_api_errors_are_json(app, monkeypatch):  # noqa: F811
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    monkeypatch.setattr(OL, "read_pdf", lambda *a, **k: [{"page": 1, "type": "LA", "title": "",
+                                                          "method": "text", "fields": {}, "width": 1,
+                                                          "height": 1, "x": object()}])
+    import io
+    r = c.post("/api/outline", data={"file": (io.BytesIO(b"%PDF-1.4"), "a.pdf"), "voltage": "230"},
+               headers=h, content_type="multipart/form-data")
+    assert r.status_code == 500 and r.is_json and "پیش‌بینی‌نشده" in r.get_json()["error"]
