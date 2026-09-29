@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.4.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.4.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -431,7 +431,7 @@ def api_keyplan():
     """
     import shutil
     import ezdxf
-    from keyplan import read_foundations
+    from keyplan import read_foundations, detect_voltage as kp_voltage, plan as kp_plan
     import layoutplan as LP
     f = request.files.get("file")
     voltage = request.form.get("voltage") or "63"
@@ -452,14 +452,14 @@ def api_keyplan():
                 continue
             found = read_foundations(None, ALL_EQUIPMENT, voltage, doc=doc)
             if any(x.ok for x in found):
+                # سطح ولتاژ از خود کی‌پلن: ستون‌های پی با کاتالوگ کدام سطح می‌خواند
+                v_kp, found = kp_voltage(doc, ALL_EQUIPMENT, voltage)
                 auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
-                ok = [x for x in found if x.ok]
-                single = all(len(x.groups) == 1 and len(x.groups[0]["positions"]) == 1
-                             and abs(x.L - x.B) < 1e-6 for x in ok)
-                warn = ("همه پی‌های این کی‌پلن منفرد و مربعی‌اند (مثل پست ۲۳۰ و ۴۰۰)، ولی سطح ولتاژ «۶۳» "
-                        "انتخاب شده؛ سطح ولتاژ را بررسی کنید." if single and voltage == "63" else "")
-                return jsonify({"kind": "keyplan", "file": label, "warning": warn,
-                                "foundations": [x.to_dict() for x in found]})
+                return jsonify({"kind": "keyplan", "file": label, "warning": "",
+                                "voltage": v_kp, "voltage_changed": v_kp != voltage,
+                                "foundations": [x.to_dict() for x in found],
+                                "plan": {"stations": [],
+                                         "pads": kp_plan(doc, {x.name for x in found if x.ok})}})
             items, axes = LP.read_items(None, doc=doc), LP.read_axes(doc)
             v = LP.detect_voltage(items) or voltage
             stations, _, _ = LP.site_stations(items, v, axes)

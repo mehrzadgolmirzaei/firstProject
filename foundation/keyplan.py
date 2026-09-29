@@ -185,3 +185,45 @@ def read_foundations(path, catalog, voltage="63", doc=None):
         found.append(f)
     found.sort(key=lambda f: f.name)
     return found
+
+
+def fit_score(found, catalog):
+    """چند نوع پی با کاتالوگ این سطح ولتاژ می‌خواند: تعداد ستون هر تجهیز = ستون‌های کاتالوگ."""
+    n = 0
+    for f in found:
+        if f.ok and all(len(g["positions"]) == catalog[g["tag"]].n_pedestal for g in f.groups):
+            n += f.count
+    return n
+
+
+def detect_voltage(doc, catalog, selected="63"):
+    """
+    سطح ولتاژ کی‌پلن: همان که ستون‌های بیشترین پی با کاتالوگش می‌خواند (پی ۲۳۰ یک ستون، پی ۶۳
+    یک سازه دو یا سه ستونه). اگر برابر بود، انتخاب فرم می‌ماند.
+    خروجی: (سطح ولتاژ، پی‌ها با همان سطح)
+    """
+    best = None
+    for v in [selected] + [v for v in VOLTAGE_LEVELS if v != selected]:
+        found = read_foundations(None, catalog, v, doc=doc)
+        s = fit_score(found, catalog)
+        if best is None or s > best[0]:
+            best = (s, v, found)
+    return best[1], best[2]
+
+
+def plan(doc, names):
+    """جای هر پی کی‌پلن (m) برای نمایش پلان: [{type, label, cx, cy, dx, dy}]."""
+    from ezdxf import bbox
+    cache = bbox.Cache()
+    out = []
+    for ins in doc.modelspace().query("INSERT"):
+        if ins.dxf.name not in names:
+            continue
+        e = bbox.extents([ins], cache=cache)
+        if not e.has_data:
+            continue
+        label = re.sub(r"(-[\d.]+)+$", "", ins.dxf.name).upper()      # LA+CVT-3-2.5 ← LA+CVT
+        out.append({"type": ins.dxf.name, "label": label,
+                    "cx": round(e.center.x / 1000, 3), "cy": round(e.center.y / 1000, 3),
+                    "dx": round(e.size.x / 1000, 3), "dy": round(e.size.y / 1000, 3)})
+    return out

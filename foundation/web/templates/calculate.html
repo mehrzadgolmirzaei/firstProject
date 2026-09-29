@@ -568,7 +568,7 @@ async function uploadDrawing(file, full){
   } catch (err) { d = {error: "ارتباط با سرور برقرار نشد: " + err}; }
   if (d.error) { kpStatus(`${file.name}: ${d.error}`, "ng"); return; }
   let note = "";
-  if (d.kind === "layout" && d.voltage_changed) {
+  if (d.voltage_changed) {
     $("voltage").value = d.voltage; populateEquipment(); drawPreview();
     note = ` سطح ولتاژ از روی نقشه ${d.voltage} کیلوولت تشخیص داده شد و در فرم تنظیم شد.`;
   }
@@ -580,7 +580,7 @@ async function uploadDrawing(file, full){
       (f.problem ? f.problem : `${f.describe} · ${fmt(f.L)}×${fmt(f.B)}` +
         (f.tf ? `×${fmt(f.tf)}` : "") + ` · ${f.count} عدد`) + `</option>`).join("");
   sel.style.display = "block";
-  if (d.kind === "layout") showLayout(d);
+  showLayout(d);
   if (full && d.full) { kpStatus(`طراحی کامل ${d.full.totals.pads} پی و سازه‌هایشان انجام و ثبت شد.`, "ok"); return; }
   kpStatus((d.kind === "layout"
     ? (MODE === "final"
@@ -614,8 +614,13 @@ function showLayout(d){
       width="${s.x1 - s.x0}" height="${s.y1 - s.y0}"><title>${esc(s.label)}</title></rect>`).join("");
   const pads = P.pads.map(p => `<g class="pad" data-type="${esc(p.type)}"><rect x="${p.cx - p.dx / 2}"
       y="${Y(p.cy + p.dy / 2)}" width="${p.dx}" height="${p.dy}"><title>${esc(p.type)}</title></rect>
-      <text x="${p.cx}" y="${Y(p.cy) + 0.15}">${esc(p.label)}</text></g>`).join("");
+      <text x="${p.cx}" y="${Y(p.cy) + 0.15}"${d.kind === "keyplan"
+        ? ` style="font-size:${Math.min(p.dx, p.dy * 1.6) / Math.max(p.label.length, 2) * 1.2}px"` : ""}>${esc(p.label)}</text></g>`).join("");
   const notes = (d.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
+  if (d.kind === "keyplan") {                 // کی‌پلن موجود: فقط پلان پی‌ها، انتخاب با کلیک
+    $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${pads}</svg>
+      <p class="note">${P.pads.length} پی از کی‌پلن؛ روی هر پی بزنید تا همان نوع انتخاب شود.</p>`;
+  } else
   $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
@@ -623,8 +628,10 @@ function showLayout(d){
     <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>
     <button type="button" class="btn wide only-final" id="lytFull" style="margin-top:8px">تهیه خروجی نهایی — طراحی همه پی‌ها و سازه‌ها</button>
 `;
-  $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
-  $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
+  if (d.kind !== "keyplan") {
+    $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
+    $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
+  }
   if (d.full) showFull(d.full);
   $("lytBox").style.display = "block";
   $("lytBox").querySelectorAll("g.pad").forEach(g => g.addEventListener("click", () => {

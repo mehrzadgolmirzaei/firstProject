@@ -8,6 +8,7 @@ pytest.importorskip("ezdxf")
 from equipment import ALL_EQUIPMENT                        # noqa: E402
 from keyplan import read_foundations, equipment_tokens    # noqa: E402
 from kimia63_data import PADS                              # noqa: E402
+from test_web import app                                   # noqa: E402,F401
 
 DXF = Path(__file__).with_name("data") / "keyplan_kimia63.dxf"
 
@@ -54,3 +55,27 @@ def test_keyplan_layout_runs(found):
     cfg.foundation.L, cfg.foundation.B, cfg.foundation.b = f.L, f.B, f.b
     res, *_ = run_layout(f.layout(ALL_EQUIPMENT), cfg)
     assert res.checks[0].value == pytest.approx(3.74, abs=0.02)
+
+
+def test_voltage_detected_from_keyplan():
+    """کی‌پلن ۶۳ با ولتاژ ۲۳۰ در فرم: سازه‌های دوستونه فقط با کاتالوگ ۶۳ می‌خوانند."""
+    import ezdxf
+    from keyplan import detect_voltage, plan
+    doc = ezdxf.readfile(str(DXF))
+    v, found = detect_voltage(doc, ALL_EQUIPMENT, "230")
+    assert v == "63" and all(g["tag"].endswith(("63", "63_1")) for f in found for g in f.groups)
+    pads = plan(doc, {f.name for f in found if f.ok})
+    assert len(pads) == sum(f.count for f in found if f.ok)
+    assert all(p["dx"] > 0.5 and p["dy"] > 0.5 for p in pads)
+
+
+def test_web_keyplan_has_plan_and_voltage(app):  # noqa: F811
+    from test_web import _login
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    with open(DXF, "rb") as fh:
+        r = c.post("/api/keyplan", data={"file": (fh, "kp.dxf"), "voltage": "230"}, headers=h,
+                   content_type="multipart/form-data")
+    d = r.get_json()
+    assert r.status_code == 200 and d["kind"] == "keyplan", d
+    assert d["voltage"] == "63" and d["voltage_changed"] and d["plan"]["pads"]
