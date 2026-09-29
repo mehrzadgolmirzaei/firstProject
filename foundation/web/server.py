@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "1.15.2"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.0.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -103,9 +103,32 @@ def dashboard():
 
 
 # ================================================================= محاسبه
+PAGE_MODES = {
+    "foundation": ("محاسبه فونداسیون", "طراحی و کنترل پی تجهیز: پایداری، ستون، آرماتور، میل مهار و نقشه ساخت"),
+    "structure": ("سازه نگهدارنده", "تعریف، تحلیل و کنترل سازه فولادی تجهیز طبق AISC-ASD89 — جایگزین SAP"),
+    "final": ("خروجی نهایی پست", "از نقشه جانمایی: طراحی همه پی‌ها و سازه‌ها، جمع مصالح و همه نقشه‌ها در یک فایل"),
+}
+
+
 @app.route("/calculate")
 @auth.login_required
 def calculate():
+    return _calc_page("foundation")
+
+
+@app.route("/structure")
+@auth.login_required
+def structure_page():
+    return _calc_page("structure")
+
+
+@app.route("/final")
+@auth.login_required
+def final_page():
+    return _calc_page("final")
+
+
+def _calc_page(mode):
     cat = db.query("SELECT * FROM equipment_catalog ORDER BY tag")
     subs = db.query("SELECT s.*, p.name AS project FROM substations s"
                     " LEFT JOIN projects p ON p.id=s.project_id ORDER BY s.code")
@@ -122,7 +145,8 @@ def calculate():
                            defaults=asdict(_office_config()),
                            angles=[a.name for a in __import__("structural.sections", fromlist=["ANGLES"]).ANGLES],
                            channels=[c.name for c in __import__("structural.sections", fromlist=["CHANNELS"]).CHANNELS],
-                           options=design_options())
+                           options=design_options(), mode=mode,
+                           page_title=PAGE_MODES[mode][0], page_sub=PAGE_MODES[mode][1])
 
 
 def _office_config():
@@ -625,6 +649,81 @@ def download(name):
     if OUT.resolve() not in target.parents or not target.is_file():
         abort(404)
     return send_file(target, as_attachment=True)
+
+
+@app.post("/api/final/zip")
+@auth.requires("engineer")
+def api_final_zip():
+    """
+    خروجی نهایی پست در یک فایل: نقشه دوبعدی، مدل سه‌بعدی و مدل SAP هر تیپ پی، کی‌پلن ساخته‌شده از
+    نقشه جانمایی و جدول خلاصه (Excel). ورودی: {"ids": [...], "summary": {...}, "keyplan": نام فایل}
+    """
+    import zipfile
+    body = request.get_json(silent=True) or {}
+    ids = [int(i) for i in body.get("ids", []) if str(i).isdigit()][:60]
+    if not ids:
+        return jsonify({"error": "هیچ محاسبه‌ای برای خروجی نیست."}), 400
+    from outputs import make_outputs
+    name = f"final_{secrets.token_hex(4)}.zip"
+    warnings = []
+    with zipfile.ZipFile(OUT / name, "w", zipfile.ZIP_DEFLATED) as z:
+        for cid in ids:
+            built, err = _rebuild(cid)
+            if err:
+                warnings.append(f"محاسبه {cid} بازتولید نشد")
+                continue
+            res, seis, des, qty, bbs, eq, cfg = built
+            try:
+                out = make_outputs(res, eq, from_config(cfg)[0], qty, bbs, seis, des, cfg,
+                                   str(OUT), f"{eq.tag}_{cid}")
+            except Exception as exc:
+                app.logger.exception("final zip")
+                warnings.append(f"محاسبه {cid}: {exc}")
+                continue
+            folder = body.get("names", {}).get(str(cid)) or f"{eq.tag}_{cid}"
+            folder = re.sub(r"[^\w.+-]", "_", folder)
+            for key in ("2d", "3d"):
+                z.write(out[key], f"{folder}/{Path(out[key]).name}")
+            for sp in out.get("sap", []):
+                z.write(sp, f"{folder}/{Path(sp).name}")
+        kp = body.get("keyplan")
+        if kp:
+            kp_path = (OUT / Path(kp).name).resolve()
+            if OUT.resolve() in kp_path.parents and kp_path.is_file():
+                z.write(kp_path, "KEYPLAN_from_layout.dxf")
+        summ = body.get("summary")
+        if summ:
+            try:
+                from openpyxl import Workbook
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Foundations"
+                ws.append(["تیپ پی", "تعداد", "L", "B", "tf", "ستون", "بتن هر پی m3", "آرماتور kg",
+                           "سازه", "نبشی اصلی", "مهاربند", "افقی", "تیر سر", "وزن سازه kg", "نسبت تنش"])
+                for t in summ.get("types", []):
+                    sts = t.get("structures") or [{}]
+                    for st_ in sts:
+                        sec = st_.get("sections", {})
+                        ws.append([t["name"], t["count"], t["L"], t["B"], t["tf"],
+                                   f'{t["pedestals"]}x{t["b"]}', t["concrete"], t["rebar"],
+                                   st_.get("tag", "سازنده"), sec.get("chord"), sec.get("brace"),
+                                   sec.get("strut"), sec.get("beam"), st_.get("weight"), st_.get("ratio")])
+                ws2 = wb.create_sheet("Steel")
+                ws2.append(["مقطع", "تعداد عضو", "طول کل m", "وزن kg"])
+                for r in summ.get("bill", []):
+                    ws2.append([r["section"], r["count"], r["length"], r["weight"]])
+                ws3 = wb.create_sheet("Totals")
+                for k, lab in (("pads", "تعداد پی"), ("concrete", "بتن m3"), ("rebar", "آرماتور kg"),
+                               ("steel", "فولاد سازه‌ها kg")):
+                    ws3.append([lab, summ.get("totals", {}).get(k)])
+                tmp = OUT / f"summary_{secrets.token_hex(3)}.xlsx"
+                wb.save(tmp)
+                z.write(tmp, "SUMMARY.xlsx")
+                tmp.unlink(missing_ok=True)
+            except ImportError:
+                warnings.append("جدول خلاصه ساخته نشد: openpyxl نصب نیست")
+    auth.record("خروجی نهایی", "final", None, {"count": len(ids)})
+    return jsonify({"url": url_for("download", name=name), "warnings": warnings})
 
 
 # ================================================================= تاریخچه

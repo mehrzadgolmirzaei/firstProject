@@ -181,3 +181,33 @@ def test_structure_height_from_layout(layout_file, result):
     assert hs["LA"] == pytest.approx(3.0) and hs["CB"] == pytest.approx(2.65)
     la = [f for f in result["foundations"] if f["name"].startswith("LA")][0]
     assert la["groups"][0]["Hs"] == pytest.approx(3.0)
+
+
+def test_three_sections_and_final_zip(layout_file, app):
+    """سه بخش جدا (فونداسیون، سازه، خروجی نهایی) و فایل ZIP خروجی نهایی."""
+    import io
+    import zipfile
+    c = app.app.test_client()
+    h = {"X-CSRF-Token": _login(c)}
+    for url, title in (("/calculate", "محاسبه فونداسیون"), ("/structure", "سازه نگهدارنده"),
+                       ("/final", "خروجی نهایی پست")):
+        page = c.get(url).get_data(as_text=True)
+        assert title in page and f'mode-{url.strip("/").replace("calculate", "foundation")}' in page
+    assert "محاسبه فونداسیون" in c.get("/").get_data(as_text=True)
+    form = {"seismic.edition": "4", "seismic.a": 0.25, "seismic.b": 2.5, "seismic.i": 1.4,
+            "seismic.r": 2, "soil.q_base": 1.72, "steel.mode": "design"}
+    with open(layout_file, "rb") as fh:
+        d = c.post("/api/keyplan", data={"file": (fh, "layout.dxf"), "voltage": "63",
+                                         "form": json.dumps(form), "full": "1"},
+                   headers=h, content_type="multipart/form-data").get_json()
+    F = d["full"]
+    r = c.post("/api/final/zip", json={"ids": [t["id"] for t in F["types"]],
+                                        "names": {str(t["id"]): t["name"] for t in F["types"]},
+                                        "summary": F, "keyplan": d["dxf"].split("/")[-1]},
+               headers=h).get_json()
+    assert not r["warnings"], r
+    names = zipfile.ZipFile(io.BytesIO(c.get(r["url"]).data)).namelist()
+    assert "SUMMARY.xlsx" in names and "KEYPLAN_from_layout.dxf" in names
+    for t in F["types"]:
+        assert any(n.startswith(t["name"] + "/") and n.endswith("_2D.dxf") for n in names)
+    assert any(n.endswith("_SAP.s2k") for n in names)

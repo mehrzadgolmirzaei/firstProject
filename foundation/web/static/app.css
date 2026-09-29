@@ -336,3 +336,20 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .suggest .btn{white-space:nowrap}
 .viewer .load-info .fails{margin-top:4px;border-top:1px solid #4A5561;padding-top:4px}
 .viewer .load-info .fail{color:#F5A89E}
+
+/* سه بخش سامانه: محاسبه فونداسیون، سازه نگهدارنده، خروجی نهایی — یک قالب، هر بخش فقط مال خودش */
+.mode-foundation .no-found, .mode-foundation .only-final,
+.mode-structure .no-struct, .mode-structure .only-found, .mode-structure .only-final,
+.mode-final .no-final, .mode-final .only-found {display:none !important}
+.mode-final .cols{grid-template-columns:minmax(0,760px)}
+.final-steps{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.final-steps>div{display:flex;gap:8px;align-items:center;flex:1;min-width:220px}
+.final-steps b{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#B8693C;color:#fff;flex:none}
+.zip-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:6px 0 12px}
+.modules{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:16px}
+.module{display:block;background:var(--sheet);border:1px solid var(--rule);padding:18px;text-decoration:none;color:inherit;position:relative;transition:border-color .15s, transform .15s}
+.module:hover{border-color:#B8693C;transform:translateY(-2px)}
+.module b{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#B8693C;color:#fff;font-size:16px}
+.module h2{margin:10px 0 6px}
+.module p{margin:0 0 10px;color:var(--ink-2);font-size:13px;line-height:1.8}
+.module span{color:#B8693C;font-weight:700;font-size:13px}

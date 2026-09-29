@@ -19,11 +19,17 @@
     </div>
     {% set p = request.path %}
     <a href="{{ url_for('dashboard') }}" class="{{ 'on' if p == '/' }}">خانه</a>
-    <a href="{{ url_for('calculate') }}" class="{{ 'on' if p.startswith('/calculate') }}">محاسبه جدید</a>
+    <div class="grp">۱. فونداسیون</div>
+    <a href="{{ url_for('calculate') }}" class="{{ 'on' if p.startswith('/calculate') }}">محاسبه فونداسیون</a>
     <a href="{{ url_for('bay_page') }}" class="{{ 'on' if p.startswith('/bay') }}">طراحی ردیف تجهیزات</a>
-    <a href="{{ url_for('guide_page') }}" class="{{ 'on' if p.startswith('/guide') }}">راهنما</a>
-    <a href="{{ url_for('method_page') }}" class="{{ 'on' if p.startswith('/method') }}">روش تحلیل سازه</a>
+    <div class="grp">۲. سازه نگهدارنده</div>
+    <a href="{{ url_for('structure_page') }}" class="{{ 'on' if p.startswith('/structure') }}">تحلیل و کنترل سازه</a>
     <a href="{{ url_for('verify_page') }}" class="{{ 'on' if p.startswith('/verify') }}">مقایسه با SAP</a>
+    <a href="{{ url_for('method_page') }}" class="{{ 'on' if p.startswith('/method') }}">روش تحلیل سازه</a>
+    <div class="grp">۳. خروجی نهایی</div>
+    <a href="{{ url_for('final_page') }}" class="{{ 'on' if p.startswith('/final') }}">خروجی نهایی پست</a>
+    <div class="grp">عمومی</div>
+    <a href="{{ url_for('guide_page') }}" class="{{ 'on' if p.startswith('/guide') }}">راهنما</a>
     <a href="{{ url_for('history') }}" class="{{ 'on' if p.startswith('/history') or p.startswith('/calculation') }}">تاریخچه</a>
     <div class="grp">مرجع</div>
     <a href="{{ url_for('catalog') }}" class="{{ 'on' if p.startswith('/catalog') }}">کاتالوگ تجهیزات</a>

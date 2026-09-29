@@ -1,12 +1,20 @@
 {% extends "base.html" %}
-{% block title %}محاسبه جدید{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 {% block body %}
 <header class="page">
-  <div><h1>محاسبه جدید</h1><p>طراحی فونداسیون و سازه نگهدارنده تجهیزات پست</p></div>
+  <div><h1>{{ page_title }}</h1><p>{{ page_sub }}</p></div>
   <span class="note" id="stamp"></span>
 </header>
+<div class="mode-{{ mode }}">
+{% if mode == "final" %}
+<div class="sheet final-steps">
+  <div><b>۱</b><span>مشخصات ساختگاه (زلزله، خاک، باد) و تنظیمات سازه را وارد کنید</span></div>
+  <div><b>۲</b><span>نقشه جانمایی پست را بدهید (DXF یا ZIP پوشه نقشه‌ها)</span></div>
+  <div><b>۳</b><span>«تهیه خروجی نهایی»: همه پی‌ها و سازه‌ها طراحی و همه نقشه‌ها در یک فایل آماده می‌شود</span></div>
+</div>
+{% endif %}
 
-<div class="sheet full-site" id="fullWide" style="display:none"></div>
+<div class="sheet full-site only-final" id="fullWide" style="display:none"></div>
 <div class="cols">
   <!-- ورودی -->
   <form class="sheet" id="form" autocomplete="off">
@@ -31,11 +39,11 @@
         پی‌ها را متناسب با فضا طراحی می‌کند (پیش از بارگذاری، مشخصات ساختگاه را وارد کنید). پوشه نقشه‌ها را
         می‌توان به‌صورت ZIP داد. <b>کی‌پلن:</b> ابعاد و ستون‌های پی‌های موجود خوانده می‌شود.</small>
       <div id="kpMsg" class="kp-msg" style="display:none"></div>
-      <select id="kpsel" style="display:none;margin-top:6px"></select>
+      <select id="kpsel" class="no-final" style="display:none;margin-top:6px"></select>
       <div id="lytBox" class="lyt-box" style="display:none"></div>
     </div>
 
-    <div class="f">
+    <div class="f no-final">
       <label>تجهیز</label>
       <select id="preset"></select>
     </div>
@@ -52,12 +60,12 @@
       </select>
     </div>
 
-    <div class="flash" id="outlineWarn" style="display:none">
+    <div class="flash no-final" id="outlineWarn" style="display:none">
       سازه این تجهیز را خود سازنده می‌دهد. ابعاد و وزن، نقاط اتصال هادی، گِیج میل مهار و
       صفحه کف باید از اوت‌لاین سازنده همین پروژه خوانده و وارد شوند. عدد پیش‌فرض گذاشته نشده.
     </div>
 
-    <fieldset>
+    <fieldset class="no-final">
       <legend>تجهیز — از اوت‌لاین سازنده</legend>
       <div class="row">
         <div class="f"><label><b>He</b> ارتفاع تجهیز (m)</label><input id="He" type="number" step="0.001">
@@ -78,7 +86,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="only-found">
       <legend>ستون‌ها و ابعاد پی</legend>
       <div class="row">
         <input type="hidden" id="kind" value="single">
@@ -137,7 +145,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="only-found">
       <legend>اتصال به فونداسیون — از نقشه سازه نگهدارنده</legend>
       <div class="row">
         
@@ -158,7 +166,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="no-final">
       <legend>استراکچر (سازه نگهدارنده)</legend>
       <div class="row">
         <div class="f"><label><b>Hs</b> ارتفاع سازه (m)</label><input id="Hs" type="number" step="0.01">
@@ -172,7 +180,7 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="no-final">
       <legend>هادی و بارهای مانور</legend>
       <div class="row">
         <div class="f"><label><b>Wc</b> وزن هادی (kg)</label><input id="Wc" type="number" step="1" value="50">
@@ -200,7 +208,7 @@
 
     {% include "_site_fields.html" %}
 
-    <fieldset>
+    <fieldset class="no-struct">
       <legend>ستون بتنی و ضخامت پی</legend>
       <div class="row three">
         <div class="f"><label><b>hp</b> (m)</label><input id="hp" type="number" step="0.05" value="1"></div>
@@ -215,11 +223,11 @@
       </div>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="no-found">
       <legend>سازه فولادی نگهدارنده</legend>
-      <label class="check-inline"><input type="checkbox" id="steel_enabled" checked>
+      <label class="check-inline only-found"><input type="checkbox" id="steel_enabled" checked>
         تحلیل و طراحی سازه فولادی طبق AISC-ASD89</label>
-      <label class="check-inline"><input type="checkbox" id="steel_feed" checked>
+      <label class="check-inline only-final"><input type="checkbox" id="steel_feed" checked>
         استفاده از وزن و سطح بادگیر سازه طراحی‌شده در محاسبه فونداسیون</label>
       <div class="f"><label>روش تعیین مقاطع</label>
         <select id="steel_mode">
@@ -258,7 +266,7 @@
         تحلیل می‌شود. سازه کلید قدرت توسط سازنده تأمین می‌شود و طراحی نمی‌گردد.</p>
     </fieldset>
 
-    <fieldset>
+    <fieldset class="only-found">
       <legend>روش کنترل — انتخاب مهندس</legend>
       <div class="f">
         <label>حالت بار حاکم</label>
@@ -287,13 +295,13 @@
     </fieldset>
 
     <aside class="help-panel" id="helpPanel" aria-live="polite"></aside>
-    <button class="btn wide" type="submit" id="go">اجرای محاسبه</button>
-    <p class="note" id="msg"></p>
+    <button class="btn wide no-final" type="submit" id="go">اجرای محاسبه</button>
+    <p class="note no-final" id="msg"></p>
   </form>
 
   <!-- خروجی -->
-  <div>
-    <div class="view-tabs" id="viewTabs" style="display:none">
+  <div class="no-final">
+    <div class="view-tabs only-found" id="viewTabs" style="display:none">
       <button type="button" class="on" data-view="viewer">مدل سه‌بعدی</button>
       <button type="button" data-view="sheetView">نقشه ساخت</button>
     </div>
@@ -318,7 +326,7 @@
           <div class="heat-scale"><span>۰</span><b></b><span>۱٫۲</span><br><small>نسبت تنش اعضا</small></div>
         </div>
         <div class="hint">برای چرخاندن بکشید · برای بزرگ‌نمایی اسکرول کنید</div>
-        <div class="load-bar" id="loadBar" style="display:none">
+        <div class="load-bar no-found" id="loadBar" style="display:none">
           <select id="loadSel" title="سازه زیر بار یک ترکیب: تغییرشکل و نسبت تنش هر عضو"></select>
           <div class="load-info" id="loadInfo"></div>
         </div>
@@ -326,7 +334,7 @@
       </div>
     </div>
 
-    <div class="sheet" id="result" style="display:none">
+    <div class="sheet only-found" id="result" style="display:none">
       <div class="readout">
         <span class="big" id="dim">—</span>
         <span class="unit">متر — پی</span>
@@ -342,19 +350,19 @@
       </div>
     </div>
 
-    <div class="sheet" id="checksBox" style="display:none">
+    <div class="sheet only-found" id="checksBox" style="display:none">
       <h2>کنترل‌های طراحی</h2>
       <div id="checks"></div>
     </div>
 
-    <div class="sheet" id="steelBox" style="display:none">
+    <div class="sheet no-found" id="steelBox" style="display:none">
       <h2>سازه فولادی نگهدارنده</h2>
       <p class="note">تحلیل و طراحی در خود برنامه (روش سختی مستقیم و AISC-ASD89)، بدون نیاز به SAP —
         <a href="{{ url_for('method_page') }}" target="_blank">شرح روش و صحت‌سنجی</a></p>
       <div id="steelOut"></div>
     </div>
 
-    <div class="sheet" id="designBox" style="display:none">
+    <div class="sheet only-found" id="designBox" style="display:none">
       <h2>آرماتور و متره</h2>
       <div class="cols">
         <div id="rebar"></div>
@@ -363,12 +371,14 @@
     </div>
   </div>
 </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='three.min.js', v=VERSION) }}"></script>
 <script src="{{ url_for('static', filename='viewer3d.js', v=VERSION) }}"></script>
 <script>
+const MODE = {{ mode|tojson }};
 const BUILTIN = {{ builtin|tojson }};
 const VOLTAGES = {{ voltages|tojson }};
 const TYPES = {{ types|tojson }};
@@ -512,7 +522,9 @@ function populateEquipment(){
 }
 $("voltage").addEventListener("change", () => { populateEquipment(); drawPreview(); });
 function applySteelMode(){ $("secRow").style.display = $("steel_mode").value === "check" ? "" : "none"; }
-$("steel_mode").addEventListener("change", applySteelMode); applySteelMode();
+$("steel_mode").addEventListener("change", applySteelMode);
+if (MODE === "final") $("steel_mode").value = "design";   // خروجی نهایی: سبک‌ترین مقاطع قابل قبول
+applySteelMode();
 
 // نقشه جانمایی یا کی‌پلن: همه پی‌ها، انتخاب یکی
 var KP = [], KP_KIND = "";
@@ -557,7 +569,9 @@ async function uploadDrawing(file, full){
   if (d.kind === "layout") showLayout(d);
   if (full && d.full) { kpStatus(`طراحی کامل ${d.full.totals.pads} پی و سازه‌هایشان انجام و ثبت شد.`, "ok"); return; }
   kpStatus((d.kind === "layout"
-    ? `نقشه جانمایی خوانده شد و ${KP.length} تیپ پی متناسب با فضا طراحی شد؛ پی مورد نظر را از فهرست یا روی پلان انتخاب کنید.`
+    ? (MODE === "final"
+      ? `نقشه جانمایی خوانده شد: ${KP.length} تیپ پی. برای طراحی همه پی‌ها و سازه‌ها و تهیه نقشه‌ها، «تهیه خروجی نهایی» را بزنید.`
+      : `نقشه جانمایی خوانده شد و ${KP.length} تیپ پی متناسب با فضا طراحی شد؛ پی مورد نظر را از فهرست یا روی پلان انتخاب کنید.`)
     : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.") + note + ` (${file.name})`, "ok");
 }
 $("kpsel").addEventListener("change", e => {
@@ -572,7 +586,9 @@ $("kpsel").addEventListener("change", e => {
 });
 
 // پلان پی‌های طراحی‌شده روی نقشه جانمایی
+var LAST_KEYPLAN = null;
 function showLayout(d){
+  LAST_KEYPLAN = (d.dxf || "").split("/").pop();
   const P = d.plan, all = P.stations.map(s => [s.x0, s.x1, s.y0, s.y1])
     .concat(P.pads.map(p => [p.cx - p.dx / 2, p.cx + p.dx / 2, p.cy - p.dy / 2, p.cy + p.dy / 2]));
   const x0 = Math.min(...all.map(a => a[0])) - 1, x1 = Math.max(...all.map(a => a[1])) + 1;
@@ -590,7 +606,7 @@ function showLayout(d){
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
     <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>
     <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>
-    <button type="button" class="btn wide" id="lytFull" style="margin-top:8px">طراحی کامل همه پی‌ها و سازه‌ها (نبشی‌ها، ناودانی‌ها، بتن، آرماتور)</button>
+    <button type="button" class="btn wide only-final" id="lytFull" style="margin-top:8px">تهیه خروجی نهایی — طراحی همه پی‌ها و سازه‌ها</button>
 `;
   $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
   $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
@@ -620,7 +636,9 @@ function showFull(F){
   const T = F.totals;
   const failing = F.types.reduce((n, t) => n + t.structures.filter(x => !x.ok).length, 0);
   $("fullWide").style.display = "block";
-  $("fullWide").innerHTML = `<h2>طراحی کامل پست از نقشه جانمایی <button type="button" class="btn ghost" id="fullClose">بستن</button></h2>
+  $("fullWide").innerHTML = `<h2>خروجی نهایی پست <button type="button" class="btn ghost" id="fullClose">بستن</button></h2>
+    <div class="zip-row"><button type="button" class="btn" id="fullZip">همه نقشه‌ها، مدل‌های سه‌بعدی، مدل‌های SAP و جدول خلاصه در یک فایل (ZIP)</button>
+      <span id="zipMsg" class="note"></span></div>
     <div class="full-tot"><div><b>${T.pads}</b><span>پی</span></div><div><b>${fmt(T.concrete, 1)}</b><span>m³ بتن</span></div>
       <div><b>${fmt(T.rebar, 0)}</b><span>kg آرماتور</span></div><div><b>${fmt(T.steel, 0)}</b><span>kg فولاد سازه‌ها (با اتصالات)</span></div></div>
     <div class="tscroll"><table class="compare"><thead><tr><th>تیپ پی</th><th>تعداد</th><th>L×B×tf (m)</th><th>ستون</th>
@@ -628,7 +646,7 @@ function showFull(F){
     <h3>فهرست کل مقاطع فولادی پست</h3>
     <table class="compare"><thead><tr><th>مقطع</th><th>تعداد عضو</th><th>طول کل m</th><th>وزن kg</th></tr></thead><tbody>${bill}</tbody></table>
     <p class="note">هر تیپ به‌صورت یک محاسبه کامل ثبت شد؛ با کلیک روی نام تیپ، گزارش، نقشه ساخت، مدل سه‌بعدی و مدل SAP همان پی باز می‌شود.
-      برای بررسی یک پی در همین صفحه (سازه زیر بار و …)، آن را از فهرست یا روی پلان انتخاب کنید و «اجرای محاسبه» را بزنید.</p>` +
+      برای دیدن سازه یک تیپ زیر بار، به بخش «سازه نگهدارنده» بروید.</p>` +
     (failing ? `<div class="suggest"><div><span class="t">${failing} سازه با مقاطع انتخابی جواب نمی‌دهد</span><br>
       سیستم برای هر سازه سبک‌ترین مقاطعی را که جواب می‌دهد انتخاب می‌کند.</div>
       <button type="button" class="btn" id="fullAuto">طراحی کامل دوباره با مقاطع پیشنهادی سیستم</button></div>` : "");
@@ -637,6 +655,24 @@ function showFull(F){
     if (LAST_FILE) uploadDrawing(LAST_FILE, true);
   });
   $("fullClose").addEventListener("click", () => { $("fullWide").style.display = "none"; });
+  $("fullZip").addEventListener("click", async () => {
+    const btn = $("fullZip"); btn.disabled = true;
+    $("zipMsg").textContent = "در حال تهیه نقشه‌ها و مدل‌های همه تیپ‌ها… (برای هر تیپ چند ثانیه)";
+    const names = {}; F.types.forEach(t => names[t.id] = t.name);
+    try {
+      const r = await fetch("/api/final/zip", {method: "POST",
+        headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+        body: JSON.stringify({ids: F.types.map(t => t.id), names: names, summary: F, keyplan: LAST_KEYPLAN})});
+      const z = await r.json();
+      if (z.error) { $("zipMsg").textContent = z.error; }
+      else {
+        $("zipMsg").innerHTML = `<a class="btn" href="${z.url}">دانلود خروجی نهایی (ZIP)</a>` +
+          (z.warnings.length ? ` <span class="note">${z.warnings.join("؛ ")}</span>` : "");
+        location.href = z.url;
+      }
+    } catch (e) { $("zipMsg").textContent = "ارتباط با سرور برقرار نشد: " + e; }
+    btn.disabled = false;
+  });
   $("fullWide").scrollIntoView({behavior: "smooth", block: "start"});
 }
 function highlightPad(name){
@@ -733,7 +769,10 @@ function formPayload(){
     "foundation.hp": num("hp"), "foundation.b": num("bcol"), "foundation.tf": num("tf"),
     "foundation.L": num("L"), "foundation.B": num("B"),
     "rebar.pad_dia": num("pad_dia"), "rebar.col_dia": num("col_dia"),
-    "steel.enabled": $("steel_enabled").checked, "steel.feed_foundation": $("steel_feed").checked,
+    // محاسبه فونداسیون: وزن و سطح بادگیر استراکچر از فرم (روش دفترچه)، بی تحلیل سازه؛
+    // سازه نگهدارنده و خروجی نهایی: سازه تحلیل و کنترل می‌شود
+    "steel.enabled": MODE === "foundation" ? false : (MODE === "final" ? true : $("steel_enabled").checked),
+    "steel.feed_foundation": MODE === "foundation" ? false : $("steel_feed").checked,
     "steel.leg_width": num("leg_width"), "steel.k_chord": num("k_chord"),
     "steel.fy": num("steel_fy"), "steel.connection_factor": num("conn_factor"),
     "steel.mode": $("steel_mode").value, "steel.panel": num("steel_panel"),
@@ -956,10 +995,10 @@ function showLoad(id){
   $("legend").classList.toggle("heat", !!id);
   if (!id || !info) { $("loadInfo").innerHTML = ""; return; }
   const ok = info.maxRatio <= 1 + 1e-9;
-  const MODE = {buckle: "کمانش فشاری", bend: "تسلیم خمشی", tension: "تسلیم کششی",
+  const FMODE = {buckle: "کمانش فشاری", bend: "تسلیم خمشی", tension: "تسلیم کششی",
                 shear: "برش", slender: "لاغری بیش از حد مجاز"};
   const fails = (info.fails || []).slice(0, 3).map(f =>
-    `<div class="fail">⚠ ${GROUP_FA[f.group] || f.group} <b>${f.section}</b>: ${MODE[f.mode] || f.mode} — نسبت ${fmt(f.ratio, 2)}</div>`).join("");
+    `<div class="fail">⚠ ${GROUP_FA[f.group] || f.group} <b>${f.section}</b>: ${FMODE[f.mode] || f.mode} — نسبت ${fmt(f.ratio, 2)}</div>`).join("");
   $("loadInfo").innerHTML = `<b class="${ok ? "yes" : "no"}">${ok ? "✓ جواب می‌دهد" : "✗ جواب نمی‌دهد"}</b>
     نسبت تنش بیشینه <b>${fmt(info.maxRatio, 2)}</b> · تغییرمکان بیشینه <b>${fmt(info.maxDisp, 1)} mm</b>
     <small>(شکل ×${Math.round(info.scale)} بزرگ‌نمایی شده)</small>` +
