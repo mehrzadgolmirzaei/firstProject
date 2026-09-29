@@ -181,3 +181,21 @@ def test_check_mode_suggests_lightest_passing_structure():
     assert not st["ok"] and g["ok"] and not g["same"] and g["ratio"] <= 1.0
     auto = _design("CT63")[0]
     assert g["sections"] == auto.sections
+
+
+@pytest.mark.parametrize("tag", ["LA63", "CT63", "PI63"])
+def test_load_table_equals_applied_loads(tag):
+    """جدول «بارهای واردشده به سازه» همان بارهای تحلیل است: جمع عکس‌العمل‌ها = جمع جدول."""
+    d, eq, seis, wind = _design(tag)
+    L = d.load_table
+    n = L["phases"]
+    for r in L["combos"]:
+        N, V, VX = _base(d, r["id"])
+        H = n * r["H"] + r["Hs"]
+        if r["dir"] == "Y":
+            assert V == pytest.approx(H, abs=0.1 * (n + 1)), r["id"]      # جدول به ۰٫۱ kg گرد شده
+        else:
+            assert VX == pytest.approx(H, abs=0.1 * (n + 1)), r["id"]
+        k = {"C4+": 1 + seis.cv, "C4-": 1 - seis.cv, "CX+": 1 + seis.cv, "CX-": 1 - seis.cv,
+             "C5+": 1 + seis.cv * 0.6, "C5-": 1 - seis.cv * 0.6}.get(r["id"], 1.0)
+        assert N == pytest.approx(n * r["V"] + k * L["self_weight"] + r["live"], abs=0.1 * (n + 2)), r["id"]

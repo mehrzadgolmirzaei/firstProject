@@ -304,6 +304,7 @@
     // سازه فولادی طراحی‌شده در برنامه
     this.steelData = m.steel || [];
     this.loadCases = m.load_cases || [];
+    this.phaseLoads = m.phase_loads || [];
     this.loadCombo = null;
     this.equipmentData = m.equipment || [];
     this.k = k;
@@ -330,9 +331,15 @@
       this.steelMeshObj = steelMesh(this.steelData, this.k, !!this.heat, this.loadCombo);
       this.group.add(this.steelMeshObj);
     }
-    // زیر بار فقط قاب نمایش داده می‌شود (مثل SAP)؛ تجهیز پنهان
-    if (this.equipmentData && this.equipmentData.length && !this.loadCombo) {
-      this.group.add(equipmentGroup(this.equipmentData, this.k));
+    // زیر بار تجهیز نیمه‌شفاف می‌شود و همراه سر سازه جابه‌جا می‌شود
+    this.equipGroup = null;
+    if (this.equipmentData && this.equipmentData.length) {
+      const eg = equipmentGroup(this.equipmentData, this.k);
+      if (this.loadCombo) eg.traverse((o) => {
+        if (o.material) { o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; }
+      });
+      this.equipGroup = eg;
+      this.group.add(eg);
     }
     this._prepareLoad();
   };
@@ -372,6 +379,17 @@
       dv[v * 3] = d[o] * k * scale; dv[v * 3 + 1] = d[o + 2] * k * scale; dv[v * 3 + 2] = -d[o + 1] * k * scale;
     }
     this.loadDv = dv;
+    // جابه‌جایی سر سازه (میانگین سرهای بالاترین اعضا) — تجهیز و پیکان‌ها همراه آن حرکت می‌کنند
+    let cnt = 0; const td = [0, 0, 0];
+    data.forEach((mb) => {
+      const d = mb.d && mb.d[c];
+      if (!d) return;
+      [[mb.p, 0], [mb.q, 3]].forEach(([pt, o]) => {
+        if (pt[2] >= top - 1) { td[0] += d[o]; td[1] += d[o + 1]; td[2] += d[o + 2]; cnt++; }
+      });
+    });
+    this.topDv = cnt ? new THREE.Vector3(td[0] / cnt * k * scale, td[2] / cnt * k * scale, -td[1] / cnt * k * scale)
+                     : new THREE.Vector3();
     // اعضای ردشده در این ترکیب: شکل نمادین حالت خرابی (کمانش ← خمیدگی جانبی، خمش ← افتادگی)
     const fails = {}, fg = new THREE.Group();
     fg.userData.steel = true;
@@ -396,7 +414,39 @@
     });
     this.failGroup = fg.children.length ? fg : null;
     if (this.failGroup) this.group.add(fg);
-    this.loadInfo = {maxDisp: maxD, maxRatio: maxR, scale: scale,
+    // بار هر فاز در همین ترکیب: پیکان قائم (وزن) بالای تجهیز، پیکان افقی (هادی + باد/زلزله تجهیز)
+    const ag = new THREE.Group();
+    ag.userData.steel = true;
+    let fmax = 0;
+    (this.phaseLoads || []).forEach((ph) => Object.values(ph.loads).forEach((l) => {
+      fmax = Math.max(fmax, Math.abs(l[0]), Math.abs(l[1]));
+    }));
+    const len = (f) => 0.22 + 0.5 * Math.abs(f) / (fmax || 1);
+    let tops = 0;
+    this.equipmentData.forEach((e) => { tops = Math.max(tops, e.p[2], e.q[2]); });
+    (this.phaseLoads || []).forEach((ph) => {
+      const l = ph.loads[c];
+      if (!l) return;
+      const [V, H, dir] = l;
+      const top = P3([ph.p[0], ph.p[1], Math.max(tops, ph.p[2] + 400)]);
+      if (V > 0) {
+        const Lv = len(V);
+        ag.add(new THREE.ArrowHelper(new THREE.Vector3(0, -1, 0), top.clone().add(new THREE.Vector3(0, Lv + 0.05, 0)),
+          Lv, 0x5AA9E6, 0.12, 0.08));
+      }
+      if (H > 0) {
+        const e = dir === "X" ? ph.ex : ph.ey;
+        const d3 = new THREE.Vector3(e[0], 0, -e[1]).normalize();
+        const at = P3([ph.p[0], ph.p[1], ph.p[2] + ph.he]);
+        const Lh = len(H);
+        ag.add(new THREE.ArrowHelper(d3, at.clone().sub(d3.clone().multiplyScalar(Lh + 0.05)), Lh, 0xF0A04B, 0.12, 0.08));
+      }
+    });
+    this.arrowGroup = ag.children.length ? ag : null;
+    if (this.arrowGroup) this.group.add(ag);
+    const pl = (this.phaseLoads || [])[0];
+    const phaseLoad = pl && pl.loads[c] ? {V: pl.loads[c][0], H: pl.loads[c][1], dir: pl.loads[c][2]} : null;
+    this.loadInfo = {maxDisp: maxD, maxRatio: maxR, scale: scale, phase: phaseLoad,
                      fails: Object.values(fails).sort((x, y) => y.ratio - x.ratio)};
   };
 
@@ -409,6 +459,10 @@
     const arr = mesh.geometry.attributes.position.array;
     for (let i = 0; i < arr.length; i++) arr[i] = base[i] + s * dv[i];
     mesh.geometry.attributes.position.needsUpdate = true;
+    if (this.topDv) {
+      if (this.equipGroup) this.equipGroup.position.copy(this.topDv).multiplyScalar(s);
+      if (this.arrowGroup) this.arrowGroup.position.copy(this.topDv).multiplyScalar(s);
+    }
     // عضو ردشده با رسیدن بار به مقدار کامل پدیدار و چشمک‌زن می‌شود
     if (this.failGroup) {
       const op = Math.max(0, (s - 0.55) / 0.45) * (0.55 + 0.45 * Math.sin(this.loadT * 6));

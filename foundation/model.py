@@ -70,6 +70,7 @@ class FoundationModel:
     base_plate: float = 0.0                             # ضلع صفحه کف (mm)؛ صفر = نامشخص
     steel: list = field(default_factory=list)           # structural.placement.Placed
     equipment: list = field(default_factory=list)       # structural.equipment3d اولیه‌ها
+    phase_loads: list = field(default_factory=list)     # نقطه هر فاز و بار آن در هر ترکیب (نمایش)
 
     @property
     def top(self):
@@ -225,6 +226,17 @@ def build(res, layout, des, cfg) -> FoundationModel:
         fm.steel += place(sd, peds, base_z)
         fm.equipment += for_design(layout.groups[gi].eq, sd, peds, base_z)
         designed.add(gi)
+        lt = getattr(sd, "load_table", None)
+        if lt:
+            import math as _m
+            from structural.placement import phase_bases
+            eqg = layout.groups[gi].eq
+            for pt, ang in phase_bases(sd, peds, base_z):
+                fm.phase_loads.append({
+                    "p": [round(v, 1) for v in pt], "he": round(eqg.he * 1000, 1),
+                    "ex": [round(_m.cos(ang), 5), round(_m.sin(ang), 5)],
+                    "ey": [round(-_m.sin(ang), 5), round(_m.cos(ang), 5)],
+                    "loads": {r["id"]: [r["V"], r["H"], r["dir"]] for r in lt["combos"]}})
     # سازه سازنده یا طراحی سازه خاموش: شکل ساده استراکچر و تجهیز روی آن
     pitch = cfg.steel.phase_pitch if getattr(cfg, "steel", None) else 1.5
     for gi, g in enumerate(layout.groups):
@@ -275,10 +287,11 @@ def clashes(fm: FoundationModel) -> list:
 
 def to_dict(fm: FoundationModel) -> dict:
     """نسخه JSON مدل برای نمای سه‌بعدی مرورگر؛ همان مختصات فایل‌های اتوکد."""
-    steel, equipment = fm.steel, fm.equipment
-    fm.steel, fm.equipment = [], []
+    steel, equipment, pl = fm.steel, fm.equipment, fm.phase_loads
+    fm.steel, fm.equipment, fm.phase_loads = [], [], []
     d = asdict(fm)
-    fm.steel, fm.equipment = steel, equipment
+    fm.steel, fm.equipment, fm.phase_loads = steel, equipment, pl
+    d["phase_loads"] = pl
     d["equipment"] = equipment
     d["top"] = fm.top
     d["steel"] = [{"p": [round(v, 1) for v in m.p], "q": [round(v, 1) for v in m.q],

@@ -353,3 +353,9 @@ table.vsum tr.muted td{color:var(--ink-2)}
 .module h2{margin:10px 0 6px}
 .module p{margin:0 0 10px;color:var(--ink-2);font-size:13px;line-height:1.8}
 .module span{color:#B8693C;font-weight:700;font-size:13px}
+.viewer .load-info .loads-line{margin-top:3px}
+.viewer .load-info .lv{color:#5AA9E6;font-weight:700} .viewer .load-info .lh{color:#F0A04B;font-weight:700}
+.load-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;margin-bottom:8px}
+.load-facts>div{border:1px solid var(--rule-soft);padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.load-facts span{font-size:11px;color:var(--ink-2)}
+.load-facts b{font-family:monospace;font-size:13px}

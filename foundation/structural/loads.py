@@ -105,6 +105,39 @@ def apply_loads(model, eq, wind, ch, cv, eq_sc=0.6, live=100.0):
     return {"wind_area": area, "cases": cases}
 
 
+def load_table(eq, wind, ch, cv, eq_sc, live, self_weight, wind_area, phases):
+    """
+    بارهای واردشده به سازه در هر ترکیب — همان بارهایی که apply_loads روی مدل می‌گذارد، به زبان
+    مهندسی برای نمایش: برای هر فاز بار قائم و افقی (هادی + تجهیز) و روی خود سازه باد یا زلزله.
+    """
+    from engine import build_cases
+    cs = {c["no"]: c for c in build_cases(eq, wind, ch, cv, eq_sc)}
+    per = (eq.We + eq.Wc)
+    q = {1: wind.q_normal, 2: wind.q_high, 3: wind.q_sc}
+    rows = []
+
+    def row(cid, V, Hc, He, direction, Hs, live_kg=0.0):
+        rows.append({"id": cid, "title": COMBO_TITLES[cid], "V": round(V, 1), "Hc": round(Hc, 1),
+                     "He": round(He, 1), "H": round(Hc + He, 1), "dir": direction,
+                     "Hs": round(Hs, 1), "live": live_kg})
+    for k in (1, 2, 3):
+        c = cs[k]
+        row(f"C{k}", per, c["Fc"], c["Fe"], "Y", q[k] * eq.Cs * wind_area)
+    for k, cid in ((4, "C4"), (5, "C5")):
+        c = cs[k]
+        f = 1.0 if k == 4 else eq_sc
+        row(cid + "+", per * (1 + cv * f), c["Fc"], c["Fe"], "Y", ch * f * self_weight)
+        row(cid + "-", per * (1 - cv * f), c["Fc"], c["Fe"], "Y", ch * f * self_weight)
+    row("CX+", per * (1 + cv), 0.0, ch * eq.We, "X", ch * self_weight)
+    row("CX-", per * (1 - cv), 0.0, ch * eq.We, "X", ch * self_weight)
+    row("C6", per, eq.Fc, 0.0, "Y", 0.0, live)
+    return {"phases": phases, "We": eq.We, "Wc": eq.Wc, "Fc": eq.Fc, "Fc_sc": eq.Fc_sc,
+            "He": eq.He, "he": eq.he, "conductor_points": list(eq.conductor_points),
+            "Ae": eq.Ae, "Ce": eq.Ce, "Cs": eq.Cs, "ch": round(ch, 4), "cv": round(cv, 4),
+            "self_weight": round(self_weight, 1), "wind_area": round(wind_area, 3),
+            "q": {k: round(v, 1) for k, v in q.items()}, "combos": rows}
+
+
 COMBO_TITLES = {
     "C1": "۱ — یخ + باد نرمال", "C2": "۲ — باد شدید", "C3": "۳ — باد شدید + اتصال کوتاه",
     "C4+": "۴ — زلزله، قائم رو به پایین", "C4-": "۴ — زلزله، قائم رو به بالا",

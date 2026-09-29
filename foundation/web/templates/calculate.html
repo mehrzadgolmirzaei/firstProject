@@ -1002,6 +1002,9 @@ function showLoad(id){
   $("loadInfo").innerHTML = `<b class="${ok ? "yes" : "no"}">${ok ? "✓ جواب می‌دهد" : "✗ جواب نمی‌دهد"}</b>
     نسبت تنش بیشینه <b>${fmt(info.maxRatio, 2)}</b> · تغییرمکان بیشینه <b>${fmt(info.maxDisp, 1)} mm</b>
     <small>(شکل ×${Math.round(info.scale)} بزرگ‌نمایی شده)</small>` +
+    (info.phase ? `<div class="loads-line"><span class="lv">↓</span> بار قائم هر فاز <b>${fmt(info.phase.V, 0)} kg</b>
+      · <span class="lh">→</span> بار افقی هر فاز <b>${fmt(info.phase.H, 0)} kg</b>
+      <small>(${info.phase.dir === "X" ? "عمود بر ردیف" : "در امتداد هادی"})</small></div>` : "") +
     (fails ? `<div class="fails">${fails}<small>عضو قرمز چشمک‌زن: اولین عضوی که در این ترکیب از حد مجاز می‌گذرد، با شکل نمادین حالت خرابی‌اش</small></div>` : "");
 }
 $("loadSel").addEventListener("change", e => showLoad(e.target.value));
@@ -1025,6 +1028,37 @@ function applySuggestion(sec){
   Object.entries(sec).forEach(([k, v]) => { if ($("sec_" + k)) $("sec_" + k).value = v; });
   $("steel_mode").value = "check"; applySteelMode();
   $("form").requestSubmit();
+}
+
+// بارهایی که به سازه داده می‌شود: داده تجهیز و جدول هر ترکیب
+function loadsHtml(st){
+  const L = st.loads;
+  if (!L) return "";
+  const rows = L.combos.map(r => `<tr><td>${r.title}</td><td class="num">${fmt(r.V, 0)}</td>
+    <td class="num">${fmt(r.Hc, 0)}</td><td class="num">${fmt(r.He, 0)}</td>
+    <td class="num"><b>${fmt(r.H, 0)}</b> ${r.dir === "X" ? "<small>(X)</small>" : ""}</td>
+    <td class="num">${fmt(r.Hs, 0)}</td></tr>`).join("");
+  const cp = (L.conductor_points || []).map(h => fmt(h, 2)).join("، ");
+  return `<div class="loads-box">
+    <h3 style="margin:10px 0 6px">بارهای واردشده به سازه</h3>
+    <div class="load-facts">
+      <div><span>وزن هر فاز تجهیز</span><b>${fmt(L.We, 0)} kg</b></div>
+      <div><span>وزن هادی هر فاز</span><b>${fmt(L.Wc, 0)} kg</b></div>
+      <div><span>کشش هادی (عادی / اتصال کوتاه)</span><b>${fmt(L.Fc, 0)} / ${fmt(L.Fc_sc, 0)} kg</b></div>
+      <div><span>تعداد فاز روی سازه</span><b>${L.phases}</b></div>
+      <div><span>ارتفاع تجهیز / مرکز ثقل</span><b>${fmt(L.He, 2)} / ${fmt(L.he, 2)} m</b></div>
+      <div><span>ارتفاع اتصال هادی</span><b>${cp} m</b></div>
+      <div><span>سطح بادگیر تجهیز Ae × Ce</span><b>${fmt(L.Ae, 2)} m² × ${fmt(L.Ce, 2)}</b></div>
+      <div><span>وزن خود سازه (اعضا)</span><b>${fmt(L.self_weight, 0)} kg</b></div>
+      <div><span>سطح بادگیر سازه × Cs</span><b>${fmt(L.wind_area, 2)} m² × ${fmt(L.Cs, 2)}</b></div>
+      <div><span>ضریب زلزله افقی / قائم</span><b>${fmt(L.ch, 3)} / ${fmt(L.cv, 3)}</b></div>
+    </div>
+    <div class="tscroll"><table class="compare"><thead><tr><th>ترکیب بار</th><th>قائم هر فاز kg</th>
+      <th>افقی هادی kg</th><th>افقی تجهیز (باد/زلزله) kg</th><th>افقی کل هر فاز kg</th><th>باد/زلزله روی خود سازه kg</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <p class="note">بار قائم = وزن تجهیز + هادی (در زلزله با ضریب قائم ±Cv)؛ بار افقی هادی در ارتفاع اتصال و بار تجهیز در
+      مرکز ثقل آن؛ باد روی اعضای وجه رو به باد و زلزله روی وزن خود اعضا، گسترده روی سازه. در نمای سه‌بعدی
+      «زیر بار» همین بارها با پیکان نشان داده می‌شوند.</p></div>`;
 }
 
 function renderSteel(list){
@@ -1063,7 +1097,7 @@ function renderSteel(list){
       <div class="kv"><span>سطح بادگیر (وجه رو به باد)</span><span>${fmt(st.wind_area, 2)} m²</span></div>
       <div class="kv"><span>${st.fed ? "به پی رفت" : "در محاسبه پی (دستی)"}</span><span>Ws = ${fmt(st.Ws_used, 0)} kg ، As = ${fmt(st.As_used, 2)} m²</span></div>`;
     const warn = st.warnings.map(w => `<p class="note" style="color:var(--fail)">${w}</p>`).join("");
-    return head + table + `<h3 style="margin:10px 0 4px">عکس‌العمل پای هر پایه (برای ستون و میل مهار)</h3>` +
+    return head + loadsHtml(st) + table + `<h3 style="margin:10px 0 4px">عکس‌العمل پای هر پایه (برای ستون و میل مهار)</h3>` +
       legs + wt + `<h3 style="margin:10px 0 4px">کنترل حاکم هر گروه — مرحله به مرحله</h3>` + steps + warn;
   }).join("<hr>");
 }

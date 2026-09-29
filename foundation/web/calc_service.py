@@ -196,6 +196,7 @@ def structures_dict(res, cfg):
                     "max_ratio": round(d.max_ratio, 3), "ok": d.ok, "k_chord": st.k_chord,
                     "mode": st.mode,
                     "suggestion": _suggestion(d, st),
+                    "loads": getattr(d, "load_table", None),
                     "fy": st.fy, "iterations": len(d.history), "groups": groups, "legs_reactions": legs,
                     "warnings": d.warnings})
     return out
