@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.1.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.2.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -444,20 +444,25 @@ def api_keyplan():
             found = read_foundations(None, ALL_EQUIPMENT, voltage, doc=doc)
             if any(x.ok for x in found):
                 auth.record("خواندن کی‌پلن", "keyplan", None, {"file": f.filename, "types": len(found)})
-                return jsonify({"kind": "keyplan", "file": label,
+                ok = [x for x in found if x.ok]
+                single = all(len(x.groups) == 1 and len(x.groups[0]["positions"]) == 1
+                             and abs(x.L - x.B) < 1e-6 for x in ok)
+                warn = ("همه پی‌های این کی‌پلن منفرد و مربعی‌اند (مثل پست ۲۳۰ و ۴۰۰)، ولی سطح ولتاژ «۶۳» "
+                        "انتخاب شده؛ سطح ولتاژ را بررسی کنید." if single and voltage == "63" else "")
+                return jsonify({"kind": "keyplan", "file": label, "warning": warn,
                                 "foundations": [x.to_dict() for x in found]})
-            items = LP.read_items(None, doc=doc)
+            items, axes = LP.read_items(None, doc=doc), LP.read_axes(doc)
             v = LP.detect_voltage(items) or voltage
-            stations, _, _ = LP.site_stations(items, v)
+            stations, _, _ = LP.site_stations(items, v, axes)
             n = sum(1 for s in stations if s.key)
             if n:
-                docs.append((n, label, items, v))
+                docs.append((n, label, items, v, axes))
             if n >= 3:
                 break
         if not docs:
             return jsonify({"error": "نه بلاک پی کی‌پلن (مثل LA+CVT-3-2.5) پیدا شد، نه تجهیز در "
                                      "نقشه جانمایی (بلاک‌هایی با نام LA، CT، CB، DS، CVT، PI)."}), 400
-        _, label, items, voltage_found = max(docs, key=lambda d: d[0])
+        _, label, items, voltage_found, axes = max(docs, key=lambda d: d[0])
         try:
             form = json.loads(request.form.get("form") or "{}")
         except ValueError:
@@ -466,7 +471,7 @@ def api_keyplan():
             raise InputError("این فایل نقشه جانمایی است. برای طراحی پی‌ها ابتدا مشخصات ساختگاه "
                              "(زلزله، خاک و باد) را در فرم وارد کنید و سپس دوباره بارگذاری کنید.")
         cfg = config_from_form(form)
-        result = LP.design_layout(None, cfg, voltage_found, items=items)
+        result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes)
         dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
         LP.plan_dxf(result, str(OUT / dxf))
         full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None

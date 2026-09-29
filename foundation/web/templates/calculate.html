@@ -572,7 +572,8 @@ async function uploadDrawing(file, full){
     ? (MODE === "final"
       ? `نقشه جانمایی خوانده شد: ${KP.length} تیپ پی. برای طراحی همه پی‌ها و سازه‌ها و تهیه نقشه‌ها، «تهیه خروجی نهایی» را بزنید.`
       : `نقشه جانمایی خوانده شد و ${KP.length} تیپ پی متناسب با فضا طراحی شد؛ پی مورد نظر را از فهرست یا روی پلان انتخاب کنید.`)
-    : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید.") + note + ` (${file.name})`, "ok");
+    : "کی‌پلن خوانده شد؛ پی مورد نظر را انتخاب کنید." + (d.warning ? " ⚠ " + d.warning : "")) + note + ` (${file.name})`,
+    d.warning ? "ng" : "ok");
 }
 $("kpsel").addEventListener("change", e => {
   const f = KP[e.target.value]; if (!f) return;

@@ -31,9 +31,9 @@ NEAR = 8.0                  # m — مانع‌هایی که در طراحی ی�
 
 # نام تجهیز در بلاک‌های نقشه ← نوع (همان نام‌های کی‌پلن)
 TOKENS = {"LA": "LA", "CB": "CB", "CT": "CT", "CVT": "CVT", "CV": "CVT", "PI": "PI",
-          "DS": "DSE", "DSE": "DSE", "DS2": "DS2"}
-OBSTACLE_TOKENS = {"TR": "TR", "GANTRY": "GANTRY", "GM": "GANTRY"}
-PRIORITY = ["DS2", "CVT", "DSE", "CB", "CT", "LA", "PI"]
+          "DS": "DSE", "DSE": "DSE", "DS2": "DS2", "DSROW": "DSROW"}
+OBSTACLE_TOKENS = {"TR": "TR", "GANTRY": "GANTRY", "GM": "GANTRY", "GAN": "GANTRY"}
+PRIORITY = ["DS2", "DSROW", "CVT", "DSE", "CB", "CT", "LA", "PI"]
 
 
 # ------------------------------------------------------------------ هندسه بلاک‌ها
@@ -165,6 +165,65 @@ def read_items(path, doc=None):
     return items
 
 
+# ------------------------------------------------------------------ راهنمای محورها
+AXIS_MIN_LEN = 8000.0       # mm — خط محور ردیف بلندتر از این است
+
+
+def read_axes(doc):
+    """
+    راهنمای محورها در نقشه‌های دفتر: نام تجهیز کنار هر خط محور (LA.، _DSE، GANTRY/CVT1، PI …).
+    هر متنی که نام تجهیز دارد به خط بلند موازی‌ای که روی آن یا در امتدادش است نسبت داده می‌شود.
+    خروجی: [{"tokens"، "a" (mm)، "u" (بردار یکه)، "L"، "text"}]
+    """
+    ms = doc.modelspace()
+    lines = []
+    for e in ms.query("LINE"):
+        a, b = np.array(e.dxf.start, dtype=float)[:2], np.array(e.dxf.end, dtype=float)[:2]
+        if np.linalg.norm(b - a) >= AXIS_MIN_LEN:
+            lines.append((a, b))
+    for e in ms.query("LWPOLYLINE"):
+        pts = [np.array(p[:2], dtype=float) for p in e.get_points("xy")]
+        if len(pts) == 2 and np.linalg.norm(pts[1] - pts[0]) >= AXIS_MIN_LEN:
+            lines.append((pts[0], pts[1]))
+    out = []
+    for t in ms.query("TEXT MTEXT"):
+        raw = t.dxf.text if t.dxftype() == "TEXT" else t.text
+        toks = name_tokens(re.sub(r"[._]", " ", raw or "").strip())
+        if not toks or len(raw.strip()) > 20:
+            continue
+        p = np.array(t.dxf.insert, dtype=float)[:2]
+        h = float(t.dxf.get("height", 0) if t.dxftype() == "TEXT" else t.dxf.get("char_height", 0)) or 500.0
+        best = None
+        for a, b in lines:
+            L = float(np.linalg.norm(b - a))
+            u = (b - a) / L
+            n = np.array([-u[1], u[0]])
+            dist = abs(float(np.dot(p - a, n)))
+            sp = float(np.dot(p - a, u))
+            gap = max(0.0, -sp, sp - L)
+            if dist <= 2.5 * h and gap <= 8 * h:
+                score = dist + 0.2 * gap
+                if best is None or score < best[0]:
+                    best = (score, a, u, L)
+        if best:
+            out.append({"text": raw.strip(), "tokens": toks, "a": best[1], "u": best[2], "L": best[3]})
+    return out
+
+
+def _axis_for(point, size, axes):
+    """محور برچسب‌دار نزدیک به مرکز یک ایستگاه؛ رواداری به اندازه خود پی (پی‌های دو طرف محور)."""
+    tol = max(700.0, 0.9 * size)
+    best = None
+    for ax in axes:
+        a, u = ax["a"], ax["u"]
+        n = np.array([-u[1], u[0]])
+        d = abs(float(np.dot(point - a, n)))
+        sp = float(np.dot(point - a, u))
+        if d <= tol and -tol <= sp <= ax["L"] + tol and (best is None or d < best[0]):
+            best = (d, ax)
+    return best[1] if best else None
+
+
 def detect_voltage(items):
     """
     سطح ولتاژ از نام بلاک‌ها (CT63، SI 63، xref-63 …): عدد مستقل ۶۳/۲۳۰/۴۰۰؛ اگر نبود None.
@@ -180,7 +239,7 @@ def detect_voltage(items):
 # ------------------------------------------------------------------ نوع تجهیز
 def name_tokens(name):
     """«6Bay - Tr 1$0$Ds-e 2250» ← نام خود بلاک (بعد از پیشوند xref) ← نوع‌ها."""
-    own = name.split("$0$")[-1].upper()
+    own = re.sub(r"DS[-_ ]?ROW", "DSROW", name.split("$0$")[-1].upper())
     found = []
     if "DS2" in own.replace(" ", "").replace("_", ""):
         found.append("DS2")
@@ -201,6 +260,7 @@ class SiteStation:
     y1: float
     hs: float = 0.0            # ارتفاع سازه از روی نقشه (m)؛ صفر = معلوم نیست
     kind: str = ""             # نوع کی‌پلن (LA، CT …) یا مانع (TR …) یا نامعلوم
+    by_axis: str = ""          # اگر نوع از راهنمای محور آمده: متن همان برچسب
     key: str = ""              # کلید کاتالوگ؛ خالی = مانع
     note: str = ""
 
@@ -259,8 +319,11 @@ def _choose_key(kind, st, types):
     return ""
 
 
-def site_stations(items, voltage="63"):
-    """ایستگاه‌ها (روی زمین) در دستگاه ردیف‌ها، و زاویه آن دستگاه."""
+def site_stations(items, voltage="63", axes=None):
+    """
+    ایستگاه‌ها (روی زمین) در دستگاه ردیف‌ها، و زاویه آن دستگاه. نوع هر ایستگاه از نام بلاک‌ها؛
+    اگر نام چیزی نگفت، از راهنمای محورها (axes، از read_axes).
+    """
     types = VOLTAGE_LEVELS[voltage]["types"]
     if not items:
         return [], 0.0, []
@@ -326,6 +389,19 @@ def site_stations(items, voltage="63"):
             if not st.key:
                 st.note = (f"نام «{st.kind}» دارد ولی جای پای آن برای ستون‌های کاتالوگ کافی "
                            "نیست؛ مانع در نظر گرفته شد")
+        elif axes:
+            pts = np.vstack([it.pts[:, :2] for it in st._base])
+            centre = (pts.min(0) + pts.max(0)) / 2
+            ax = _axis_for(centre, float(np.ptp(pts, axis=0).max()), axes)
+            ak = [k for k in PRIORITY if ax and k in ax["tokens"]]
+            if ak:
+                st.kind = ak[0]
+                st.key = _choose_key(st.kind, st, types)
+                st.by_axis = ax["text"]
+            elif ax and "GANTRY" in ax["tokens"]:
+                st.kind, st.by_axis = "GANTRY", ax["text"]
+            else:
+                unknown.update(n.split("$0$")[-1] for n in st.names)
         else:
             unknown.update(n.split("$0$")[-1] for n in st.names)
     return stations, ang, sorted(unknown)
@@ -396,18 +472,25 @@ def row_stations(row, stations, gap=0.2, B_hi=5.0, L_hi=6.0):
 
 # ------------------------------------------------------------------ طراحی کل نقشه
 def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_span=1.6,
-                  items=None):
+                  items=None, axes=None):
     """
     خروجی: {"foundations": [مثل کی‌پلن]، "rows": [...]، "plan": داده نقشه، "unknown": [...]،
     "notes": [...]}
     """
     import bay
-    items = items if items is not None else read_items(path)
-    stations, ang, unknown = site_stations(items, voltage)
+    if items is None:
+        import ezdxf
+        doc = ezdxf.readfile(path)
+        items, axes = read_items(None, doc=doc), read_axes(doc)
+    stations, ang, unknown = site_stations(items, voltage, axes)
     if not any(s.key for s in stations):
         raise ValueError("در نقشه تجهیز قابل طراحی (LA، CT، CB، DS، CVT، PI …) پیدا نشد")
     rows = find_rows(stations)
     notes = [f"{s.names[0].split('$0$')[-1]}: {s.note}" for s in stations if s.note]
+    by_axis = Counter(s.kind for s in stations if s.by_axis)
+    if by_axis:
+        notes.append("نوع این پی‌ها از برچسب محورهای نقشه تشخیص داده شد (نام بلاک چیزی نمی‌گفت): "
+                     + "، ".join(f"{k} × {n}" for k, n in by_axis.items()))
     pads, row_out, cache = [], [], {}
     for r_i, row in enumerate(rows):
         chain = row_stations(row, stations, gap, B_hi, L_hi)

@@ -71,7 +71,8 @@ def _rects(block):
 
 def equipment_tokens(name):
     """«LA+CVT-3-2.5» ← ["LA", "CVT"] ؛ «DS-DSE-2.5-1.8» ← ["DSE"]  (نوع تجهیز)."""
-    tokens = [t for t in re.split(r"[+\-_ ]", name.upper()) if t and not re.fullmatch(r"[\d.]+", t)]
+    up = re.sub(r"DS[-_ ]?ROW", "DSROW", name.upper())       # «DS-ROW» یک تجهیز است (سکسیونر ردیفی)
+    tokens = [t for t in re.split(r"[+\-_ ]", up) if t and not re.fullmatch(r"[\d.]+", t)]
     keys = []
     for t in tokens:
         key = KEYPLAN_TOKENS.get(t)

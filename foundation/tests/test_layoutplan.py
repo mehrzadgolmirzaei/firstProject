@@ -211,3 +211,34 @@ def test_three_sections_and_final_zip(layout_file, app):
     for t in F["types"]:
         assert any(n.startswith(t["name"] + "/") and n.endswith("_2D.dxf") for n in names)
     assert any(n.endswith("_SAP.s2k") for n in names)
+
+
+def test_axis_legend_identifies_unnamed_blocks(tmp_path):
+    """نام بلاک‌ها بی‌معنا (مثل نقشه‌های دفتر)؛ نوع هر پی از برچسب محور کنارش (LA.، CT. …)."""
+    import ezdxf
+    doc = ezdxf.new("R2018")
+    msp = doc.modelspace()
+    for name, w in (("B1", 2000), ("B2", 2200), ("B3", 2300)):
+        blk = doc.blocks.new(name)
+        blk.add_lwpolyline([(-w / 2, -w / 2), (w / 2, -w / 2), (w / 2, w / 2), (-w / 2, w / 2)], close=True)
+    # سه محور قائم با برچسب زیرشان؛ روی هر محور چهار پی
+    for x, name, label in ((0, "B1", "LA."), (5000, "B2", "CT."), (10000, "B3", "CB.")):
+        msp.add_line((x, -3000), (x, 40000), dxfattribs={"linetype": "DASHDOT"})
+        msp.add_text(label, height=900, rotation=270).set_placement((x - 400, -3500))
+        for y in (0, 9000, 18000, 27000):
+            msp.add_blockref(name, (x, y))
+    path = str(tmp_path / "axes.dxf")
+    doc.saveas(path)
+    doc = ezdxf.readfile(path)
+    axes = LP.read_axes(doc)
+    assert sorted(a["text"] for a in axes) == ["CB.", "CT.", "LA."]
+    stations, _, unknown = LP.site_stations(LP.read_items(None, doc=doc), "230", axes)
+    got = sorted((s.kind, s.key) for s in stations)
+    assert got == [("CB", "CB")] * 4 + [("CT", "CT")] * 4 + [("LA", "LA")] * 4
+    assert all(s.by_axis for s in stations) and not unknown
+
+
+def test_ds_row_block_name():
+    from keyplan import equipment_tokens
+    assert equipment_tokens("DS-ROW") == (["DSROW"], None)
+    assert LP.name_tokens("DS-ROW") == ["DSROW"]
