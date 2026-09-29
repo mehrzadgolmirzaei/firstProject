@@ -602,6 +602,59 @@ $("kpsel").addEventListener("change", e => {
   $("msg").textContent = `پی ${f.name}: ${f.describe}. اعداد تجهیز را با اوت‌لاین پروژه کنترل کنید.`;
 });
 
+// بزرگ‌نمایی و جابه‌جایی پلان (با viewBox، پس خطوط تیز می‌مانند)، تمام‌صفحه، و دانلود تصویر PNG
+let PLAN_DRAGGED = false;
+function planZoom(wrap, name){
+  const svg = wrap.querySelector("svg");
+  const vb0 = svg.getAttribute("viewBox").split(" ").map(Number);
+  let vb = vb0.slice();
+  const set = () => svg.setAttribute("viewBox", vb.join(" "));
+  const toSvg = (cx, cy) => { const r = svg.getBoundingClientRect(), k = Math.max(vb[2] / r.width, vb[3] / r.height);
+    const ox = vb[0] + (vb[2] - r.width * k) / 2, oy = vb[1] + (vb[3] - r.height * k) / 2;
+    return [ox + (cx - r.left) * k, oy + (cy - r.top) * k, k]; };
+  const zoom = (f, cx, cy) => { const r = svg.getBoundingClientRect();
+    if (cx === undefined) { cx = r.left + r.width / 2; cy = r.top + r.height / 2; }
+    const [px, py] = toSvg(cx, cy);
+    const w = Math.min(vb0[2] * 1.5, Math.max(vb0[2] / 60, vb[2] / f)), h = vb[3] * w / vb[2];
+    vb = [px - (px - vb[0]) * w / vb[2], py - (py - vb[1]) * h / vb[3], w, h]; set(); };
+  svg.addEventListener("wheel", e => { e.preventDefault(); zoom(e.deltaY < 0 ? 1.25 : 0.8, e.clientX, e.clientY); }, {passive: false});
+  let drag = null;
+  svg.addEventListener("pointerdown", e => { drag = {x: e.clientX, y: e.clientY, vb: vb.slice(), moved: false}; PLAN_DRAGGED = false; });
+  svg.addEventListener("pointermove", e => { if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    if (!drag.moved) { drag.moved = true; svg.setPointerCapture(e.pointerId); }
+    const k = toSvg(0, 0)[2];
+    vb = [drag.vb[0] - dx * k, drag.vb[1] - dy * k, vb[2], vb[3]]; set(); });
+  svg.addEventListener("pointerup", () => { PLAN_DRAGGED = !!(drag && drag.moved); drag = null;
+    setTimeout(() => { PLAN_DRAGGED = false; }, 0); });
+  wrap.querySelectorAll(".plan-tools button").forEach(bt => bt.addEventListener("click", () => {
+    const z = bt.dataset.z;
+    if (z === "in") zoom(1.5); else if (z === "out") zoom(1 / 1.5);
+    else if (z === "fit") { vb = vb0.slice(); set(); }
+    else if (z === "full") { if (document.fullscreenElement) document.exitFullscreen(); else wrap.requestFullscreen && wrap.requestFullscreen(); }
+    else if (z === "png") planPng(svg, name);
+  }));
+}
+function planPng(svg, name){
+  // سبک‌های CSS درون فایل تصویر نیست؛ همان قواعد پلان داخل SVG گذاشته می‌شود
+  const css = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch (_) { return []; } })
+    .map(r => r.cssText).filter(t => t.startsWith(".lyt-plan")).join("\n");
+  const c = svg.cloneNode(true);
+  const vb = svg.getAttribute("viewBox").split(" ").map(Number);
+  const W = 2400, H = Math.round(W * vb[3] / vb[2]);
+  c.setAttribute("xmlns", "http://www.w3.org/2000/svg"); c.setAttribute("width", W); c.setAttribute("height", H);
+  c.insertAdjacentHTML("afterbegin", `<rect x="${vb[0]}" y="${vb[1]}" width="${vb[2]}" height="${vb[3]}" fill="#212830"/><style>${css}</style>`);
+  const img = new Image();
+  img.onload = () => {
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    cv.getContext("2d").drawImage(img, 0, 0, W, H);
+    const a = document.createElement("a");
+    a.download = String(name).replace(/\.[^.]+$/, "") + "_plan.png"; a.href = cv.toDataURL("image/png"); a.click();
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(new XMLSerializer().serializeToString(c));
+}
+
 // پلان پی‌های طراحی‌شده روی نقشه جانمایی
 var LAST_KEYPLAN = null;
 function showLayout(d){
@@ -620,10 +673,10 @@ function showLayout(d){
         ? ` style="font-size:${Math.min(p.dx, p.dy * 1.6) / Math.max(p.label.length, 2) * 1.2}px"` : ""}>${esc(p.label)}</text></g>`).join("");
   const notes = (d.notes || []).map(n => `<li>${esc(n)}</li>`).join("");
   if (d.kind === "keyplan") {                 // کی‌پلن موجود: فقط پلان پی‌ها، انتخاب با کلیک
-    $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${pads}</svg>
+    $("lytBox").innerHTML = `<div class="plan-wrap"><div class="plan-tools"><button type="button" data-z="in" title="بزرگ‌نمایی">+</button><button type="button" data-z="out" title="کوچک‌نمایی">−</button><button type="button" data-z="fit">کل پلان</button><button type="button" data-z="full">تمام‌صفحه</button><button type="button" data-z="png">دانلود تصویر</button><span>اسکرول: بزرگ‌نمایی · کشیدن: جابه‌جایی</span></div><svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${pads}</svg></div>
       <p class="note">${P.pads.length} پی از کی‌پلن؛ روی هر پی بزنید تا همان نوع انتخاب شود.</p>`;
   } else
-  $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
+  $("lytBox").innerHTML = `<div class="plan-wrap"><div class="plan-tools"><button type="button" data-z="in" title="بزرگ‌نمایی">+</button><button type="button" data-z="out" title="کوچک‌نمایی">−</button><button type="button" data-z="fit">کل پلان</button><button type="button" data-z="full">تمام‌صفحه</button><button type="button" data-z="png">دانلود تصویر</button><span>اسکرول: بزرگ‌نمایی · کشیدن: جابه‌جایی</span></div><svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg></div>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
     ${unknownPanel(P)}
@@ -639,7 +692,9 @@ function showLayout(d){
   }
   if (d.full) showFull(d.full);
   $("lytBox").style.display = "block";
+  planZoom($("lytBox").querySelector(".plan-wrap"), d.file || "plan");
   $("lytBox").querySelectorAll("g.pad").forEach(g => g.addEventListener("click", () => {
+    if (PLAN_DRAGGED) return;
     const i = KP.findIndex(f => f.name === g.dataset.type);
     if (i >= 0) { $("kpsel").value = i; $("kpsel").dispatchEvent(new Event("change")); }
   }));
