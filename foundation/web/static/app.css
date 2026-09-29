@@ -400,3 +400,6 @@ input.from-outline{border-color:var(--steel);background:#EEF3F6}
 .peds{margin:10px 0;font-size:13px}
 .peds summary{cursor:pointer;font-weight:600}
 .peds tr.own input{border-color:var(--steel);background:#EEF3F6}
+.lyt-plan rect.un{fill:rgba(200,60,50,.18);stroke:#E0645A;stroke-width:.06;stroke-dasharray:.3 .15}
+.lyt-plan rect.un.hot{fill:rgba(240,90,70,.6);stroke:#FF8A7A;stroke-width:.12}
+.unk select{width:auto;font-size:12.5px;padding:2px 4px}

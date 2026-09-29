@@ -67,6 +67,22 @@ class Tok:
         return self.h > 1.4 * self.w
 
 
+def _pymupdf():
+    """کتابخانه خواندن PDF (نام جدید pymupdf، نام قدیمی fitz)؛ اگر نصب نیست پیام روشن."""
+    try:
+        import pymupdf
+        return pymupdf
+    except ImportError:
+        pass
+    try:
+        import fitz
+        return fitz
+    except ImportError:
+        raise RuntimeError("کتابخانه خواندن PDF (PyMuPDF) روی این رایانه نصب نیست. برنامه را یک بار "
+                           "ببندید و دوباره اجرا کنید تا خودش نصب کند، یا در پوشه foundation این را بزنید: "
+                           "python -m pip install -r requirements.txt")
+
+
 def ocr_available():
     try:
         import rapidocr_onnxruntime  # noqa: F401
@@ -340,7 +356,7 @@ def read_pdf(path, pages=None, max_pages=30):
     هر صفحه: {page, type, title, method, fields, width, height}.
     method: text (لایه متنی) / ocr / none (اسکن و OCR نصب نیست).
     """
-    import pymupdf
+    pymupdf = _pymupdf()
     doc = pymupdf.open(path)
     out = []
     for i, page in enumerate(doc):
@@ -357,7 +373,7 @@ def read_pdf(path, pages=None, max_pages=30):
 
 def render_page(path, page_no, fields=None, dpi=110):
     """PNG صفحه با قاب رنگی دور هر عددی که برداشته شده."""
-    import pymupdf
+    pymupdf = _pymupdf()
     doc = pymupdf.open(path)
     page = doc[page_no - 1]
     colors = {"He": (0.85, 0.2, 0.2), "he": (0.9, 0.55, 0.1), "Ae": (0.1, 0.5, 0.85),

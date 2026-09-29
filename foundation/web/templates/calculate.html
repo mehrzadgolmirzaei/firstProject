@@ -560,6 +560,7 @@ async function uploadDrawing(file, full){
   const fd = new FormData(); fd.append("file", file); fd.append("voltage", $("voltage").value);
   fd.append("form", JSON.stringify(formPayload()));
   fd.append("outline", JSON.stringify(outlineValues()));
+  fd.append("aliases", JSON.stringify(ALIASES));
   if (full) fd.append("full", "1");
   let d;
   try {
@@ -611,8 +612,8 @@ function showLayout(d){
   const y0 = Math.min(...all.map(a => a[2])) - 1, y1 = Math.max(...all.map(a => a[3])) + 1;
   const Y = y => (y0 + y1 - y);
   const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-  const st = P.stations.map(s => `<rect class="${s.design ? "eq" : (s.future ? "fu" : "ob")}" x="${s.x0}" y="${Y(s.y1)}"
-      width="${s.x1 - s.x0}" height="${s.y1 - s.y0}"><title>${esc(s.label)}</title></rect>`).join("");
+  const st = P.stations.map(s => `<rect class="${s.design ? "eq" : (s.future ? "fu" : (s.unknown ? "un" : "ob"))}" x="${s.x0}" y="${Y(s.y1)}"
+      width="${s.x1 - s.x0}" height="${s.y1 - s.y0}" data-names="${esc((s.names || []).join("|"))}"><title>${esc((s.names || [s.label]).join(" + "))}</title></rect>`).join("");
   const pads = P.pads.map(p => `<g class="pad" data-type="${esc(p.type)}"><rect x="${p.cx - p.dx / 2}"
       y="${Y(p.cy + p.dy / 2)}" width="${p.dx}" height="${p.dy}"><title>${esc(p.type)}</title></rect>
       <text x="${p.cx}" y="${Y(p.cy) + 0.15}"${d.kind === "keyplan"
@@ -625,13 +626,14 @@ function showLayout(d){
   $("lytBox").innerHTML = `<svg viewBox="${x0} ${y0} ${x1 - x0} ${y1 - y0}" class="lyt-plan">${st}${pads}</svg>
     <p class="note">${d.rows.length} ردیف: ` + d.rows.map(r => r.units.join(" · ")).join(" | ") + `</p>
     ${notes ? `<ul class="note">${notes}</ul>` : ""}
+    ${unknownPanel(P)}
     ${pedsTable(d)}
     <a class="btn" href="${d.dxf}">کی‌پلن فونداسیون ساخته‌شده از نقشه جانمایی (DXF)</a>
     <button type="button" class="btn ghost" id="lytRedo">طراحی دوباره با مشخصات فعلی فرم</button>
     <button type="button" class="btn wide only-final" id="lytFull" style="margin-top:8px">تهیه خروجی نهایی — طراحی همه پی‌ها و سازه‌ها</button>
 `;
   if (d.kind !== "keyplan") {
-    bindPeds();
+    bindPeds(); bindAliases();
     $("lytRedo").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE); });
     $("lytFull").addEventListener("click", () => { if (LAST_FILE) uploadDrawing(LAST_FILE, true); });
   }
@@ -714,6 +716,55 @@ function typeOf(key){
   return key;
 }
 function olType(t){ return String(t || "").replace(/[12]$/, ""); }
+// نوعی که مهندس برای بلاک‌های ناشناخته نقشه‌ها تعیین کرده: {نام بلاک: نوع}؛ برای همه پروژه‌ها
+let ALIASES = {};
+try { ALIASES = JSON.parse(localStorage.getItem("aliases.v1") || "{}") || {}; } catch (_) { ALIASES = {}; }
+function saveAliases(){ try { localStorage.setItem("aliases.v1", JSON.stringify(ALIASES)); } catch (_) {} }
+const ALIAS_OPTS = [["LA", "برق‌گیر LA"], ["CT", "ترانس جریان CT"], ["CB", "کلید CB"], ["CVT", "ترانس ولتاژ CVT"],
+  ["PI", "مقره PI"], ["DSE", "سکسیونر DS/DSE"], ["DS2", "سکسیونر نوع ۲ DS2"], ["DSROW", "سکسیونر ردیفی"],
+  ["OBST", "مانع — بدون پی (ترانس، ساختمان …)"]];
+function unknownPanel(P){
+  const by = {};
+  P.stations.filter(s => s.unknown).forEach(s => s.names.forEach(n => {
+    const b = by[n] = by[n] || {n: 0, w: s.x1 - s.x0, d: s.y1 - s.y0}; b.n++; }));
+  const names = Object.keys(by);
+  const saved = Object.keys(ALIASES);
+  if (!names.length && !saved.length) return "";
+  const opt = sel => `<option value="">— نوع؟ —</option>` +
+    ALIAS_OPTS.map(([v, l]) => `<option value="${v}" ${v === sel ? "selected" : ""}>${l}</option>`).join("");
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  const rows = names.map(n => `<tr data-n="${esc(n)}"><td dir="ltr">${esc(n)}</td><td class="num">${by[n].n}</td>
+      <td class="num">${by[n].w.toFixed(1)}×${by[n].d.toFixed(1)}</td>
+      <td><select data-n="${esc(n)}">${opt(ALIASES[n.toUpperCase()] || "")}</select></td></tr>`).join("");
+  return `<details class="peds unk" ${names.length ? "open" : ""}><summary>${names.length
+      ? `${names.length} نام بلاک شناخته نشد — روی پلان قرمز خط‌چین` : "نام بلاک‌هایی که نوعشان را تعیین کرده‌اید"}</summary>
+    ${names.length ? `<p class="note">این‌ها روی زمین‌اند ولی از نامشان نوع تجهیز معلوم نیست؛ فعلاً فقط مانع حساب شده‌اند.
+      نوع هر کدام را انتخاب کنید؛ برای نقشه‌های بعدی هم به خاطر سپرده می‌شود.</p>
+    <table class="ol-tab"><thead><tr><th>نام بلاک</th><th>تعداد</th><th>ابعاد (m)</th><th>نوع</th></tr></thead>
+      <tbody>${rows}</tbody></table>` : ""}
+    ${saved.length ? `<p class="note">تعیین‌شده: ` + saved.map(k => `<span class="ol-chip" dir="ltr">${esc(k)} → ${ALIASES[k]}
+      <a href="#" data-del="${esc(k)}">✕</a></span>`).join(" ") + `</p>` : ""}
+    ${names.length ? `<div class="ol-act"><button type="button" class="btn" id="aliasGo">طراحی دوباره با این نوع‌ها</button></div>` : ""}
+  </details>`;
+}
+function bindAliases(){
+  document.querySelectorAll(".unk tr[data-n]").forEach(tr => {
+    tr.addEventListener("mouseenter", () => document.querySelectorAll("#lytBox rect.un").forEach(r =>
+      r.classList.toggle("hot", (r.dataset.names || "").split("|").includes(tr.dataset.n))));
+    tr.addEventListener("mouseleave", () => document.querySelectorAll("#lytBox rect.hot").forEach(r => r.classList.remove("hot")));
+  });
+  document.querySelectorAll(".unk a[data-del]").forEach(a => a.addEventListener("click", ev => {
+    ev.preventDefault(); delete ALIASES[a.dataset.del]; saveAliases(); if (LAST_FILE) uploadDrawing(LAST_FILE);
+  }));
+  const go = $("aliasGo"); if (!go) return;
+  go.addEventListener("click", () => {
+    document.querySelectorAll(".unk select[data-n]").forEach(s => {
+      if (s.value) ALIASES[s.dataset.n.toUpperCase()] = s.value;
+    });
+    saveAliases(); if (LAST_FILE) uploadDrawing(LAST_FILE);
+  });
+}
+
 // ستون‌های سازه هر تجهیز که مهندس برای این پروژه تعیین کرده: {ولتاژ: {نوع: {n_pedestal, pedestal_spacing}}}
 let PEDS = {};
 try { PEDS = JSON.parse(localStorage.getItem("peds.v1") || "{}") || {}; } catch (_) { PEDS = {}; }

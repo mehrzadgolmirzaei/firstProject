@@ -345,3 +345,19 @@ def test_future_plan_cloud_excludes_bay():
     assert sum(f["count"] for f in r["foundations"]) == 5                  # فقط bay اول
     assert any("FUTURE PLAN" in n for n in r["notes"])
     assert sum(s["future"] for s in r["plan"]["stations"]) == 8               # هشت تجهیز bay دوم
+
+
+def test_engineer_names_unknown_blocks():
+    """بلاکی با نام بی‌معنا (مثل «A$C1E4») ناشناخته و روی پلان علامت‌دار؛ نوعش را مهندس می‌دهد."""
+    items = [it for it in _soleimani_bays()]
+    for it in items:
+        if it.name == "STST-CB":
+            it.name = "A$C1E401186"
+    r = LP.design_layout(None, kimia_config(), "63", items=items)
+    assert "A$C1E401186" in r["unknown"]
+    assert sum(s["unknown"] for s in r["plan"]["stations"]) == 2
+    assert not any(g["tag"] == "CB63" for f in r["foundations"] for g in f["groups"])
+    r = LP.design_layout(None, kimia_config(), "63", items=items, aliases={"a$c1e401186": "CB"})
+    assert not r["unknown"] and sum(f["count"] for f in r["foundations"]
+                                    if any(g["tag"] == "CB63" for g in f["groups"])) == 2
+    assert LP.ALIASES.get() == {}                                   # برای درخواست بعدی نمی‌ماند

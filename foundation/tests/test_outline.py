@@ -162,3 +162,11 @@ def test_project_pedestals_override_catalog():
     assert ALL_EQUIPMENT["CVT63"].n_pedestal == 3
     with pytest.raises(ValueError):
         OL.overrides_ok({"CVT": {"n_pedestal": 7}})
+
+
+def test_missing_pdf_library_is_explained(monkeypatch):
+    import sys
+    monkeypatch.setitem(sys.modules, "pymupdf", None)
+    monkeypatch.setitem(sys.modules, "fitz", None)
+    with pytest.raises(RuntimeError, match="requirements"):
+        OL._pymupdf()

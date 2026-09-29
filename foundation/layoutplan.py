@@ -239,8 +239,17 @@ def detect_voltage(items):
 
 
 # ------------------------------------------------------------------ نوع تجهیز
+# نام بلاک‌هایی که مهندس نوعشان را تعیین کرده ({نام بلاک: نوع یا OBST})؛ برای هر درخواست جدا
+import contextvars
+ALIASES = contextvars.ContextVar("layout_aliases", default={})
+ALIAS_TYPES = set(PRIORITY) | {"OBST"}
+
+
 def name_tokens(name):
     """«6Bay - Tr 1$0$Ds-e 2250» ← نام خود بلاک (بعد از پیشوند xref) ← نوع‌ها."""
+    alias = ALIASES.get().get(name.split("$0$")[-1].strip().upper())
+    if alias:
+        return [alias]
     own = re.sub(r"DS[-_ ]?ROW", "DSROW", name.split("$0$")[-1].upper())
     found = []
     if "DS2" in own.replace(" ", "").replace("_", ""):
@@ -398,7 +407,7 @@ def site_stations(items, voltage="63", axes=None):
         st.hs = _structure_height(st, ground)
         found = Counter(t for n in st.names for t in name_tokens(n))
         kinds = [k for k in PRIORITY if found.get(k)]
-        obst = [k for k in ("TR", "GANTRY") if found.get(k)]
+        obst = [k for k in ("TR", "GANTRY", "OBST") if found.get(k)]
         if obst and not kinds:
             st.kind = obst[0]
         elif kinds:
@@ -658,7 +667,7 @@ def _inside(pt, poly):
 
 
 def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_span=1.6,
-                  items=None, axes=None, future=None):
+                  items=None, axes=None, future=None, aliases=None):
     """
     خروجی: {"foundations": [مثل کی‌پلن]، "rows": [...]، "plan": داده نقشه، "unknown": [...]،
     "notes": [...]}
@@ -668,7 +677,12 @@ def design_layout(path, cfg, voltage="63", gap=0.20, B_hi=5.0, L_hi=6.0, merge_s
         import ezdxf
         doc = ezdxf.readfile(path)
         items, axes = read_items(None, doc=doc), read_axes(doc)
-    stations, ang, unknown = site_stations(items, voltage, axes)
+    token = ALIASES.set({str(k).strip().upper(): v for k, v in (aliases or {}).items()
+                         if v in ALIAS_TYPES})
+    try:
+        stations, ang, unknown = site_stations(items, voltage, axes)
+    finally:
+        ALIASES.reset(token)
     n_future = 0
     for st in stations:                      # محدوده آینده: طراحی نمی‌شود، فقط جایش گرفته است
         if st.key and future:
@@ -886,7 +900,9 @@ def _plan(stations, pads):
     """داده پلان برای نمایش (m، دستگاه ردیف‌ها)."""
     return {"stations": [{"label": s.label, "x0": round(s.x0, 3), "x1": round(s.x1, 3),
                           "y0": round(s.y0, 3), "y1": round(s.y1, 3), "design": bool(s.key),
-                          "future": bool(getattr(s, "future", False))}
+                          "future": bool(getattr(s, "future", False)),
+                          "unknown": not s.kind and not getattr(s, "future", False),
+                          "names": sorted({n.split("$0$")[-1] for n in s.names})}
                          for s in stations],
             "pads": [{"label": p["label"], "type": p.get("type", ""), "cx": round(p["cx"], 3), "cy": round(p["cy"], 3),
                       "dx": p["dx"], "dy": p["dy"], "L": p["L"], "B": p["B"],

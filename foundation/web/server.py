@@ -24,7 +24,7 @@ from engine import from_config, GOVERNING_OPTIONS, BEARING_OPTIONS, RECOMMENDED,
 from equipment import CATALOG, outline_values  # noqa: F401
 from seismic import FS_TABLE
 
-VERSION = "2.5.1"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
+VERSION = "2.6.0"      # در منوی کناری دیده می‌شود؛ نشانی فایل‌های css/js هم با آن عوض می‌شود
 
 OUT = Path(os.environ.get("FOUNDATION_OUT") or Path(__file__).with_name("generated"))
 OUT.mkdir(parents=True, exist_ok=True)
@@ -419,6 +419,17 @@ def _outline_form():
         raise InputError(f"عددهای اوت‌لاین نامعتبر است: {exc}")
 
 
+def _aliases_form():
+    """نوعی که مهندس برای بلاک‌های ناشناخته نقشه تعیین کرده: {نام بلاک: نوع}."""
+    try:
+        raw = json.loads(request.form.get("aliases") or "{}")
+    except ValueError:
+        raise InputError("نام‌های بلاک ارسالی نامعتبر است.")
+    if not isinstance(raw, dict):
+        raise InputError("نام‌های بلاک ارسالی نامعتبر است.")
+    return {str(k)[:120]: str(t) for k, t in raw.items()}
+
+
 @app.post("/api/keyplan")
 @auth.requires("engineer")
 def api_keyplan():
@@ -500,7 +511,7 @@ def api_keyplan():
         del doc
         with outline_values(voltage_found, _outline_form()):
             result = LP.design_layout(None, cfg, voltage_found, items=items, axes=axes, gap=gap,
-                                      future=future)
+                                      future=future, aliases=_aliases_form())
             dxf = f"keyplan_from_layout_{secrets.token_hex(4)}.dxf"
             LP.plan_dxf(result, str(OUT / dxf))
             full = _layout_full(result, cfg, form, label) if request.form.get("full") == "1" else None
@@ -544,6 +555,8 @@ def api_outline():
     try:
         f.save(folder / "source.pdf")
         pages = OL.read_pdf(str(folder / "source.pdf"))
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 500
     except Exception as exc:
         app.logger.exception("outline")
         return jsonify({"error": f"PDF خوانده نشد ({type(exc).__name__}: {exc})"}), 400
@@ -1141,7 +1154,37 @@ def bootstrap():
     return creds
 
 
+def ensure_requirements():
+    """
+    کتابخانه‌های لازم پیش از بالا آمدن: اگر برنامه بدون start_web اجرا شده (مثلاً از VS Code) و نسخه
+    تازه کتابخانه جدیدی لازم دارد، همین‌جا نصب می‌شود. OCR اختیاری است و خطای نصبش مانع کار نمی‌شود.
+    """
+    import importlib.util
+    import subprocess
+    root = Path(__file__).resolve().parent.parent
+    need = {"flask": "flask", "ezdxf": "ezdxf", "openpyxl": "openpyxl"}
+    missing = [m for m in need if importlib.util.find_spec(m) is None]
+    if importlib.util.find_spec("pymupdf") is None and importlib.util.find_spec("fitz") is None:
+        missing.append("pymupdf")
+    if missing:
+        print("نصب کتابخانه‌های لازم: " + "، ".join(missing) + " …")
+        r = subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
+                            "-r", str(root / "requirements.txt")])
+        if r.returncode:
+            print("نصب انجام نشد؛ اتصال اینترنت را بررسی کنید و دستور زیر را در پوشه foundation بزنید:\n"
+                  "  python -m pip install -r requirements.txt")
+        importlib.invalidate_caches()
+    marker = root / ".ocr_tried"
+    if importlib.util.find_spec("rapidocr_onnxruntime") is None and not marker.exists():
+        print("نصب خواندن متن نقشه‌های اسکن‌شده (OCR، اختیاری، یک بار) …")
+        subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
+                        "-r", str(root / "requirements-ocr.txt")],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        marker.write_text("1")
+
+
 if __name__ == "__main__":
+    ensure_requirements()
     creds = bootstrap()
     if creds:
         print(f"کاربر مدیر ساخته شد — {creds}  (رمز را بعد از اولین ورود عوض کنید)")
